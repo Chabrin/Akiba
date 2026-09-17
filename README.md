@@ -100,10 +100,16 @@ reviewed and signed-off process, not a side effect of starting the application.
 | Endpoint | What it shows |
 |---|---|
 | `/health` | Liveness, including the database |
-| `/ledger/accounts` | The seeded chart of accounts |
-| `/ledger/trial-balance` | The trial balance as at today, which must be zero |
+| `/ledger/accounts` | The chart of accounts |
+| `/ledger/trial-balance?asAt=` | The trial balance, which must be zero |
+| `/members?asAt=yyyy-MM-dd` | Members with their shareholding as at a date |
+| `/members/{id}/statement?asAt=` | A member's statement as at any date |
 
-These are a read-only window on the ledger while the Blazor panel is still to come.
+These are a read-only window on the same queries the Blazor panel will use.
+
+Outside Production the panel runs as a fixed development user, and says so in the startup
+log. Every ledger entry records its author, so attributing them all to one person is only
+tolerable while ASP.NET Core Identity is still to come — it is disabled in Production.
 
 ### Project layout
 
