@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ================================================================
+    Akiba.Domain
+
+    The innermost layer. It models what Akiba IS, not how it is stored
+    or displayed.
+
+    DEPENDENCY RULE: this project references NOTHING.
+    No project references. No package references. Not EF Core, not
+    MediatR, not ASP.NET Core, not Npgsql.
+
+    This is enforced by Akiba.ArchitectureTests and by CI. If you find
+    yourself wanting to add a reference here, the thing you are trying
+    to do belongs in Akiba.Application or Akiba.Infrastructure.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

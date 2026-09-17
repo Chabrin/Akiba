@@ -1,0 +1,43 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS / VS Code
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+# Test results
+[Tt]est[Rr]esult*/
+coverage*.xml
+coverage*.json
+*.coverage
+*.trx
+
+# Local secrets and environment - NEVER commit these
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+appsettings.Development.local.json
+secrets.json
+
+# Akiba data - member records must never reach source control
+backups/
+*.bak
+*.dump
+scans/
+uploads/
+reports-output/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

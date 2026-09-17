@@ -1,0 +1,35 @@
+<Project>
+
+  <!--
+    Settings that apply to EVERY project in the solution.
+    Akiba is a financial system of record: warnings are errors, nullable is on,
+    and nothing ships that the compiler is unhappy about.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      CS1591 = "missing XML comment for publicly visible type or member".
+      Documentation generation is on so that analyzers can see doc comments,
+      but we do not require one on every member.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Company>Akiba Welfare Society</Company>
+    <Product>Akiba Sacco Management System</Product>
+    <Authors>Chabrin Agencies Limited ICT</Authors>
+  </PropertyGroup>
+
+</Project>

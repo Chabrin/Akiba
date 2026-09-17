@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ================================================================
+    Akiba.Infrastructure
+
+    Everything that talks to the outside world: EF Core and PostgreSQL,
+    repositories, ASP.NET Core Identity, email and SMS, file storage,
+    Hangfire jobs, report writers.
+
+    DEPENDENCY RULE: may reference Akiba.Application (and Akiba.Domain
+    transitively). It must never reference Akiba.Web.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Akiba.Application\Akiba.Application.csproj" />
+  </ItemGroup>
+
+</Project>

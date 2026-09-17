@@ -1,0 +1,23 @@
+# Normalise line endings. CI runs `dotnet format --verify-no-changes` on Linux while
+# development happens on Windows; without this, every file would "differ" by its line
+# endings and the format check would fail for no real reason.
+* text=auto eol=lf
+
+*.cs        text eol=lf diff=csharp
+*.csproj    text eol=lf
+*.sln       text eol=crlf
+*.props     text eol=lf
+*.targets   text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.sh        text eol=lf
+*.ps1       text eol=crlf
+Dockerfile  text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.xlsx  binary
+*.docx  binary
+*.doc   binary

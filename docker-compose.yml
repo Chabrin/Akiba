@@ -1,0 +1,72 @@
+# Akiba - deployment for the dedicated LAN machine.
+#
+# NETWORK EXPOSURE: Akiba holds member financial records and is never exposed to the
+# internet. AKIBA_BIND_ADDRESS defaults to 127.0.0.1 so that an unconfigured deployment
+# is reachable only from the machine itself. To serve the four officials over the CAL
+# LAN, set it to that machine's LAN address in .env - never to 0.0.0.0.
+
+name: akiba
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-akiba}
+      POSTGRES_USER: ${POSTGRES_USER:-akiba}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # Kenyan locale for collation; all money is numeric(19,4) regardless.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      # Database is NOT published to the LAN. Officials reach Akiba through the web
+      # application; nothing else needs a route to PostgreSQL.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - akiba-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-akiba} -d ${POSTGRES_DB:-akiba}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  seq:
+    image: datalust/seq:latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+    ports:
+      - "127.0.0.1:${SEQ_PORT:-5341}:80"
+    volumes:
+      - akiba-seq:/data
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__Akiba: >-
+        Host=db;Port=5432;Database=${POSTGRES_DB:-akiba};Username=${POSTGRES_USER:-akiba};Password=${POSTGRES_PASSWORD};Include Error Detail=false
+      Serilog__WriteTo__1__Args__serverUrl: http://seq
+    ports:
+      - "${AKIBA_BIND_ADDRESS:-127.0.0.1}:${AKIBA_PORT:-8080}:8080"
+    volumes:
+      # Scanned application forms, vouchers and generated reports live outside the
+      # container so they survive a rebuild and are picked up by the nightly backup.
+      - akiba-files:/var/akiba/files
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  akiba-db:
+  akiba-seq:
+  akiba-files:

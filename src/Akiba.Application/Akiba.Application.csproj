@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ================================================================
+    Akiba.Application
+
+    Use cases. Commands, queries, handlers, validators, and the PORT
+    INTERFACES that Infrastructure implements (repositories, clock,
+    email, SMS, file storage).
+
+    DEPENDENCY RULE: may reference Akiba.Domain only.
+    It must never reference Akiba.Infrastructure or Akiba.Web -
+    that is what the ports are for.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Akiba.Domain\Akiba.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

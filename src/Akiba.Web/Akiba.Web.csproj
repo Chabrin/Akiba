@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    ================================================================
+    Akiba.Web
+
+    The Blazor Server panel used by the four officials over the LAN.
+    This is the composition root: it is the ONLY project allowed to
+    reference Akiba.Infrastructure, and it does so purely to wire up
+    dependency injection.
+
+    DEPENDENCY RULE: no domain logic lives here. Components dispatch
+    commands and queries and render the result. If a Blazor component
+    is calculating money, it is in the wrong place.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.Web</RootNamespace>
+    <UserSecretsId>akiba-web-local</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Akiba.Application\Akiba.Application.csproj" />
+    <ProjectReference Include="..\Akiba.Infrastructure\Akiba.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

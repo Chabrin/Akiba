@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Architecture tests reference every project so it can inspect their
+    compiled assemblies, and reads the .csproj files from disk so it can
+    catch a forbidden reference at the source rather than after the
+    compiler has trimmed it away.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.ArchitectureTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Akiba.Domain\Akiba.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Akiba.Application\Akiba.Application.csproj" />
+    <ProjectReference Include="..\..\src\Akiba.Infrastructure\Akiba.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Akiba.Web\Akiba.Web.csproj" />
+  </ItemGroup>
+
+</Project>
