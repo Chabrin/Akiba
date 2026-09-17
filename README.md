@@ -26,10 +26,10 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 6 | Schedule generation with the one-month grace period | ✅ Done |
 | 7 | Guarantors, coverage, liability, exposure | ✅ Done |
 | 8 | Applications, lock period, approvals, disbursement | ✅ Done |
-| 9 | Receipts, three channels, allocation, clearance | ⬜ Not started |
+| 9 | Receipts, three channels, allocation, clearance | ✅ Done (domain) |
 | 10 | Payroll and bank reconciliation | ⬜ Not started |
-| 11 | Restructuring | ⬜ Not started |
-| 12 | Arrears and ageing | ⬜ Not started |
+| 11 | Restructuring | ✅ Done (domain) |
+| 12 | Arrears and ageing | ✅ Done (domain) |
 | 13 | Reporting suite | ⬜ Not started |
 | 14 | Notifications | ⬜ Not started |
 | 15 | Identity, roles, MFA, audit trail | ⬜ Not started |
