@@ -65,11 +65,34 @@ dotnet_naming_style.underscore_prefix.capitalization = camel_case
 
 # CA1062 (validate arguments) is noisy in a nullable-enabled codebase
 dotnet_diagnostic.CA1062.severity = none
-# CA1848 (LoggerMessage delegates) - not worth it at this scale
+# CA1716 warns when a parameter name collides with a reserved word in ANOTHER .NET language,
+# so that a VB or F# consumer can still implement the interface. Akiba is one C# solution with
+# no external consumers, and `from`/`to`/`date` are the words an accountant uses for these
+# things. Renaming them to placate a cross-language rule would cost clarity for no reader.
+dotnet_diagnostic.CA1716.severity = none
+# CA1848 (LoggerMessage delegates) and CA1873 (guard expensive log arguments) both optimise
+# logging on a hot path. Akiba has four users on a LAN and logs at startup and at posting
+# time; the source-generated delegates and IsEnabled guards would cost readability and buy
+# nothing measurable.
 dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
 
 [tests/**/*.cs]
 # Test method names read as sentences: Disbursing_a_loan_posts_two_lines
 dotnet_naming_rule.test_methods.severity = none
 dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA1861.severity = none
+# xUnit's collection-fixture convention is a type whose name ends in "Collection". CA1711
+# reserves that suffix for ICollection implementations; here the framework's convention wins.
+dotnet_diagnostic.CA1711.severity = none
+
+# EF Core writes these files, not people. They are checked in because a migration is part of
+# the schema's history and must never be regenerated differently, but they are not edited by
+# hand, so holding them to the hand-written style rules only means reformatting generated code
+# after every migration.
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1062.severity = none

@@ -21,6 +21,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      The EF Core health check. Note this is Microsoft.Extensions.Diagnostics.*, not
+      Microsoft.EntityFrameworkCore.* - the architecture tests forbid Akiba.Web declaring a
+      dependency on EF Core itself, because a Blazor component that can open a DbContext is a
+      component that will end up calculating money.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Akiba.Application\Akiba.Application.csproj" />
     <ProjectReference Include="..\Akiba.Infrastructure\Akiba.Infrastructure.csproj" />
   </ItemGroup>

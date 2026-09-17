@@ -20,7 +20,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 |---|---|---|
 | 1 | Solution skeleton, dependency rules, Docker Compose, CI | ✅ Done |
 | 2 | `Money` value object, including `Allocate` | ✅ Done |
-| 3 | Ledger core: accounts, journal entries, balances as at a date, period close | ✅ Done |
+| 3 | Ledger core: accounts, journal entries, balances as at a date, period close | ✅ Done — persisted |
 | 4 | Borrowers, members, zones, shares | ✅ Done |
 | 5 | Loan products and interest strategies | ✅ Done |
 | 6 | Schedule generation with the one-month grace period | ✅ Done |
@@ -57,6 +57,16 @@ dotnet test Akiba.sln
 
 Warnings are errors. A build that emits a warning fails.
 
+The integration tests start a PostgreSQL container, so Docker must be running. If your
+Docker daemon is not available, point them at a PostgreSQL you already have — still a real
+server, running the real migrations, with identical tests:
+
+```bash
+AKIBA_TEST_POSTGRES="Host=localhost;Port=5432;Database=akiba_tests;Username=postgres;Password=..." dotnet test Akiba.sln
+```
+
+CI always uses the container.
+
 ### Check the architecture rules on their own
 
 ```bash
@@ -74,11 +84,23 @@ dotnet format Akiba.sln --verify-no-changes --severity warn
 
 ### Run locally
 
+Akiba needs a PostgreSQL database. Create one, then point the app at it:
+
 ```bash
-dotnet run --project src/Akiba.Web
+ConnectionStrings__Akiba="Host=localhost;Port=5432;Database=akiba_dev;Username=postgres;Password=..." dotnet run --project src/Akiba.Web
 ```
 
-Then open <http://localhost:5280>. Health probe at `/health`.
+Migrations are applied and the chart of accounts is seeded at startup. No member, loan or
+balance is ever seeded — opening balances arrive through the migration tooling, which is a
+reviewed and signed-off process, not a side effect of starting the application.
+
+| Endpoint | What it shows |
+|---|---|
+| `/health` | Liveness, including the database |
+| `/ledger/accounts` | The seeded chart of accounts |
+| `/ledger/trial-balance` | The trial balance as at today, which must be zero |
+
+These are a read-only window on the ledger while the Blazor panel is still to come.
 
 ### Project layout
 

@@ -18,7 +18,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Akiba.Application\Akiba.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Repositories and the DbContext's row types are internal: outside this assembly, the only
+      way to reach the database is through the ports in Akiba.Application. The integration
+      tests construct the repositories directly, because testing them through a handler would
+      be testing the handler.
+    -->
+    <InternalsVisibleTo Include="Akiba.Infrastructure.Tests" />
   </ItemGroup>
 
 </Project>

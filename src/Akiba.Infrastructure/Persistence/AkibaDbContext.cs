@@ -1,0 +1,62 @@
+using Akiba.Application.Abstractions;
+using Akiba.Infrastructure.Persistence.Rows;
+using Microsoft.EntityFrameworkCore;
+
+namespace Akiba.Infrastructure.Persistence;
+
+/// <summary>
+/// Akiba's database.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Every monetary column is <c>numeric(19,4)</c>. The four decimal places are headroom for
+/// intermediate rate arithmetic; money is rounded to two at the point of posting. There is no
+/// <c>double precision</c> column anywhere in this schema and there must never be one - see
+/// ARCHITECTURE.md section 3.
+/// </para>
+/// <para>
+/// There are no balance columns either. A member's shareholding, a loan's outstanding balance
+/// and the bank position are derived by summing journal lines, and adding a column to cache
+/// any of them would mean holding two numbers with no way to tell which is real.
+/// </para>
+/// </remarks>
+public sealed class AkibaDbContext : DbContext, IUnitOfWork
+{
+    /// <summary>The schema every Akiba table lives in.</summary>
+    public const string Schema = "akiba";
+
+    /// <summary>The type every monetary column uses.</summary>
+    internal const string MoneyColumnType = "numeric(19,4)";
+
+    public AkibaDbContext(DbContextOptions<AkibaDbContext> options)
+        : base(options)
+    {
+    }
+
+    internal DbSet<AccountRow> Accounts => Set<AccountRow>();
+
+    internal DbSet<JournalEntryRow> JournalEntries => Set<JournalEntryRow>();
+
+    internal DbSet<JournalLineRow> JournalLines => Set<JournalLineRow>();
+
+    internal DbSet<AccountingPeriodRow> AccountingPeriods => Set<AccountingPeriodRow>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(modelBuilder);
+
+        modelBuilder.HasDefaultSchema(Schema);
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AkibaDbContext).Assembly);
+    }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(configurationBuilder);
+
+        // Belt and braces: even a decimal property somebody forgets to configure gets the
+        // right column type rather than silently defaulting to a lower precision.
+        configurationBuilder.Properties<decimal>().HaveColumnType(MoneyColumnType);
+
+        configurationBuilder.Properties<string>().HaveMaxLength(256);
+    }
+}
