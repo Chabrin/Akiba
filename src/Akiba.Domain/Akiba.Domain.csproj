@@ -21,4 +21,16 @@
     <RootNamespace>Akiba.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!--
+      Some aggregate operations are internal because only another aggregate in this assembly
+      may call them - Loan.CloseIntoRestructure, for instance, is driven by the restructuring
+      service and must not be reachable from a Blazor component. The domain's own test project
+      tests them directly rather than through a public wrapper that exists only for testing.
+
+      This is an assembly attribute, not a package reference: Akiba.Domain still has none.
+    -->
+    <InternalsVisibleTo Include="Akiba.Domain.Tests" />
+  </ItemGroup>
+
 </Project>
