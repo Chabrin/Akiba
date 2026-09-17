@@ -41,6 +41,15 @@ Status: 🔴 blocks a milestone · 🟠 needed before go-live · 🟡 can ship w
 | Most recent bank statement | Building and testing the bank reconciliation importer | 🟠 Requested, not received |
 | A completed example loan application form | Confirming every captured field and its format | 🟠 Requested, not received |
 
+## Found while building, not yet raised
+
+**The graduated scale is a maximum, not a fixed term.** The application form's duration
+guide is headed *"Maximum Repayment Period"* and the form asks the applicant to state the
+period they want. The build brief treats the scale as giving *the* term. The code follows
+the form: a member borrowing 60,000 may ask for eight months although the scale allows
+twelve, and a longer request is refused. Worth confirming, because it changes what the
+office may agree to at the counter.
+
 ## One thing to verify against the paper ledger
 
 The emergency loan maximum is recorded as **KSh 25,000 over 5 months at 5,500/month**, and

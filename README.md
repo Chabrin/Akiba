@@ -22,8 +22,8 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 2 | `Money` value object, including `Allocate` | ✅ Done |
 | 3 | Ledger core: accounts, journal entries, balances as at a date, period close | ✅ Done |
 | 4 | Borrowers, members, zones, shares | ✅ Done |
-| 5 | Loan products and interest strategies | ⬜ Not started |
-| 6 | Schedule generation with the one-month grace period | ⬜ Not started |
+| 5 | Loan products and interest strategies | ✅ Done |
+| 6 | Schedule generation with the one-month grace period | ✅ Done |
 | 7 | Guarantors, coverage, liability, exposure | ⬜ Not started |
 | 8 | Applications, lock period, approvals, disbursement | ⬜ Not started |
 | 9 | Receipts, three channels, allocation, clearance | ⬜ Not started |
