@@ -30,12 +30,11 @@
 
   <ItemGroup Label="Testing">
     <!--
-      Integration tests run against a real PostgreSQL container. Never SQLite and never the
-      in-memory provider: both differ from PostgreSQL in exactly the places that matter to a
-      ledger - numeric precision, transaction isolation, constraint enforcement - so a green
-      test against either would prove nothing about production.
+      Npgsql, so the integration tests can clear the connection pool between runs. They talk
+      to a real PostgreSQL server - never SQLite and never the in-memory provider, because
+      both differ from PostgreSQL exactly where a ledger is sensitive.
     -->
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageVersion Include="xunit" Version="2.9.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />

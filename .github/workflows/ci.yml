@@ -19,6 +19,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # Akiba itself does not use Docker - it runs as a service against an installed
+    # PostgreSQL, and docs/deployment.md says why. The integration tests still need a real
+    # PostgreSQL, and the runner provides one here at no cost to anybody's machine.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: akiba_tests
+          POSTGRES_USER: akiba
+          POSTGRES_PASSWORD: akiba-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,12 +59,9 @@ jobs:
       - name: Build
         run: dotnet build Akiba.sln --configuration Release --no-restore
 
-      # Integration tests use Testcontainers and need a working Docker daemon.
-      # ubuntu-latest runners provide one; this fails loudly if that ever changes.
-      - name: Verify Docker is available for Testcontainers
-        run: docker info > /dev/null
-
       - name: Test
+        env:
+          AKIBA_TEST_POSTGRES: Host=localhost;Port=5432;Database=akiba_tests;Username=akiba;Password=akiba-ci-only
         run: >-
           dotnet test Akiba.sln
           --configuration Release
@@ -85,8 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Run the architecture tests as their own job so a dependency-rule violation is
-    # visible as such in the checks list, rather than buried in the full test run.
+    # Run as its own job so a dependency-rule violation shows up as such in the checks list,
+    # rather than buried in the full test run. Needs no database.
     steps:
       - uses: actions/checkout@v4
 
@@ -100,3 +115,24 @@ jobs:
           dotnet test tests/Akiba.ArchitectureTests/Akiba.ArchitectureTests.csproj
           --configuration Release
           --logger "console;verbosity=normal"
+
+  publish:
+    name: Publish check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Akiba is deployed by copying publish output onto the machine, so a publish that fails
+    # is a deployment that fails. Cheaper to find out here.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Publish
+        run: dotnet publish src/Akiba.Web --configuration Release --output ./publish
+
+      - name: Confirm the entry point is there
+        run: test -f ./publish/Akiba.Web.dll

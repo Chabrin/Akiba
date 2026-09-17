@@ -35,7 +35,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 15 | Identity, roles, MFA, audit trail | ⬜ Not started |
 | 16 | Dividend run | ⬜ Not started |
 | 17 | Migration tooling | ⬜ Not started |
-| 18 | Deployment, backups, treasurer's handbook | ⬜ Not started |
+| 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
 
 ---
 
@@ -44,8 +44,9 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 ### Prerequisites
 
 - **.NET 10 SDK** — the version is pinned in `global.json`
-- **Docker** — required, not optional. Integration tests run against real PostgreSQL via
-  Testcontainers; SQLite and the in-memory provider are never used.
+- **PostgreSQL 17 or later**, running locally. The integration tests use a real server;
+  SQLite and the in-memory provider are never used, because both differ from PostgreSQL
+  exactly where a ledger is sensitive.
 
 ### Build and test
 
@@ -57,15 +58,17 @@ dotnet test Akiba.sln
 
 Warnings are errors. A build that emits a warning fails.
 
-The integration tests start a PostgreSQL container, so Docker must be running. If your
-Docker daemon is not available, point them at a PostgreSQL you already have — still a real
-server, running the real migrations, with identical tests:
+Create the test database once:
+
+```bash
+createdb akiba_tests
+```
+
+The tests default to `localhost:5432` as `postgres`. Point them elsewhere with:
 
 ```bash
 AKIBA_TEST_POSTGRES="Host=localhost;Port=5432;Database=akiba_tests;Username=postgres;Password=..." dotnet test Akiba.sln
 ```
-
-CI always uses the container.
 
 ### Check the architecture rules on their own
 
@@ -124,24 +127,24 @@ Dependencies point inward. `Akiba.Domain` has no NuGet references at all. See
 
 ## Deployment
 
-Akiba runs on a **dedicated machine** — not the CAL server — via Docker Compose.
+Akiba runs on a **dedicated machine** — not the CAL server — as a Windows service or a
+systemd unit, against an installed PostgreSQL. **Full instructions, written for a
+non-developer: [`docs/deployment.md`](docs/deployment.md).**
 
-```bash
-cp .env.example .env
-#  edit .env: set POSTGRES_PASSWORD, and AKIBA_BIND_ADDRESS to the machine's LAN address
-docker compose up -d
-```
+There is no Docker. Docker earns its keep when the same software must run identically across
+many environments, and Akiba has one: a single machine, four users, maintained by whoever is
+around. Without it the moving parts are ones any IT contractor already knows — PostgreSQL, a
+service, and `pg_dump`.
 
 ### Network exposure
 
 This system holds member financial records and the group requires confidentiality.
 
-- `AKIBA_BIND_ADDRESS` **defaults to `127.0.0.1`**, so an unconfigured deployment is
-  reachable only from the machine itself.
-- To serve the four officials, set it to that machine's **LAN address**, e.g.
-  `192.168.1.40`. **Never set it to `0.0.0.0`.**
-- PostgreSQL and Seq are bound to `127.0.0.1` and are not published to the LAN at all.
-- The container runs as a non-root user.
+- `ASPNETCORE_URLS` decides what Akiba listens on. Use the machine's **own LAN address**,
+  e.g. `http://192.168.1.40:8080`. **Never `0.0.0.0`.**
+- PostgreSQL listens on `localhost` only. Officials reach Akiba through the web application;
+  nothing else needs a route to the database.
+- Backups are encrypted, because a `pg_dump` is every member's financial position in one file.
 
 ---
 

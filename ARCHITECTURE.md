@@ -317,10 +317,12 @@ violation shows up as such, rather than buried in the full test run.
   Not invented examples. The emergency loan test asserts 25,000 + 2,500 = 27,500 over five
   months at exactly 5,500 per month, because that is what the ledger says and what members
   expect to see.
-- **Integration tests run against real PostgreSQL via Testcontainers. Never SQLite, never
-  the in-memory provider.** Both differ from PostgreSQL in precisely the areas that matter
-  to a ledger — numeric precision, transaction isolation, constraint enforcement — so a
-  green test against either would prove nothing about production.
+- **Integration tests run against a real PostgreSQL server. Never SQLite, never the
+  in-memory provider.** Both differ from PostgreSQL in precisely the areas that matter to a
+  ledger — numeric precision, transaction isolation, constraint enforcement — so a green test
+  against either would prove nothing about production. Akiba is not containerised, and
+  `docs/deployment.md` explains why; the tests run against an installed server for the same
+  reason.
 - **Property-based tests for `Money.Allocate`**, because the failure mode is a specific
   amount and a specific number of parts that nobody thought to write an example for.
 - **Warnings are errors.** In a financial system, "it's only a warning" is not a category.

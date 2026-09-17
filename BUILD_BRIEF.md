@@ -49,8 +49,8 @@ A `JournalEntry` aggregate holds: entry date, value date, narration, source docu
 - **Serilog** to file and Seq
 - **ClosedXML** for Excel schedules, **QuestPDF** for member statements and the AGM pack
 - **Audit.NET** for the audit trail (chosen over hand-rolled `SaveChanges` interceptors — do not build both)
-- **xUnit + FluentAssertions + Testcontainers** (real PostgreSQL in integration tests, never SQLite or InMemory for anything touching money)
-- **Docker Compose** deployment onto a dedicated LAN machine
+- **xUnit + FluentAssertions** with a real PostgreSQL server in integration tests, never SQLite or InMemory for anything touching money
+- **Deployment onto a dedicated LAN machine** as a Windows service or systemd unit, against an installed PostgreSQL. *(Revised: Docker Compose was dropped — see `docs/deployment.md` for the reasoning.)*
 
 No public internet exposure. No member-facing portal. No third-party API surface. The group operates informally and leadership requires confidentiality — the minutes of 06/09/2026 record the system as in-house, for operational use by authorised officials only. Bind to the LAN only.
 
@@ -332,7 +332,7 @@ These are open because the source documents are silent, contradictory, or answer
 15. **Identity, roles, MFA, audit trail hardening.**
 16. **Dividend run** with review and approval.
 17. **Migration tooling.**
-18. **Deployment:** Docker Compose, encrypted nightly backups with an off-machine copy, automated restore verification, health checks, and a plain-English README a non-developer treasurer can follow.
+18. **Deployment:** service installation, encrypted nightly backups with an off-machine copy, automated restore verification, health checks, and a plain-English guide a non-developer treasurer can follow.
 
 ## 14. Conventions
 

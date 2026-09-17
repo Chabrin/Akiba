@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Npgsql" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,12 +1,11 @@
 using Akiba.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Testcontainers.PostgreSql;
 
 namespace Akiba.Infrastructure.Tests.Persistence;
 
 /// <summary>
-/// A real PostgreSQL instance, shared by every test in the collection.
+/// A real PostgreSQL database, shared by every test in the collection.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,12 +15,9 @@ namespace Akiba.Infrastructure.Tests.Persistence;
 /// happens in Nairobi.
 /// </para>
 /// <para>
-/// By default the instance is a container started by Testcontainers, which is what CI uses
-/// and what everybody should use. Where <c>AKIBA_TEST_POSTGRES</c> is set, that connection
-/// string is used instead, so a developer whose Docker daemon is not running can still run
-/// these tests against a PostgreSQL they already have. That is an escape hatch for a machine,
-/// not a relaxation of the rule: it is still a real PostgreSQL server, running real
-/// migrations, and the tests are identical either way.
+/// It connects to a PostgreSQL server you already have, rather than starting a container.
+/// Akiba does not use Docker: it runs as a service against an installed PostgreSQL, so the
+/// tests run the same way. CI provides the server as a workflow service.
 /// </para>
 /// <para>
 /// The schema is created by running the real migrations rather than by <c>EnsureCreated</c>,
@@ -31,52 +27,54 @@ namespace Akiba.Infrastructure.Tests.Persistence;
 /// </remarks>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    /// <summary>
-    /// Points the tests at an existing PostgreSQL instead of starting a container.
-    /// </summary>
+    /// <summary>Overrides the connection string the tests use.</summary>
     public const string ConnectionStringVariable = "AKIBA_TEST_POSTGRES";
 
-    private readonly PostgreSqlContainer? _container;
-    private readonly string? _externalConnectionString;
+    /// <summary>
+    /// Where the tests look when <see cref="ConnectionStringVariable"/> is not set: a local
+    /// PostgreSQL with the default superuser. Development machines usually have one.
+    /// </summary>
+    private const string DefaultConnectionString =
+        "Host=localhost;Port=5432;Database=akiba_tests;Username=postgres;Password=postgres";
 
-    public PostgresFixture()
-    {
-        _externalConnectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
-
-        if (string.IsNullOrWhiteSpace(_externalConnectionString))
-        {
-            _container = new PostgreSqlBuilder("postgres:17-alpine")
-                .WithDatabase("akiba_tests")
-                .WithUsername("akiba")
-                .WithPassword("akiba-tests-only")
-                .Build();
-        }
-    }
-
-    public string ConnectionString =>
-        _container?.GetConnectionString() ?? _externalConnectionString!;
-
-    /// <summary>True when running against a container rather than a developer's own server.</summary>
-    public bool UsesContainer => _container is not null;
+    public string ConnectionString { get; } =
+        Environment.GetEnvironmentVariable(ConnectionStringVariable) is { Length: > 0 } configured
+            ? configured
+            : DefaultConnectionString;
 
     public async Task InitializeAsync()
     {
-        if (_container is not null)
-        {
-            await _container.StartAsync();
-        }
-
         await using var context = CreateContext();
-        await context.Database.MigrateAsync();
-    }
 
-    public async Task DisposeAsync()
-    {
-        if (_container is not null)
+        try
         {
-            await _container.DisposeAsync();
+            await context.Database.MigrateAsync();
+        }
+        catch (NpgsqlException exception)
+        {
+            throw new InvalidOperationException(
+                $"""
+                Could not reach PostgreSQL for the integration tests.
+
+                Akiba's integration tests run against a real PostgreSQL server - never SQLite
+                and never the in-memory provider, because both differ from PostgreSQL exactly
+                where a ledger is sensitive.
+
+                Point them at a server you have:
+
+                    {ConnectionStringVariable}="Host=localhost;Port=5432;Database=akiba_tests;Username=postgres;Password=..."
+
+                and create the database first:
+
+                    CREATE DATABASE akiba_tests;
+
+                Tried: {Redact(ConnectionString)}
+                """,
+                exception);
         }
     }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     public AkibaDbContext CreateContext()
     {
@@ -88,21 +86,21 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Clears the ledger between tests.
+    /// Clears every table between tests.
     /// </summary>
     /// <remarks>
     /// This is the only place in the entire system that deletes a financial record, and it
-    /// exists solely so that tests do not see each other's entries. Nothing in
+    /// exists solely so that tests do not see each other's rows. Nothing in
     /// <c>Akiba.Application</c> or <c>Akiba.Infrastructure</c> can delete a journal entry -
     /// <c>IJournalRepository</c> has no Delete, by design.
+    ///
+    /// Every table, not just the ledger ones. A table left out here does not fail loudly - it
+    /// leaks rows into the next test, which then fails somewhere unrelated on a duplicate key.
     /// </remarks>
     public async Task ResetAsync()
     {
         await using var context = CreateContext();
 
-        // Every table, not just the ledger ones. A table left out here does not fail loudly -
-        // it leaks rows into the next test, which then fails somewhere unrelated on a
-        // duplicate key.
         await context.Database.ExecuteSqlRawAsync(
             $"""
             TRUNCATE TABLE
@@ -128,6 +126,16 @@ public sealed class PostgresFixture : IAsyncLifetime
         // view of a type that a migration has since changed.
         NpgsqlConnection.ClearAllPools();
     }
+
+    /// <summary>Strips the password so a failure message can be pasted into a chat safely.</summary>
+    private static string Redact(string connectionString) =>
+        string.Join(
+            ';',
+            connectionString
+                .Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(part => part.TrimStart().StartsWith("Password", StringComparison.OrdinalIgnoreCase)
+                    ? "Password=***"
+                    : part));
 }
 
 [CollectionDefinition(Name)]

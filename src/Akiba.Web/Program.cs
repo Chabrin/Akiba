@@ -17,8 +17,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Akiba")
     ?? throw new InvalidOperationException(
-        "No connection string named 'Akiba'. Set ConnectionStrings__Akiba - docker-compose.yml " +
-        "does this from the values in .env.");
+        "No connection string named 'Akiba'. Set the ConnectionStrings__Akiba environment " +
+        "variable - see docs/deployment.md.");
 
 builder.Services.AddAkibaInfrastructure(connectionString);
 
