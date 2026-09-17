@@ -81,6 +81,17 @@ public interface ILoanRepository
     Task<IReadOnlyList<Loan>> RunningForBorrowerAsync(
         BorrowerId borrowerId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Every loan a borrower has ever had, settled and written off included.
+    /// </summary>
+    /// <remarks>
+    /// A statement as at a past date needs the loans that were running <i>then</i>, which is
+    /// not the same set as the loans running now - a loan settled since must still appear, and
+    /// one disbursed since must not.
+    /// </remarks>
+    Task<IReadOnlyList<Loan>> AllForBorrowerAsync(
+        BorrowerId borrowerId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Loan>> AllRunningAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Every loan a member guarantees, for the exposure report and the exit review.</summary>

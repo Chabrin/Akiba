@@ -26,6 +26,14 @@
   <ItemGroup Label="Application layer">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <!--
+      MediatR is commercially licensed above a revenue threshold Akiba is far below, so the
+      free tier applies. Its types stay inside Akiba.Application: IRequest never reaches the
+      domain, so replacing the dispatcher would be a change to this layer alone.
+    -->
+    <PackageVersion Include="MediatR" Version="14.2.0" />
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">

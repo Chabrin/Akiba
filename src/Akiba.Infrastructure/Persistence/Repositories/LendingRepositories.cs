@@ -290,6 +290,19 @@ internal sealed class LoanRepository : ILoanRepository
         return [.. rows.Select(LendingMapper.ToDomain)];
     }
 
+    public async Task<IReadOnlyList<Loan>> AllForBorrowerAsync(
+        BorrowerId borrowerId, CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Loans
+            .AsNoTracking()
+            .Where(loan => loan.BorrowerId == borrowerId.Value)
+            .OrderBy(loan => loan.DisbursedOn)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(LendingMapper.ToDomain)];
+    }
+
     public async Task<IReadOnlyList<Loan>> AllRunningAsync(CancellationToken cancellationToken = default)
     {
         var rows = await _context.Loans

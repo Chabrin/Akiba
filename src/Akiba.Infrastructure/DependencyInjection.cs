@@ -1,6 +1,8 @@
 using Akiba.Application.Abstractions;
+using Akiba.Domain.Common;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Infrastructure.Persistence.Repositories;
+using Akiba.Infrastructure.Identity;
 using Akiba.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -41,10 +43,29 @@ public static class DependencyInjection
         services.AddScoped<ILoanApplicationRepository, LoanApplicationRepository>();
         services.AddScoped<ILoanRepository, LoanRepository>();
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
+        services.AddScoped<IAkibaAccounts, AkibaAccounts>();
 
         services.AddScoped<ChartOfAccountsSeeder>();
 
         services.AddSingleton<IClock, SystemClock>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers a fixed signed-in official.
+    /// </summary>
+    /// <remarks>
+    /// For tests, and for development before ASP.NET Core Identity arrives in milestone 15.
+    /// <b>Never call this in Production</b> - every ledger entry would be attributed to the
+    /// same person regardless of who acted, which is the opposite of an audit trail. The host
+    /// guards the call and logs plainly when it is in use.
+    /// </remarks>
+    public static IServiceCollection AddAkibaTestUser(this IServiceCollection services, Actor actor)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ICurrentUser>(new FixedCurrentUser(actor));
 
         return services;
     }
