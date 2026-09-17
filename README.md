@@ -19,7 +19,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | # | Milestone | Status |
 |---|---|---|
 | 1 | Solution skeleton, dependency rules, Docker Compose, CI | ✅ Done |
-| 2 | `Money` value object, including `Allocate` | ⬜ Not started |
+| 2 | `Money` value object, including `Allocate` | ✅ Done |
 | 3 | Ledger core: accounts, journal entries, balances as at a date, period close | ⬜ Not started |
 | 4 | Borrowers, members, zones, shares | ⬜ Not started |
 | 5 | Loan products and interest strategies | ⬜ Not started |

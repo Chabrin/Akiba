@@ -158,13 +158,36 @@ journal entry no longer balances, and the entry constructor rejects it.
 always sum exactly to the whole**. There is a property-based test (FsCheck) asserting this
 for any amount and any number of parts, not a handful of examples.
 
-Everywhere Akiba divides money, it uses `Allocate`:
+Everywhere Akiba divides money, it uses `Allocate`. There are two overloads, because
+Akiba divides money two different ways:
+
+**`Allocate(int parts)` — an even split**, used for loan instalments. It works in whole
+minor units, where the division is exact, and hands the leftover cents to the **earliest
+parts**. Earliest-first is a decision, not an accident of the loop: the odd cent lands on
+the first instalment, which is the one closest to the disbursement and the easiest for a
+member to check against a payslip. A 12-month schedule sums to principal plus interest
+exactly.
+
+**`Allocate(IReadOnlyList<decimal> weights)` — a proportional split**, used for guarantor
+liability and dividends. It uses the **largest-remainder method**: everyone gets their whole
+minor units, then the leftover cents go to whoever was cut off by the most, with ties broken
+toward the earliest weight. Ties must break deterministically because a dividend run is
+computed as a draft, reviewed by the treasurer, and approved by the chairman possibly days
+later — recomputing has to produce the identical schedule or there is nothing meaningful to
+approve.
 
 - **Loan instalments** — a 12-month schedule must sum to principal plus interest exactly.
 - **Guarantor pro-rata liability** — a guarantor who guaranteed 50,000 of 200,000 bears
-  0.25 of the outstanding balance, and the guarantors' shares must sum to the whole.
+  0.25 of the outstanding balance, and the guarantors' shares must sum to the whole. A lost
+  cent here is a member being pursued for the wrong figure.
 - **Dividend allocation** — the total distributed to members must equal the total
   available, to the cent.
+
+`Money` carries the precision it was given and rounds **only when asked**, because rounding
+twice is how a figure ends up a cent away from anything reproducible. `default(Money)` has
+no currency and throws on arithmetic rather than behaving as zero shillings — a struct can
+always be default-constructed, and an uninitialised field that silently reads as zero would
+hide the bug that created it.
 
 ---
 

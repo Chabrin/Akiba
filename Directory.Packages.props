@@ -22,6 +22,12 @@
       7.x is the last Apache-2.0 release. Do NOT upgrade past 7 without a decision.
     -->
     <PackageVersion Include="FluentAssertions" Version="7.0.0" />
+    <!--
+      Property-based testing. Money.Allocate's failure mode is a specific amount and a
+      specific number of parts that nobody thought to write an example for, so it is
+      proved across generated inputs rather than asserted on a handful.
+    -->
+    <PackageVersion Include="FsCheck.Xunit" Version="3.4.0" />
   </ItemGroup>
 
 </Project>
