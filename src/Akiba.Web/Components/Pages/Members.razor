@@ -1,0 +1,194 @@
+@page "/members"
+@inject IMediator Mediator
+@inject IClock Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Akiba - Members</PageTitle>
+
+<PageHeader Title="Members"
+            Description="Shareholding and borrowing limit, derived from each member's share account.">
+    <Actions>
+        <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+    </Actions>
+</PageHeader>
+
+<MudPaper Elevation="1" Class="pa-2">
+    <MudToolBar Dense="true" Class="akiba-no-print">
+        <MudTextField T="string"
+                      Value="_search"
+                      ValueChanged="OnSearchChanged"
+                      Placeholder="Search by name, membership number or payroll number"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Immediate="true"
+                      Clearable="true"
+                      Class="mt-0" />
+
+        <MudSpacer />
+
+        <MudSwitch T="bool"
+                   Value="_includeExited"
+                   ValueChanged="OnIncludeExitedChanged"
+                   Color="Color.Primary"
+                   Label="Include members who have left CAL" />
+    </MudToolBar>
+
+    @if (_members is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (Filtered.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            @if (_members.Count == 0)
+            {
+                <text>
+                    No members yet. A member is enrolled by the accounts clerk from their letter
+                    to the chairman, and becomes a member proper at their first share
+                    contribution.
+                </text>
+            }
+            else
+            {
+                <text>No member matches that search.</text>
+            }
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="Filtered"
+                  Dense="true"
+                  Hover="true"
+                  Striped="true"
+                  Elevation="0"
+                  Breakpoint="Breakpoint.Sm"
+                  OnRowClick="@((TableRowClickEventArgs<MemberSummary> row) => OpenStatement(row.Item))"
+                  RowStyle="cursor: pointer">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh>Membership no.</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh Style="text-align: right">Shareholding</MudTh>
+                <MudTh Style="text-align: right">Borrowing limit</MudTh>
+                <MudTh Style="text-align: center">Loans</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member">
+                    @context.Name
+                    @if (!context.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">
+                            Left CAL
+                        </MudChip>
+                    }
+                    @if (context.IsLandlord)
+                    {
+                        <MudTooltip Text="Deductions run on the landlord schedule, drawn on the main account">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-2">
+                                Landlord
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Membership no.">@context.MembershipNumber</MudTd>
+                <MudTd DataLabel="Payroll no.">@context.PayrollNumber</MudTd>
+                <MudTd DataLabel="Shareholding" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Shareholding" />
+                </MudTd>
+                <MudTd DataLabel="Borrowing limit" Class="akiba-money-cell">
+                    <MoneyText Amount="context.BorrowingLimit" />
+                </MudTd>
+                <MudTd DataLabel="Loans" Style="text-align: center">
+                    @if (context.RunningLoans >= 2)
+                    {
+                        <MudTooltip Text="A member may hold two loans and no more">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                                @context.RunningLoans
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        @context.RunningLoans
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <MudIconButton Icon="@Icons.Material.Filled.Description"
+                                   Size="Size.Small"
+                                   aria-label="@($"Statement for {context.Name}")"
+                                   OnClick="@(() => OpenStatement(context))" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            @Filtered.Count of @_members.Count member(s), stated as at
+            @_asAt.ToString("d MMMM yyyy", CultureInfo.InvariantCulture). The borrowing limit is
+            twice the shareholding; it is not the only constraint, since the two-thirds rule can
+            bite well before it does.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    private DateOnly _asAt;
+    private string _search = string.Empty;
+    private bool _includeExited;
+    private IReadOnlyList<MemberSummary>? _members;
+
+    private IReadOnlyList<MemberSummary> Filtered =>
+        _members is null
+            ? []
+            : string.IsNullOrWhiteSpace(_search)
+                ? _members
+                : [.. _members.Where(Matches)];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = Clock.TodayInNairobi;
+        await LoadAsync();
+    }
+
+    private bool Matches(MemberSummary member) =>
+        member.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || member.MembershipNumber.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || member.PayrollNumber.Contains(_search, StringComparison.OrdinalIgnoreCase);
+
+    private void OnSearchChanged(string search) => _search = search ?? string.Empty;
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _members = null;
+        await LoadAsync();
+    }
+
+    private async Task OnIncludeExitedChanged(bool includeExited)
+    {
+        _includeExited = includeExited;
+        _members = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _members = await Mediator.Send(new ListMembersQuery(_asAt, _includeExited));
+
+    private void OpenStatement(MemberSummary? member)
+    {
+        // MudTable hands back a nullable item; a click on a header or an empty row has none.
+        if (member is null)
+        {
+            return;
+        }
+
+
+        Navigation.NavigateTo(
+            $"/members/{member.MemberId.Value}?asAt={_asAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}");
+    }
+}

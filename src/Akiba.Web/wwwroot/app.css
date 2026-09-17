@@ -1,0 +1,66 @@
+/*
+ * Akiba is read by four officials on office screens, often while comparing what is on the
+ * screen with a paper form on the desk. So: money right-aligned and tabular, dates
+ * unambiguous, and nothing that moves on its own.
+ */
+
+/* Money lines up column-wise when the digits are the same width. On a ledger page that is
+   not decoration - a figure that is out by a factor of ten should look wrong. */
+.akiba-money {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.akiba-money-cell {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* A negative figure is always a real event in a ledger, never a rendering artefact. */
+.akiba-negative {
+    color: var(--mud-palette-error);
+}
+
+.akiba-page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* The "as at" control appears on every screen that reports a figure, because every figure
+   Akiba reports is answerable as at a past date. */
+.akiba-as-at {
+    min-width: 12rem;
+}
+
+@media print {
+    .akiba-no-print {
+        display: none !important;
+    }
+}
+
+/* A headline figure must never be clipped. "KES 30,937.5" is not a smaller number than
+   "KES 30,937.50" - it is a different one, and a reader cannot tell which they are looking
+   at. Shrinking the type is the lesser evil. */
+.akiba-figure {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-size: clamp(0.95rem, 2.2vw, 1.25rem);
+}
+
+/* A stat card title wraps to two lines at narrow widths - "Loans outstanding" does, "Bank"
+   does not. Giving the header a fixed height keeps every figure in a row on the same
+   baseline, so the eye can compare them without hopping up and down. */
+.akiba-stat-header {
+    min-height: 2.75rem;
+}
+
+.akiba-stat-title {
+    display: block;
+    line-height: 1.25;
+}

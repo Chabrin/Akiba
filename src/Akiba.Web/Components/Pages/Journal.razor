@@ -1,0 +1,169 @@
+@page "/ledger/journal"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Journal</PageTitle>
+
+<PageHeader Title="Journal"
+            Description="Every entry, with its lines, its source document and who posted it. This is how an official walks back from a figure to the posting that made it.">
+    <Actions>
+        <div class="d-flex gap-3">
+            <MudDatePicker Label="From"
+                           Date="@(_from.ToDateTime(TimeOnly.MinValue))"
+                           DateChanged="OnFromChanged"
+                           DateFormat="dd MMM yyyy"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Class="akiba-as-at" />
+            <MudDatePicker Label="To"
+                           Date="@(_to.ToDateTime(TimeOnly.MinValue))"
+                           DateChanged="OnToChanged"
+                           DateFormat="dd MMM yyyy"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Class="akiba-as-at" />
+        </div>
+    </Actions>
+</PageHeader>
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_entries is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            No entries in that period.
+        </MudAlert>
+    }
+    else
+    {
+        <MudExpansionPanels MultiExpansion="true" Elevation="0">
+            @foreach (var entry in _entries)
+            {
+                <MudExpansionPanel>
+                    <TitleContent>
+                        <div class="d-flex align-center justify-space-between" style="width: 100%">
+                            <div>
+                                <MudText Typo="Typo.body2">
+                                    @entry.EntryDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                                    &nbsp;&mdash;&nbsp;@entry.Narration
+                                    @if (entry.IsReversal)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">
+                                            Reversal
+                                        </MudChip>
+                                    }
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @entry.SourceDocument &middot; posted by @entry.PostedBy
+                                    @if (entry.ValueDate != entry.EntryDate)
+                                    {
+                                        <text>
+                                            &middot; value date
+                                            @entry.ValueDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                                        </text>
+                                    }
+                                </MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="akiba-money mr-4">
+                                <MoneyText Amount="entry.Total" />
+                            </MudText>
+                        </div>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudSimpleTable Dense="true" Elevation="0">
+                            <thead>
+                                <tr>
+                                    <th>Account</th>
+                                    <th style="text-align: right">Debit</th>
+                                    <th style="text-align: right">Credit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in entry.Lines)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@line.AccountCode</strong> @line.AccountName
+                                        </td>
+                                        <td class="akiba-money-cell">
+                                            @if (!line.SignedAmount.IsNegative)
+                                            {
+                                                <MoneyText Amount="line.SignedAmount" HighlightNegative="false" />
+                                            }
+                                        </td>
+                                        <td class="akiba-money-cell">
+                                            @if (line.SignedAmount.IsNegative)
+                                            {
+                                                <MoneyText Amount="@(-line.SignedAmount)" HighlightNegative="false" />
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            @_entries.Count entr@(_entries.Count == 1 ? "y" : "ies"). Nothing here is ever edited
+            or deleted - a mistake is corrected by posting a reversal, which appears alongside
+            the original with its reason.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private IReadOnlyList<JournalEntryView>? _entries;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _to = Clock.TodayInNairobi;
+        _from = new DateOnly(_to.Year, _to.Month, 1).AddMonths(-2);
+
+        await LoadAsync();
+    }
+
+    private async Task OnFromChanged(DateTime? date)
+    {
+        if (date is null)
+        {
+            return;
+        }
+
+        _from = DateOnly.FromDateTime(date.Value);
+        _entries = null;
+        await LoadAsync();
+    }
+
+    private async Task OnToChanged(DateTime? date)
+    {
+        if (date is null)
+        {
+            return;
+        }
+
+        _to = DateOnly.FromDateTime(date.Value);
+        _entries = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        // The repository refuses a period that ends before it starts, which is right - but the
+        // page should not hand it one just because somebody is mid-edit.
+        if (_to < _from)
+        {
+            _entries = [];
+            return;
+        }
+
+        _entries = await Mediator.Send(new ListJournalEntriesQuery(_from, _to));
+    }
+}

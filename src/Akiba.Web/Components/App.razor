@@ -1,0 +1,31 @@
+@using Microsoft.AspNetCore.Components.Web
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+
+    @* MudBlazor ships its own stylesheet and Roboto. Akiba runs on a LAN with no internet
+       route, so both are served from the application rather than from a CDN. *@
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <HeadOutlet @rendermode="RenderMode.InteractiveServer" />
+</head>
+
+<body>
+    @* Interactive server rendering, declared here so it applies to every page.
+
+       Without a rendermode the components render statically and nothing works: no date
+       picker, no switch, no tab, no expansion panel. Registering the mode on the endpoint
+       with AddInteractiveServerRenderMode() only makes it AVAILABLE - a component still has
+       to ask for it. *@
+    <Routes @rendermode="RenderMode.InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+
+</html>

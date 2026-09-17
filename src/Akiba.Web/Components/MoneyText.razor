@@ -1,0 +1,24 @@
+@*
+    One place that renders money.
+
+    Named MoneyText rather than Money so it does not shadow the Money value object - a
+    component and a type sharing a name produces compiler errors nobody can read.
+
+    Every figure on every screen goes through here, so "how is money shown?" has one answer:
+    tabular numerals, right-aligned in a table, and a negative figure coloured because in a
+    ledger a negative is always a real event rather than a rendering artefact.
+*@
+
+<span class="@CssClass">@Amount.ToString()</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public Money Amount { get; set; }
+
+    /// <summary>Colour a negative figure. On by default; off where a negative is expected.</summary>
+    [Parameter]
+    public bool HighlightNegative { get; set; } = true;
+
+    private string CssClass =>
+        HighlightNegative && Amount.IsNegative ? "akiba-money akiba-negative" : "akiba-money";
+}

@@ -1,0 +1,31 @@
+@*
+    A page's title, what it is for, and whatever controls belong beside it.
+*@
+
+<div class="akiba-page-header">
+    <div>
+        <MudText Typo="Typo.h5" Class="mb-1">
+            <h1 style="all: unset">@Title</h1>
+        </MudText>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Description</MudText>
+        }
+    </div>
+
+    @if (Actions is not null)
+    {
+        <div class="akiba-no-print">@Actions</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+}

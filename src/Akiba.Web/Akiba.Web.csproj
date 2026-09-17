@@ -28,6 +28,7 @@
       component that will end up calculating money.
     -->
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="MudBlazor" />
   </ItemGroup>
 
   <ItemGroup>

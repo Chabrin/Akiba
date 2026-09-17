@@ -1,0 +1,154 @@
+@page "/receipts"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Receipts</PageTitle>
+
+<PageHeader Title="Receipts"
+            Description="Money in, on all three channels. A receipt reaches the ledger when it clears - a cheque that has not matured has not brought anything in." />
+
+<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true"
+         ActivePanelIndexChanged="OnTabChanged">
+    <MudTabPanel Text="Awaiting clearance" Icon="@Icons.Material.Filled.HourglassEmpty" />
+    <MudTabPanel Text="Awaiting allocation" Icon="@Icons.Material.Filled.CallSplit" />
+    <MudTabPanel Text="All" Icon="@Icons.Material.Filled.List" />
+</MudTabs>
+
+<MudPaper Elevation="1" Class="pa-2 mt-2">
+    @if (_receipts is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_receipts.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            @(_workList switch
+            {
+                ReceiptWorkList.AwaitingClearance => "Nothing is waiting to clear.",
+                ReceiptWorkList.AwaitingAllocation => "Every cleared receipt has been allocated.",
+                _ => "No receipts recorded.",
+            })
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_receipts" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Received</MudTh>
+                <MudTh>Channel</MudTh>
+                <MudTh>Reference</MudTh>
+                <MudTh>Name on slip</MudTh>
+                <MudTh Style="text-align: right">Amount</MudTh>
+                <MudTh Style="text-align: right">Unallocated</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Received">
+                    @context.ReceivedOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="Channel">
+                    @ChannelLabel(context.Channel)
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                        @context.Method
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Reference">@context.Reference</MudTd>
+                <MudTd DataLabel="Name on slip">
+                    @if (string.IsNullOrWhiteSpace(context.PayerNameOnSlip))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">-</MudText>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Kept exactly as written on the slip, not normalised to a member record">
+                            <span>@context.PayerNameOnSlip</span>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Amount" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Amount" />
+                </MudTd>
+                <MudTd DataLabel="Unallocated" Class="akiba-money-cell">
+                    @if (context.IsFullyAllocated)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Allocated</MudText>
+                    }
+                    else
+                    {
+                        <MoneyText Amount="context.Unallocated" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                        @context.Status
+                    </MudChip>
+                    @if (context.ClearanceOverdue(_today))
+                    {
+                        <MudTooltip Text="@($"Expected to mature on {context.ExpectedClearanceOn:d MMM yyyy}")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-1">
+                                Overdue
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+
+        @if (_workList == ReceiptWorkList.AwaitingAllocation)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+                This queue is worked by hand. Allocation is never inferred - a wrong guess in a
+                system of record is worse than no guess, because it looks like a decision
+                somebody made.
+            </MudText>
+        }
+    }
+</MudPaper>
+
+@code {
+    private ReceiptWorkList _workList = ReceiptWorkList.AwaitingClearance;
+    private IReadOnlyList<ReceiptSummary>? _receipts;
+    private DateOnly _today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _today = Clock.TodayInNairobi;
+        await LoadAsync();
+    }
+
+    private static string ChannelLabel(ReceiptChannel channel) => channel switch
+    {
+        ReceiptChannel.PayrollDeduction => "Payroll deduction",
+        ReceiptChannel.LandlordRentOffset => "Landlord rent offset",
+        _ => "Direct deposit",
+    };
+
+    private static Color StatusColour(ReceiptStatus status) => status switch
+    {
+        ReceiptStatus.Recorded => Color.Warning,
+        ReceiptStatus.Cleared => Color.Info,
+        ReceiptStatus.Reconciled => Color.Success,
+        _ => Color.Default,
+    };
+
+    private async Task OnTabChanged(int index)
+    {
+        _workList = index switch
+        {
+            0 => ReceiptWorkList.AwaitingClearance,
+            1 => ReceiptWorkList.AwaitingAllocation,
+            _ => ReceiptWorkList.All,
+        };
+
+        _receipts = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _receipts = await Mediator.Send(new ListReceiptsQuery(
+            _workList, _today.AddYears(-2), _today.AddMonths(1)));
+}

@@ -1,0 +1,28 @@
+@*
+    The "as at" control.
+
+    It appears on every screen that reports a figure, because every figure Akiba reports is
+    answerable as at a past date - that is the whole point of the append-only ledger, and a
+    screen that could only ever show today would be the one that could not answer it.
+*@
+
+<MudDatePicker Label="As at"
+               Date="@(AsAt.ToDateTime(TimeOnly.MinValue))"
+               DateChanged="OnDateChanged"
+               DateFormat="dd MMM yyyy"
+               MaxDate="@DateTime.Today.AddYears(1)"
+               Variant="Variant.Outlined"
+               Margin="Margin.Dense"
+               Class="akiba-as-at akiba-no-print"
+               HelperText="Figures are stated as at this date" />
+
+@code {
+    [Parameter, EditorRequired]
+    public DateOnly AsAt { get; set; }
+
+    [Parameter]
+    public EventCallback<DateOnly> AsAtChanged { get; set; }
+
+    private Task OnDateChanged(DateTime? date) =>
+        date is null ? Task.CompletedTask : AsAtChanged.InvokeAsync(DateOnly.FromDateTime(date.Value));
+}

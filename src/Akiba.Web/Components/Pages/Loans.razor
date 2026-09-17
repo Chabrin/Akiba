@@ -1,0 +1,171 @@
+@page "/loans"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Loans</PageTitle>
+
+<PageHeader Title="Loan portfolio"
+            Description="Outstanding balances derived from each loan's receivable account; arrears from comparing the schedule with what was actually paid.">
+    <Actions>
+        <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+    </Actions>
+</PageHeader>
+
+@if (_loans is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    @if (_arrears is { Loans.Count: > 0 })
+    {
+        <MudPaper Elevation="1" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Arrears ageing</MudText>
+
+            <MudGrid Spacing="2">
+                @foreach (var bucket in AgeingBuckets)
+                {
+                    <MudItem xs="6" sm="4" md="3" lg="2">
+                        <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @BucketLabel(bucket)
+                            </MudText>
+                            <MudText Typo="Typo.body1" Class="akiba-figure">
+                                <MoneyText Amount="@_arrears.Totals[bucket]" />
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+                <MudItem xs="6" sm="4" md="3" lg="2">
+                    <MudPaper Class="pa-3" Elevation="0" Outlined="true">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Total overdue</MudText>
+                        <MudText Typo="Typo.body1" Class="akiba-figure">
+                            <MoneyText Amount="_arrears.TotalOverdue" />
+                        </MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
+                No penalty is shown because Akiba has no penalty rule. The question was asked and
+                came back unanswered, and inventing one would be inventing a charge against a
+                member.
+            </MudText>
+        </MudPaper>
+    }
+
+    <MudPaper Elevation="1" Class="pa-2">
+        @if (_loans.Count == 0)
+        {
+            <MudAlert Severity="Severity.Normal" Class="ma-4">
+                No loans running as at this date.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_loans" Dense="true" Hover="true" Striped="true" Elevation="0"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Loan</MudTh>
+                    <MudTh>Borrower</MudTh>
+                    <MudTh>Product</MudTh>
+                    <MudTh Style="text-align: right">Repayable</MudTh>
+                    <MudTh Style="text-align: right">Outstanding</MudTh>
+                    <MudTh Style="text-align: right">Instalment</MudTh>
+                    <MudTh>Progress</MudTh>
+                    <MudTh>Arrears</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Loan">@context.LoanNumber</MudTd>
+                    <MudTd DataLabel="Borrower">@context.BorrowerName</MudTd>
+                    <MudTd DataLabel="Product">@context.Product.DisplayName()</MudTd>
+                    <MudTd DataLabel="Repayable" Class="akiba-money-cell">
+                        <MoneyText Amount="context.TotalRepayable" />
+                    </MudTd>
+                    <MudTd DataLabel="Outstanding" Class="akiba-money-cell">
+                        <MoneyText Amount="context.OutstandingBalance" />
+                    </MudTd>
+                    <MudTd DataLabel="Instalment" Class="akiba-money-cell">
+                        <MoneyText Amount="context.MonthlyInstalment" />
+                    </MudTd>
+                    <MudTd DataLabel="Progress" Style="min-width: 8rem">
+                        <MudProgressLinear Color="Color.Primary"
+                                           Value="@(context.ProportionRepaid * 100)"
+                                           Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @($"{context.ProportionRepaid:P0} repaid")
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Arrears">
+                        @if (context.IsInArrears)
+                        {
+                            <MudTooltip Text="@($"{context.DaysOverdue} days since the oldest unpaid instalment fell due")">
+                                <MudChip T="string" Size="Size.Small" Color="@BucketColour(context.ArrearsBucket)">
+                                    <MoneyText Amount="context.AmountOverdue" HighlightNegative="false" />
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Current</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager Class="akiba-no-print" />
+                </PagerContent>
+            </MudTable>
+        }
+    </MudPaper>
+}
+
+@code {
+    private static readonly ArrearsBucket[] AgeingBuckets =
+    [
+        ArrearsBucket.Days1To30,
+        ArrearsBucket.Days31To60,
+        ArrearsBucket.Days61To90,
+        ArrearsBucket.Over90Days,
+    ];
+
+    private DateOnly _asAt;
+    private IReadOnlyList<LoanSummary>? _loans;
+    private ArrearsReport? _arrears;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = Clock.TodayInNairobi;
+        await LoadAsync();
+    }
+
+    private static string BucketLabel(ArrearsBucket bucket) => bucket switch
+    {
+        ArrearsBucket.Days1To30 => "1 - 30 days",
+        ArrearsBucket.Days31To60 => "31 - 60 days",
+        ArrearsBucket.Days61To90 => "61 - 90 days",
+        ArrearsBucket.Over90Days => "Over 90 days",
+        _ => "Current",
+    };
+
+    private static Color BucketColour(ArrearsBucket bucket) => bucket switch
+    {
+        ArrearsBucket.Days1To30 => Color.Warning,
+        ArrearsBucket.Days31To60 => Color.Warning,
+        ArrearsBucket.Days61To90 => Color.Error,
+        ArrearsBucket.Over90Days => Color.Error,
+        _ => Color.Default,
+    };
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _loans = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loans = await Mediator.Send(new GetLoanPortfolioQuery(_asAt));
+        _arrears = await Mediator.Send(new GetArrearsReportQuery(_asAt));
+    }
+}

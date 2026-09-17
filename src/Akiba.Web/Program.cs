@@ -7,8 +7,11 @@ using Akiba.Domain.Financial;
 using Akiba.Domain.Membership;
 using Akiba.Infrastructure;
 using Akiba.Infrastructure.Persistence;
+using Akiba.Web;
+using Akiba.Web.Components;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
 
 // Akiba - composition root.
 //
@@ -27,6 +30,14 @@ var connectionString = builder.Configuration.GetConnectionString("Akiba")
 
 builder.Services.AddAkibaApplication();
 builder.Services.AddAkibaInfrastructure(connectionString);
+
+// Blazor Server. Four officials on a LAN: rendering on the server keeps one language across
+// the whole system and means no figure is ever computed twice, once here and once in a
+// browser.
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+builder.Services.AddMudServices();
 
 // Identity arrives in milestone 15. Until then the panel runs as a fixed clerk, and only
 // outside Production - every ledger entry records its author, and attributing them all to the
@@ -62,24 +73,15 @@ await using (var scope = app.Services.CreateAsyncScope())
         startupLogger);
 }
 
+app.UseStaticFiles();
+app.UseAntiforgery();
+
 app.MapHealthChecks("/health");
 
-app.MapGet("/", () => Results.Text(
-    """
-    Akiba Sacco Management System
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
-    /health                          liveness, including the database
-    /ledger/accounts                 the chart of accounts
-    /ledger/trial-balance?asAt=      the trial balance, which must be zero
-    /members?asAt=yyyy-MM-dd         members with their shareholding as at a date
-    /members/{id}/statement?asAt=    a member's statement as at any date
-
-    The Blazor panel is still to come; these are a read-only window on the same queries it
-    will use.
-    """,
-    "text/plain"));
-
-app.MapGet("/ledger/accounts", async (IAccountRepository accounts) =>
+app.MapGet("/api/ledger/accounts", async (IAccountRepository accounts) =>
 {
     var chart = await accounts.AllAsync();
 
@@ -93,7 +95,7 @@ app.MapGet("/ledger/accounts", async (IAccountRepository accounts) =>
     }));
 });
 
-app.MapGet("/ledger/trial-balance", async (IBalanceQueries balances, IClock clock, DateOnly? asAt) =>
+app.MapGet("/api/ledger/trial-balance", async (IBalanceQueries balances, IClock clock, DateOnly? asAt) =>
 {
     var date = asAt ?? clock.TodayInNairobi;
     var difference = await balances.TrialBalanceDifferenceAsAtAsync(date);
@@ -108,7 +110,7 @@ app.MapGet("/ledger/trial-balance", async (IBalanceQueries balances, IClock cloc
     });
 });
 
-app.MapGet("/members", async (IMediator mediator, IClock clock, DateOnly? asAt, bool? includeExited) =>
+app.MapGet("/api/members", async (IMediator mediator, IClock clock, DateOnly? asAt, bool? includeExited) =>
 {
     var members = await mediator.Send(
         new ListMembersQuery(asAt ?? clock.TodayInNairobi, includeExited ?? false));
@@ -126,7 +128,7 @@ app.MapGet("/members", async (IMediator mediator, IClock clock, DateOnly? asAt, 
     }));
 });
 
-app.MapGet("/members/{id:guid}/statement", async (
+app.MapGet("/api/members/{id:guid}/statement", async (
     IMediator mediator, IClock clock, Guid id, DateOnly? asAt) =>
 {
     var statement = await mediator.Send(
@@ -159,6 +161,16 @@ app.MapGet("/members/{id:guid}/statement", async (
         }),
     });
 });
+
+// Development-only. Fills an empty database with plausible activity so the panel has
+// something to show. It drives the same commands the panel does, so anything it creates got
+// there the way an official would have put it there - which also makes it a smoke test of the
+// whole stack. Never mapped in Production.
+if (!app.Environment.IsProduction())
+{
+    app.MapPost("/api/dev/seed-demo", async (IServiceProvider services) =>
+        Results.Ok(await DemoData.SeedAsync(services)));
+}
 
 await app.RunAsync();
 

@@ -1,0 +1,161 @@
+@page "/"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Dashboard</PageTitle>
+
+<PageHeader Title="Dashboard" Description="Akiba's position, derived from the ledger.">
+    <Actions>
+        <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+    </Actions>
+</PageHeader>
+
+@if (_summary is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate />
+}
+else
+{
+    @if (!_summary.BooksBalance)
+    {
+        @* This cannot happen unless something wrote to the database without going through
+           JournalEntry's constructor. If it ever does, it is the most important thing on the
+           screen. *@
+        <MudAlert Severity="Severity.Error" Class="mb-4" Icon="@Icons.Material.Filled.ReportProblem">
+            <MudText Typo="Typo.subtitle2">The books do not balance.</MudText>
+            <MudText Typo="Typo.body2">
+                Debits and credits differ by <MoneyText Amount="_summary.TrialBalanceDifference" />.
+                Every journal entry balances by construction, so this means something wrote to
+                the database without going through the application. Tell the treasurer before
+                doing anything else.
+            </MudText>
+        </MudAlert>
+    }
+
+    <MudGrid Spacing="3">
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Bank"
+                      Value="_summary.BankBalance"
+                      Caption="Confirmed funds only"
+                      Icon="@Icons.Material.Filled.AccountBalance" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Member shares"
+                      Value="_summary.TotalShareholding"
+                      Caption="What Akiba owes its members"
+                      Icon="@Icons.Material.Filled.Savings" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Loans outstanding"
+                      Value="_summary.TotalLoansOutstanding"
+                      Caption="What members owe Akiba"
+                      Icon="@Icons.Material.Filled.RequestQuote" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Unallocated"
+                      Value="_summary.UnallocatedReceipts"
+                      Caption="Money in, not yet applied"
+                      Icon="@Icons.Material.Filled.HelpOutline"
+                      Colour="@(_summary.UnallocatedReceipts.IsZero ? Color.Default : Color.Warning)" />
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Spacing="3" Class="mt-2">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">Waiting on somebody</MudText>
+
+                <MudList T="string" Dense="true">
+                    <QueueRow Label="Applications awaiting a decision"
+                              Count="_summary.ApplicationsAwaitingDecision"
+                              Href="/applications" />
+                    <QueueRow Label="Approved, awaiting a cheque"
+                              Count="_summary.ApplicationsAwaitingCheque"
+                              Href="/applications"
+                              Hint="Forms received after the 15th wait for the next cycle" />
+                    <QueueRow Label="Cheques not yet matured"
+                              Count="_summary.ReceiptsAwaitingClearance"
+                              Href="/receipts" />
+                    <QueueRow Label="Cleared money not yet allocated"
+                              Count="_summary.ReceiptsAwaitingAllocation"
+                              Href="/receipts"
+                              Hint="Allocation is never inferred - a clerk decides each one" />
+                </MudList>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">The society</MudText>
+
+                <MudSimpleTable Dense="true" Striped="true" Elevation="0">
+                    <tbody>
+                        <tr>
+                            <td>Active members</td>
+                            <td class="akiba-money-cell">@_summary.ActiveMembers</td>
+                        </tr>
+                        <tr>
+                            <td>Running loans</td>
+                            <td class="akiba-money-cell">@_summary.RunningLoans</td>
+                        </tr>
+                        <tr>
+                            <td>Loans in arrears</td>
+                            <td class="akiba-money-cell">
+                                @if (_summary.LoansInArrears > 0)
+                                {
+                                    <MudLink Href="/loans" Color="Color.Error">@_summary.LoansInArrears</MudLink>
+                                }
+                                else
+                                {
+                                    @_summary.LoansInArrears
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Total overdue</td>
+                            <td class="akiba-money-cell"><MoneyText Amount="_summary.TotalOverdue" /></td>
+                        </tr>
+                        <tr>
+                            <td>Interest earned</td>
+                            <td class="akiba-money-cell"><MoneyText Amount="_summary.InterestEarned" /></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                Bank charges
+                                <MudTooltip Text="Deducted when working out the interest the dividend is calculated on">
+                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                                </MudTooltip>
+                            </td>
+                            <td class="akiba-money-cell"><MoneyText Amount="_summary.BankCharges" /></td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-4 d-block">
+        Every figure here is summed from journal entries as at
+        @_asAt.ToString("d MMMM yyyy", CultureInfo.InvariantCulture). None of them is stored.
+    </MudText>
+}
+
+@code {
+    private DateOnly _asAt;
+    private DashboardSummary? _summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = Clock.TodayInNairobi;
+        await LoadAsync();
+    }
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _summary = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _summary = await Mediator.Send(new GetDashboardQuery(_asAt));
+}

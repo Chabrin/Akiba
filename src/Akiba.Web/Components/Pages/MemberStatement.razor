@@ -1,0 +1,174 @@
+@page "/members/{MemberId:guid}"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Member statement</PageTitle>
+
+@if (_statement is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <PageHeader Title="@_statement.MemberName"
+                Description="@($"Membership number {_statement.MembershipNumber}")">
+        <Actions>
+            <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+        </Actions>
+    </PageHeader>
+
+    <MudGrid Spacing="3" Class="mb-2">
+        <MudItem xs="12" sm="4">
+            <StatCard Title="Shareholding"
+                      Value="_statement.Shareholding"
+                      Caption="@($"As at {_statement.AsAt.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}")"
+                      Icon="@Icons.Material.Filled.Savings" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <StatCard Title="Borrowing limit"
+                      Value="_statement.BorrowingLimit"
+                      Caption="Twice the shareholding"
+                      Icon="@Icons.Material.Filled.TrendingUp" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="1" Style="height: 100%">
+                <div class="d-flex align-center mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.CalendarToday" Color="Color.Primary" Class="mr-2" />
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Member since</MudText>
+                </div>
+                <MudText Typo="Typo.h6">
+                    @(_statement.MembershipSince?.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)
+                      ?? "Not yet contributing")
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Membership begins at the first share contribution, not the application letter
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-3">Loans</MudText>
+
+        @if (_statement.Loans.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                No loans running as at this date.
+            </MudText>
+        }
+        else
+        {
+            <MudTable Items="_statement.Loans" Dense="true" Hover="true" Elevation="0"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Loan</MudTh>
+                    <MudTh>Product</MudTh>
+                    <MudTh Style="text-align: right">Repayable</MudTh>
+                    <MudTh Style="text-align: right">Outstanding</MudTh>
+                    <MudTh Style="text-align: right">Instalment</MudTh>
+                    <MudTh>First due</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Loan">@context.LoanNumber</MudTd>
+                    <MudTd DataLabel="Product">@context.Product.DisplayName()</MudTd>
+                    <MudTd DataLabel="Repayable" Class="akiba-money-cell">
+                        <MoneyText Amount="context.TotalRepayable" />
+                    </MudTd>
+                    <MudTd DataLabel="Outstanding" Class="akiba-money-cell">
+                        <MoneyText Amount="context.OutstandingBalance" />
+                    </MudTd>
+                    <MudTd DataLabel="Instalment" Class="akiba-money-cell">
+                        <MoneyText Amount="context.MonthlyInstalment" />
+                    </MudTd>
+                    <MudTd DataLabel="First due">
+                        @context.FirstDueDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                These are the loans that were running <em>as at</em> this date - not the loans
+                running today. A loan disbursed later does not appear, and one settled since
+                still does.
+            </MudText>
+        }
+    </MudPaper>
+
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-3">Share account</MudText>
+
+        @if (_statement.ShareMovements.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                No contributions yet. This member has been enrolled but has not been deducted.
+            </MudText>
+        }
+        else
+        {
+            <MudTable Items="_statement.ShareMovements" Dense="true" Hover="true" Striped="true"
+                      Elevation="0" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Narration</MudTh>
+                    <MudTh>Document</MudTh>
+                    <MudTh Style="text-align: right">Movement</MudTh>
+                    <MudTh Style="text-align: right">Balance</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Date">
+                        @context.Date.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                    </MudTd>
+                    <MudTd DataLabel="Narration">@context.Narration</MudTd>
+                    <MudTd DataLabel="Document">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @context.SourceDocument
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Movement" Class="akiba-money-cell">
+                        <MoneyText Amount="context.Movement" />
+                    </MudTd>
+                    <MudTd DataLabel="Balance" Class="akiba-money-cell">
+                        <MoneyText Amount="context.RunningBalance" HighlightNegative="false" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                Every line traces to a journal entry and its source document. Nothing on this
+                statement is a stored figure - ask for it as at June in December and it will say
+                the same thing it said in June.
+            </MudText>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public Guid MemberId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "asAt")]
+    public string? AsAtParameter { get; set; }
+
+    private DateOnly _asAt;
+    private Akiba.Application.Members.MemberStatement? _statement;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = DateOnly.TryParse(AsAtParameter, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : Clock.TodayInNairobi;
+
+        await LoadAsync();
+    }
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _statement = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _statement = await Mediator.Send(
+            new GetMemberStatementQuery(new BorrowerId(MemberId), _asAt));
+}

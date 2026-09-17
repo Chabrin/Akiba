@@ -1,0 +1,29 @@
+@* A single headline figure. *@
+
+<MudPaper Class="pa-4" Elevation="1" Style="height: 100%">
+    <div class="d-flex align-start mb-2 akiba-stat-header">
+        <MudIcon Icon="@Icon" Color="@Colour" Class="mr-2" />
+        <MudText Typo="Typo.overline" Class="mud-text-secondary akiba-stat-title">@Title</MudText>
+    </div>
+
+    <MudText Typo="Typo.h6" Class="akiba-figure">
+        <MoneyText Amount="Value" />
+    </MudText>
+
+    @if (!string.IsNullOrWhiteSpace(Caption))
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">@Caption</MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public Money Value { get; set; }
+
+    [Parameter] public string? Caption { get; set; }
+
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Circle;
+
+    [Parameter] public Color Colour { get; set; } = Color.Primary;
+}

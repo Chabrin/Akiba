@@ -26,10 +26,10 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 6 | Schedule generation with the one-month grace period | ✅ Done |
 | 7 | Guarantors, coverage, liability, exposure | ✅ Done |
 | 8 | Applications, lock period, approvals, disbursement | ✅ Done |
-| 9 | Receipts, three channels, allocation, clearance | ✅ Done (domain) |
+| 9 | Receipts, three channels, allocation, clearance | ✅ Done |
 | 10 | Payroll and bank reconciliation | ⬜ Not started |
-| 11 | Restructuring | ✅ Done (domain) |
-| 12 | Arrears and ageing | ✅ Done (domain) |
+| 11 | Restructuring | 🟡 Domain done; no screen yet |
+| 12 | Arrears and ageing | ✅ Done |
 | 13 | Reporting suite | ⬜ Not started |
 | 14 | Notifications | ⬜ Not started |
 | 15 | Identity, roles, MFA, audit trail | ⬜ Not started |
@@ -97,9 +97,24 @@ Migrations are applied and the chart of accounts is seeded at startup. No member
 balance is ever seeded — opening balances arrive through the migration tooling, which is a
 reviewed and signed-off process, not a side effect of starting the application.
 
+The panel is at <http://localhost:5280>. The JSON endpoints below remain under `/api`, so
+anything scripted against them keeps working and the panel is not the only way to read a
+figure.
+
+To fill a development database with plausible activity so the screens have something to show:
+
+```bash
+pwsh tools/seed-demo.ps1 -Database akiba_demo
+```
+
+It drives the same commands the panel does, so anything it creates got there the way an
+official would have put it there. **Never point it at the live database** — it creates people
+who do not exist.
+
 | Endpoint | What it shows |
 |---|---|
 | `/health` | Liveness, including the database |
+| `/api/...` | The same queries the panel uses, as JSON |
 | `/ledger/accounts` | The chart of accounts |
 | `/ledger/trial-balance?asAt=` | The trial balance, which must be zero |
 | `/members?asAt=yyyy-MM-dd` | Members with their shareholding as at a date |

@@ -1,0 +1,138 @@
+@page "/applications"
+@inject IMediator Mediator
+
+<PageTitle>Akiba - Applications</PageTitle>
+
+<PageHeader Title="Loan applications"
+            Description="Entered from the signed paper form. Approval is by the zone and office representatives, so an application collects several decisions rather than one." />
+
+<MudPaper Elevation="1" Class="pa-2">
+    <MudToolBar Dense="true" Class="akiba-no-print">
+        <MudSelect T="LoanApplicationStatus?"
+                   Value="_status"
+                   ValueChanged="OnStatusChanged"
+                   Label="Status"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense"
+                   Clearable="true"
+                   Style="max-width: 18rem"
+                   Class="mt-0">
+            <MudSelectItem T="LoanApplicationStatus?" Value="@(null)">All</MudSelectItem>
+            @foreach (var status in Enum.GetValues<LoanApplicationStatus>())
+            {
+                <MudSelectItem T="LoanApplicationStatus?" Value="@status">@status</MudSelectItem>
+            }
+        </MudSelect>
+    </MudToolBar>
+
+    @if (_applications is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_applications.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            No applications match that filter.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_applications" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Applicant</MudTh>
+                <MudTh>Product</MudTh>
+                <MudTh Style="text-align: right">Applied for</MudTh>
+                <MudTh Style="text-align: right">Approved</MudTh>
+                <MudTh>Received</MudTh>
+                <MudTh>Considered</MudTh>
+                <MudTh>Guarantors</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Applicant">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Product">@context.Product.DisplayName()</MudTd>
+                <MudTd DataLabel="Applied for" Class="akiba-money-cell">
+                    <MoneyText Amount="context.RequestedPrincipal" />
+                </MudTd>
+                <MudTd DataLabel="Approved" Class="akiba-money-cell">
+                    @if (context.ApprovedPrincipal is { } approved)
+                    {
+                        <MoneyText Amount="approved" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">-</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Received">
+                    @context.ReceivedOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="Considered">
+                    @context.ConsiderationMonth.ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+                    @if (context.MissedTheCutoff)
+                    {
+                        <MudTooltip Text="Received after the 15th, so it is considered in the succeeding month">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">
+                                Late
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Guarantors">
+                    @if (context.Guarantors == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">None</MudText>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@($"{context.Guarantors} guarantor(s)")">
+                            <MoneyText Amount="context.TotalGuaranteed" />
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                        @context.Status
+                    </MudChip>
+                    @if (context.Status == LoanApplicationStatus.Submitted)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            @context.DecisionsRecorded decision(s) recorded
+                        </MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private LoanApplicationStatus? _status;
+    private IReadOnlyList<ApplicationSummary>? _applications;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private static Color StatusColour(LoanApplicationStatus status) => status switch
+    {
+        LoanApplicationStatus.Draft => Color.Default,
+        LoanApplicationStatus.Submitted => Color.Info,
+        LoanApplicationStatus.Approved => Color.Warning,
+        LoanApplicationStatus.Disbursed => Color.Success,
+        LoanApplicationStatus.Rejected => Color.Error,
+        _ => Color.Default,
+    };
+
+    private async Task OnStatusChanged(LoanApplicationStatus? status)
+    {
+        _status = status;
+        _applications = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _applications = await Mediator.Send(new ListApplicationsQuery(_status));
+}

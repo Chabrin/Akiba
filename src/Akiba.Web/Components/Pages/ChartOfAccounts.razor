@@ -1,0 +1,128 @@
+@page "/ledger"
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Chart of accounts</PageTitle>
+
+<PageHeader Title="Chart of accounts"
+            Description="Balances summed from journal entries. No account stores a balance.">
+    <Actions>
+        <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+    </Actions>
+</PageHeader>
+
+@if (_trial is not null)
+{
+    <MudAlert Severity="@(_trial.Balances ? Severity.Success : Severity.Error)"
+              Icon="@(_trial.Balances ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.ReportProblem)"
+              Class="mb-4">
+        @if (_trial.Balances)
+        {
+            <text>
+                The trial balance is zero. Debits of <MoneyText Amount="_trial.TotalDebits" /> against
+                credits of <MoneyText Amount="_trial.TotalCredits" />. It cannot be anything else -
+                every entry balances by construction.
+            </text>
+        }
+        else
+        {
+            <text>
+                Debits and credits differ by <MoneyText Amount="_trial.Difference" />. Something wrote
+                to the database without going through the application.
+            </text>
+        }
+    </MudAlert>
+}
+
+<MudPaper Elevation="1" Class="pa-2">
+    <MudToolBar Dense="true" Class="akiba-no-print">
+        <MudSwitch T="bool"
+                   Value="_includeMemberAndLoanAccounts"
+                   ValueChanged="OnIncludeChanged"
+                   Color="Color.Primary"
+                   Label="Include per-member and per-loan accounts" />
+    </MudToolBar>
+
+    @if (_accounts is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudTable Items="_accounts" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  GroupBy="_groupBy" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Code</MudTh>
+                <MudTh>Account</MudTh>
+                <MudTh>Normal side</MudTh>
+                <MudTh Style="text-align: right">Balance</MudTh>
+            </HeaderContent>
+            <GroupHeaderTemplate>
+                <MudTh Class="mud-table-cell-custom-group" colspan="4">
+                    <MudText Typo="Typo.subtitle2">@context.Key</MudText>
+                </MudTh>
+            </GroupHeaderTemplate>
+            <RowTemplate>
+                <MudTd DataLabel="Code">@context.Code</MudTd>
+                <MudTd DataLabel="Account">
+                    @context.Name
+                    @if (!context.IsOpen)
+                    {
+                        <MudChip T="string" Size="Size.Small" Class="ml-2">Closed</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Normal side">@context.NormalBalance</MudTd>
+                <MudTd DataLabel="Balance" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Balance" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            Member shares are a liability, not equity - Akiba owes that money back to the member,
+            and reading it any other way makes the balance sheet wrong.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    private readonly TableGroupDefinition<ChartAccount> _groupBy = new()
+    {
+        Selector = account => account.Type.ToString(),
+        Indentation = false,
+        Expandable = false,
+    };
+
+    private DateOnly _asAt;
+    private bool _includeMemberAndLoanAccounts;
+    private IReadOnlyList<ChartAccount>? _accounts;
+    private TrialBalance? _trial;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = Clock.TodayInNairobi;
+        await LoadAsync();
+    }
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _accounts = null;
+        await LoadAsync();
+    }
+
+    private async Task OnIncludeChanged(bool include)
+    {
+        _includeMemberAndLoanAccounts = include;
+        _accounts = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _accounts = await Mediator.Send(
+            new GetChartOfAccountsQuery(_asAt, _includeMemberAndLoanAccounts));
+
+        _trial = await Mediator.Send(new GetTrialBalanceQuery(_asAt));
+    }
+}

@@ -1,0 +1,73 @@
+@inherits LayoutComponentBase
+@inject ICurrentUser CurrentUser
+@inject IWebHostEnvironment Environment
+
+<MudThemeProvider Theme="AkibaTheme.Instance" @bind-IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Class="akiba-no-print">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       aria-label="Toggle navigation"
+                       OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+
+        <MudText Typo="Typo.h6" Class="ml-2">Akiba</MudText>
+        <MudText Typo="Typo.caption" Class="ml-3 d-none d-sm-flex">Welfare Society</MudText>
+
+        <MudSpacer />
+
+        @if (!Environment.IsProduction())
+        {
+            @* Every ledger entry records its author. While Identity is still to come, every
+               entry is attributed to the same person, and nobody should be in any doubt. *@
+            <MudChip T="string"
+                     Color="Color.Warning"
+                     Size="Size.Small"
+                     Icon="@Icons.Material.Filled.Warning"
+                     Class="mr-3">
+                Development user
+            </MudChip>
+        }
+
+        <MudText Typo="Typo.body2" Class="mr-3 d-none d-md-flex">@_actorName</MudText>
+
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit"
+                       aria-label="Toggle light and dark"
+                       OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Class="akiba-no-print">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent Class="pt-16 px-4">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-6">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode;
+    private string _actorName = "Not signed in";
+
+    protected override void OnInitialized()
+    {
+        // CurrentUser throws when nobody is signed in, by design - an entry attributed to
+        // nobody is not an audit trail. The chrome should say so rather than fall over.
+        try
+        {
+            _actorName = CurrentUser.Actor.DisplayName;
+        }
+        catch (InvalidOperationException)
+        {
+            _actorName = "Not signed in";
+        }
+    }
+}

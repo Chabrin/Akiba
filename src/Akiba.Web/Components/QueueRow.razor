@@ -1,0 +1,26 @@
+@* One line of the "waiting on somebody" list. *@
+
+<MudListItem T="string" Href="@Href">
+    <div class="d-flex align-center justify-space-between" style="width: 100%">
+        <div>
+            <MudText Typo="Typo.body2">@Label</MudText>
+            @if (!string.IsNullOrWhiteSpace(Hint))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@Hint</MudText>
+            }
+        </div>
+        <MudChip T="string" Size="Size.Small" Color="@(Count > 0 ? Color.Primary : Color.Default)">
+            @Count
+        </MudChip>
+    </div>
+</MudListItem>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public int Count { get; set; }
+
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string? Hint { get; set; }
+}
