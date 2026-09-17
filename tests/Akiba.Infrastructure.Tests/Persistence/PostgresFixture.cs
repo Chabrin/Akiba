@@ -100,12 +100,26 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await using var context = CreateContext();
 
+        // Every table, not just the ledger ones. A table left out here does not fail loudly -
+        // it leaks rows into the next test, which then fails somewhere unrelated on a
+        // duplicate key.
         await context.Database.ExecuteSqlRawAsync(
             $"""
             TRUNCATE TABLE
                 "{AkibaDbContext.Schema}"."journal_lines",
                 "{AkibaDbContext.Schema}"."journal_entries",
                 "{AkibaDbContext.Schema}"."accounting_periods",
+                "{AkibaDbContext.Schema}"."receipt_allocations",
+                "{AkibaDbContext.Schema}"."receipts",
+                "{AkibaDbContext.Schema}"."guarantees",
+                "{AkibaDbContext.Schema}"."approval_decisions",
+                "{AkibaDbContext.Schema}"."loan_security",
+                "{AkibaDbContext.Schema}"."attached_documents",
+                "{AkibaDbContext.Schema}"."loans",
+                "{AkibaDbContext.Schema}"."loan_applications",
+                "{AkibaDbContext.Schema}"."zone_representatives",
+                "{AkibaDbContext.Schema}"."zones",
+                "{AkibaDbContext.Schema}"."borrowers",
                 "{AkibaDbContext.Schema}"."accounts"
             RESTART IDENTITY CASCADE
             """);

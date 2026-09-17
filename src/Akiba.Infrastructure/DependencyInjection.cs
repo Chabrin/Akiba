@@ -36,6 +36,12 @@ public static class DependencyInjection
         services.AddScoped<IJournalRepository, JournalRepository>();
         services.AddScoped<IBalanceQueries, BalanceQueries>();
 
+        services.AddScoped<IBorrowerRepository, BorrowerRepository>();
+        services.AddScoped<IZoneRepository, ZoneRepository>();
+        services.AddScoped<ILoanApplicationRepository, LoanApplicationRepository>();
+        services.AddScoped<ILoanRepository, LoanRepository>();
+        services.AddScoped<IReceiptRepository, ReceiptRepository>();
+
         services.AddScoped<ChartOfAccountsSeeder>();
 
         services.AddSingleton<IClock, SystemClock>();

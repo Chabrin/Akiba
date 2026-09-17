@@ -41,6 +41,28 @@ public sealed class AkibaDbContext : DbContext, IUnitOfWork
 
     internal DbSet<AccountingPeriodRow> AccountingPeriods => Set<AccountingPeriodRow>();
 
+    internal DbSet<BorrowerRow> Borrowers => Set<BorrowerRow>();
+
+    internal DbSet<AttachedDocumentRow> AttachedDocuments => Set<AttachedDocumentRow>();
+
+    internal DbSet<ZoneRow> Zones => Set<ZoneRow>();
+
+    internal DbSet<ZoneRepresentativeRow> ZoneRepresentatives => Set<ZoneRepresentativeRow>();
+
+    internal DbSet<LoanApplicationRow> LoanApplications => Set<LoanApplicationRow>();
+
+    internal DbSet<ApprovalDecisionRow> ApprovalDecisions => Set<ApprovalDecisionRow>();
+
+    internal DbSet<GuaranteeRow> Guarantees => Set<GuaranteeRow>();
+
+    internal DbSet<LoanSecurityRow> LoanSecurity => Set<LoanSecurityRow>();
+
+    internal DbSet<LoanRow> Loans => Set<LoanRow>();
+
+    internal DbSet<ReceiptRow> Receipts => Set<ReceiptRow>();
+
+    internal DbSet<ReceiptAllocationRow> ReceiptAllocations => Set<ReceiptAllocationRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);

@@ -211,6 +211,7 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         Money? approvedPrincipal,
         LoanTerms? approvedTerms,
         string? rejectionReason,
+        RentalIncomeSecurity? rentalIncome,
         IEnumerable<ApprovalDecision> decisions,
         IEnumerable<Guarantee> guarantees,
         IEnumerable<LoanSecurity> security,
@@ -225,6 +226,7 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
             ApprovedPrincipal = approvedPrincipal,
             ApprovedTerms = approvedTerms,
             RejectionReason = rejectionReason,
+            RentalIncome = rentalIncome,
         };
 
         application._decisions.AddRange(decisions);
