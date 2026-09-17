@@ -43,7 +43,18 @@ dotnet_style_qualification_for_method = false:warning
 # Readonly where possible - aggregates must not expose mutable state
 dotnet_style_readonly_field = true:warning
 
-# Naming: private fields _camelCase
+# Naming: private static readonly fields are PascalCase. Declared BEFORE the instance-field
+# rule because the first matching rule wins, and a shared read-only value reads as a constant
+# rather than as mutable state.
+dotnet_naming_rule.private_static_readonly_pascal.severity = warning
+dotnet_naming_rule.private_static_readonly_pascal.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_pascal.style = pascal_case_style
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static,readonly
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# Naming: private instance fields _camelCase
 dotnet_naming_rule.private_fields_underscore.severity = warning
 dotnet_naming_rule.private_fields_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_underscore.style = underscore_prefix
