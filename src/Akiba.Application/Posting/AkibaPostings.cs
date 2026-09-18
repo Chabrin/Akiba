@@ -4,6 +4,33 @@ using Akiba.Domain.Ledger;
 
 namespace Akiba.Application.Posting;
 
+/// <summary>Why a member's share account is being credited.</summary>
+public enum ShareCreditKind
+{
+    /// <summary>The regular monthly amount, deducted from payroll.</summary>
+    MonthlyContribution = 0,
+
+    /// <summary>A lump sum over and above the monthly amount.</summary>
+    TopUpDeposit = 1,
+
+    /// <summary>An overpayment converted into shareholding rather than refunded.</summary>
+    Overpayment = 2,
+
+    /// <summary>The shareholding a member already had when Akiba went live.</summary>
+    OpeningBalance = 3,
+}
+
+internal static class ShareCreditKindExtensions
+{
+    public static string Narration(this ShareCreditKind kind) => kind switch
+    {
+        ShareCreditKind.TopUpDeposit => "Share top-up deposit",
+        ShareCreditKind.Overpayment => "Overpayment applied to shares",
+        ShareCreditKind.OpeningBalance => "Opening shareholding",
+        _ => "Share contribution",
+    };
+}
+
 /// <summary>
 /// Builds the journal entry for each thing that happens to Akiba's money.
 /// </summary>
@@ -67,6 +94,10 @@ public static class AkibaPostings
     /// <remarks>
     /// Debit Unallocated Receipts, credit the member's share account. Both are liabilities:
     /// the money stops being unattributed and becomes something Akiba owes that member.
+    ///
+    /// The kind distinguishes a monthly contribution from a lump-sum top-up. Both post
+    /// identically; only the narration differs, so a member reading their statement can tell
+    /// which is which.
     /// </remarks>
     public static JournalEntry AllocateToShares(
         AccountId unallocatedReceipts,
@@ -76,10 +107,11 @@ public static class AkibaPostings
         string memberName,
         SourceDocument sourceDocument,
         Actor postedBy,
-        DateTimeOffset postedAtUtc) =>
+        DateTimeOffset postedAtUtc,
+        ShareCreditKind kind = ShareCreditKind.MonthlyContribution) =>
         JournalEntry.Post(
             entryDate,
-            $"Share contribution - {memberName}",
+            $"{kind.Narration()} - {memberName}",
             sourceDocument,
             postedBy,
             postedAtUtc,

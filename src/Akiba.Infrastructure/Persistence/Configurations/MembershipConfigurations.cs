@@ -14,18 +14,23 @@ internal sealed class BorrowerConfiguration : IEntityTypeConfiguration<BorrowerR
         builder.Property(borrower => borrower.GivenName).HasMaxLength(100).IsRequired();
         builder.Property(borrower => borrower.FamilyName).HasMaxLength(100).IsRequired();
         builder.Property(borrower => borrower.OtherNames).HasMaxLength(100);
-        builder.Property(borrower => borrower.NationalId).HasMaxLength(12).IsRequired();
-        builder.Property(borrower => borrower.Phone).HasMaxLength(20).IsRequired();
+        // Not required. A member imported from the deduction register has neither until the
+        // clerk enters them, and refusing to store the member until then would mean refusing to
+        // migrate the society.
+        builder.Property(borrower => borrower.NationalId).HasMaxLength(12);
+        builder.Property(borrower => borrower.Phone).HasMaxLength(20);
         builder.Property(borrower => borrower.Email).HasMaxLength(256);
         builder.Property(borrower => borrower.MembershipNumber).HasMaxLength(20);
         builder.Property(borrower => borrower.PayrollNumber).HasMaxLength(20);
         builder.Property(borrower => borrower.IntroducedBy).HasMaxLength(200);
 
         // HR matches the monthly deduction schedule on the payroll number, so two members
-        // sharing one would be a real-world collision, not just a data problem.
+        // sharing one would be a real-world collision - but only where there IS one. The
+        // society's own register has two shareholders who are not on the payroll, and an
+        // unfiltered unique index would have refused to load it.
         builder.HasIndex(borrower => borrower.PayrollNumber)
             .IsUnique()
-            .HasFilter("\"PayrollNumber\" IS NOT NULL");
+            .HasFilter("\"PayrollNumber\" IS NOT NULL AND \"PayrollNumber\" <> ''");
 
         builder.HasIndex(borrower => borrower.MembershipNumber)
             .IsUnique()

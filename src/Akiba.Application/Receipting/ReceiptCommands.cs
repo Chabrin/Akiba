@@ -279,7 +279,9 @@ internal sealed class AllocateReceiptHandler
 
         var entry = command.Target switch
         {
-            AllocationTarget.Shares or AllocationTarget.OverpaymentToShares =>
+            AllocationTarget.Shares
+            or AllocationTarget.OverpaymentToShares
+            or AllocationTarget.ShareTopUp =>
                 await ShareEntryAsync(command, receipt, unallocated, clerk, cancellationToken)
                     .ConfigureAwait(false),
 
@@ -322,7 +324,13 @@ internal sealed class AllocateReceiptHandler
             member.Name.Full,
             SourceDocument.Of(SourceDocumentKind.PayrollSchedule, receipt.Reference),
             clerk,
-            _clock.UtcNow);
+            _clock.UtcNow,
+            command.Target switch
+            {
+                AllocationTarget.ShareTopUp => ShareCreditKind.TopUpDeposit,
+                AllocationTarget.OverpaymentToShares => ShareCreditKind.Overpayment,
+                _ => ShareCreditKind.MonthlyContribution,
+            });
     }
 
     private async Task<JournalEntry> LoanEntryAsync(

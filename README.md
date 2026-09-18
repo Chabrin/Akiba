@@ -34,7 +34,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 14 | Notifications | ⬜ Not started |
 | 15 | Identity, roles, MFA, audit trail | ⬜ Not started |
 | 16 | Dividend run | ⬜ Not started |
-| 17 | Migration tooling | ⬜ Not started |
+| 17 | Migration tooling | ✅ Done — loads the real deduction register |
 | 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
 
 ---

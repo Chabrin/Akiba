@@ -21,9 +21,14 @@ internal sealed class BorrowerRow
 
     public string? OtherNames { get; set; }
 
-    public string NationalId { get; set; } = string.Empty;
+    /// <summary>
+    /// Nullable: members imported from the deduction register have none until the clerk
+    /// enters one from their file. Absent is an honest state; a made-up number is not.
+    /// </summary>
+    public string? NationalId { get; set; }
 
-    public string Phone { get; set; } = string.Empty;
+    /// <summary>Nullable, for the same reason as <see cref="NationalId"/>.</summary>
+    public string? Phone { get; set; }
 
     public string? Email { get; set; }
 

@@ -4,8 +4,20 @@ namespace Akiba.Domain.Membership;
 /// A CAL payroll number. HR matches the monthly deduction schedule on this.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The schedule must carry payroll numbers and full names - HR asked for both - so this is
 /// part of the domain rather than an incidental field.
+/// </para>
+/// <para>
+/// <b>It is optional.</b> The deduction register shows shareholders who are not on the CAL
+/// payroll: two of them share staff number <c>0</c>, which is the office's way of writing "no
+/// payroll number". They hold shares and are deducted by other means. A required, unique
+/// payroll number would have refused to load the society's own records.
+/// </para>
+/// <para>
+/// <see cref="None"/> represents an absent number, and several members may have it. A number
+/// that <i>is</i> present is unique, because HR matches on it.
+/// </para>
 /// </remarks>
 public readonly record struct PayrollNumber
 {
@@ -14,6 +26,9 @@ public readonly record struct PayrollNumber
     public string Value { get; }
 
     public bool IsSpecified => !string.IsNullOrEmpty(Value);
+
+    /// <summary>A shareholder who is not on the CAL payroll.</summary>
+    public static PayrollNumber None => default;
 
     public static PayrollNumber Of(string value)
     {
@@ -30,7 +45,28 @@ public readonly record struct PayrollNumber
         return new PayrollNumber(trimmed);
     }
 
-    public override string ToString() => IsSpecified ? Value : "(no payroll number)";
+    /// <summary>
+    /// Reads a payroll number from a register, treating the office's stand-ins for "none" as
+    /// absent.
+    /// </summary>
+    /// <remarks>
+    /// The register writes <c>0</c> for a shareholder who is not on the payroll, and more than
+    /// one person carries it. Taken literally it is a duplicate key; taken as the office means
+    /// it, it is a blank.
+    /// </remarks>
+    public static PayrollNumber FromRegister(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return None;
+        }
+
+        var trimmed = value.Trim();
+
+        return trimmed is "0" or "-" or "N/A" or "NA" ? None : Of(trimmed);
+    }
+
+    public override string ToString() => IsSpecified ? Value : "(not on payroll)";
 }
 
 /// <summary>A Kenyan national identity card number.</summary>
@@ -41,6 +77,16 @@ public readonly record struct NationalId
     public string Value { get; }
 
     public bool IsSpecified => !string.IsNullOrEmpty(Value);
+
+    /// <summary>
+    /// Not recorded yet.
+    /// </summary>
+    /// <remarks>
+    /// The deduction register carries names and shareholdings and nothing else, so members
+    /// imported from it have no ID until the clerk enters one from their file. Absent is an
+    /// honest state; a made-up number would not be.
+    /// </remarks>
+    public static NationalId Unknown => default;
 
     public static NationalId Of(string value)
     {
@@ -106,6 +152,9 @@ public readonly record struct PhoneNumber
     public string Value { get; }
 
     public bool IsSpecified => !string.IsNullOrEmpty(Value);
+
+    /// <summary>Not recorded yet. See <see cref="NationalId.Unknown"/>.</summary>
+    public static PhoneNumber Unknown => default;
 
     public static PhoneNumber Of(string value)
     {

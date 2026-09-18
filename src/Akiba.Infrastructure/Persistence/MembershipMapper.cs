@@ -30,11 +30,11 @@ internal static class MembershipMapper
             GivenName = member.Name.GivenName,
             FamilyName = member.Name.FamilyName,
             OtherNames = member.Name.OtherNames,
-            NationalId = member.NationalId.Value,
-            Phone = member.Phone.Value,
+            NationalId = member.NationalId.IsSpecified ? member.NationalId.Value : null,
+            Phone = member.Phone.IsSpecified ? member.Phone.Value : null,
             Email = member.Email,
             MembershipNumber = member.MembershipNumber.Value,
-            PayrollNumber = member.PayrollNumber.Value,
+            PayrollNumber = member.PayrollNumber.IsSpecified ? member.PayrollNumber.Value : null,
             ZoneId = member.ZoneId.Value,
             SharesAccountId = member.SharesAccountId.Value,
             EmploymentStatus = (int)member.EmploymentStatus,
@@ -49,8 +49,8 @@ internal static class MembershipMapper
             GivenName = client.Name.GivenName,
             FamilyName = client.Name.FamilyName,
             OtherNames = client.Name.OtherNames,
-            NationalId = client.NationalId.Value,
-            Phone = client.Phone.Value,
+            NationalId = client.NationalId.IsSpecified ? client.NationalId.Value : null,
+            Phone = client.Phone.IsSpecified ? client.Phone.Value : null,
             Email = client.Email,
             IntroducedBy = client.IntroducedBy,
             Documents = [.. client.Documents.Select(document => ToRow(document, client.Id.Value, null))],
@@ -64,8 +64,14 @@ internal static class MembershipMapper
         ArgumentNullException.ThrowIfNull(row);
 
         var name = new PersonName(row.GivenName, row.FamilyName, row.OtherNames);
-        var nationalId = NationalId.Of(row.NationalId);
-        var phone = PhoneNumber.Of(row.Phone);
+        // Absent rather than invented, for a member imported from the register.
+        var nationalId = string.IsNullOrWhiteSpace(row.NationalId)
+            ? NationalId.Unknown
+            : NationalId.Of(row.NationalId);
+
+        var phone = string.IsNullOrWhiteSpace(row.Phone)
+            ? PhoneNumber.Unknown
+            : PhoneNumber.Of(row.Phone);
 
         if (row.Kind == BorrowerKind.Client)
         {
@@ -80,7 +86,7 @@ internal static class MembershipMapper
         var member = Member.Rehydrate(
             new BorrowerId(row.Id),
             MembershipNumber.Of(Required(row.MembershipNumber, row.Id, "membership number")),
-            PayrollNumber.Of(Required(row.PayrollNumber, row.Id, "payroll number")),
+            PayrollNumber.FromRegister(row.PayrollNumber),
             name,
             nationalId,
             phone,

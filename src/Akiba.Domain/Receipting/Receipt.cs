@@ -65,7 +65,7 @@ public enum ReceiptStatus
 /// <summary>What an allocation was applied to.</summary>
 public enum AllocationTarget
 {
-    /// <summary>A member's share contribution.</summary>
+    /// <summary>A member's regular monthly share contribution.</summary>
     Shares = 1,
 
     /// <summary>An instalment on a loan.</summary>
@@ -78,6 +78,21 @@ public enum AllocationTarget
 
     /// <summary>An overpayment refunded by cheque. The other sanctioned outcome.</summary>
     OverpaymentRefund = 4,
+
+    /// <summary>
+    /// A lump sum paid into shares, over and above the monthly contribution.
+    /// </summary>
+    /// <remarks>
+    /// The deduction register carries these in their own column - 100,000 in one case, 862 in
+    /// another. They increase shareholding exactly as a contribution does, and post to the same
+    /// account, so nothing about a balance changes.
+    ///
+    /// They are a separate target because a member reading their statement should be able to
+    /// tell a lump sum they chose to pay from the monthly amount they agreed to, and because
+    /// the two arrive by different routes - the monthly figure through payroll, a top-up
+    /// usually as a direct deposit.
+    /// </remarks>
+    ShareTopUp = 5,
 }
 
 /// <summary>

@@ -41,7 +41,24 @@ public sealed class Member : Borrower
 
     public MembershipNumber MembershipNumber { get; private set; }
 
+    /// <summary>
+    /// The member's CAL payroll number, where they have one.
+    /// </summary>
+    /// <remarks>
+    /// Optional. The deduction register carries shareholders who are not on the payroll, and
+    /// they are deducted by other means. <see cref="IsOnPayroll"/> is the question most rules
+    /// actually want to ask.
+    /// </remarks>
     public PayrollNumber PayrollNumber { get; private set; }
+
+    /// <summary>
+    /// Whether this member is deducted at source through CAL payroll.
+    /// </summary>
+    /// <remarks>
+    /// This is what arrears reasoning turns on. A member deducted at source cannot really miss
+    /// a payment; one who is not, can.
+    /// </remarks>
+    public bool IsOnPayroll => PayrollNumber.IsSpecified;
 
     /// <summary>
     /// The zone or office whose representatives approve this member's loan applications.
