@@ -2,6 +2,7 @@ using System.Globalization;
 using Akiba.Application;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Members;
+using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Membership;
@@ -183,6 +184,66 @@ if (!app.Environment.IsProduction())
     app.MapPost("/api/dev/seed-demo", async (IServiceProvider services) =>
         Results.Ok(await DemoData.SeedAsync(services))).AllowAnonymous();
 }
+
+// Reports. Each returns a file, and each is reproducible as at a past date because every
+// figure in it is summed from the ledger rather than read from a stored total.
+var reports = app.MapGroup("/reports");
+
+reports.MapGet("/deductions/{kind}/{year:int}/{month:int}", async (
+    IMediator mediator,
+    IDeductionScheduleWriter writer,
+    string kind,
+    int year,
+    int month) =>
+{
+    var scheduleKind = string.Equals(kind, "landlords", StringComparison.OrdinalIgnoreCase)
+        ? DeductionScheduleKind.Landlords
+        : DeductionScheduleKind.Employees;
+
+    var schedule = await mediator.Send(new GetDeductionScheduleQuery(scheduleKind, year, month));
+    var file = writer.Write(schedule);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.DownloadsSchedules);
+
+reports.MapGet("/shareholding", async (
+    IMediator mediator, IShareholdingSummaryWriter writer, IClock clock, DateOnly? asAt) =>
+{
+    var summary = await mediator.Send(
+        new GetShareholdingSummaryQuery(asAt ?? clock.TodayInNairobi));
+
+    var file = writer.Write(summary);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.ViewsLedger);
+
+reports.MapGet("/members/{id:guid}/statement", async (
+    IMediator mediator, IMemberStatementWriter writer, IClock clock, Guid id, DateOnly? asAt) =>
+{
+    var statement = await mediator.Send(
+        new GetMemberStatementQuery(new BorrowerId(id), asAt ?? clock.TodayInNairobi));
+
+    var file = writer.Write(statement);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.ViewsLedger);
+
+reports.MapGet("/agm/{year:int}", async (
+    IMediator mediator,
+    IAgmPackWriter writer,
+    int year,
+    string? treasurersReport,
+    string? chairmansReport) =>
+{
+    // The two narrative reports are written by officials and printed as supplied. Akiba does
+    // not generate prose that somebody then has to stand behind.
+    var pack = await mediator.Send(new GetAgmPackQuery(
+        year, treasurersReport ?? string.Empty, chairmansReport ?? string.Empty));
+
+    var file = writer.Write(pack);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.ViewsLedger);
 
 await app.RunAsync();
 

@@ -30,7 +30,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 10 | Payroll and bank reconciliation | ⬜ Not started |
 | 11 | Restructuring | 🟡 Domain done; no screen yet |
 | 12 | Arrears and ageing | ✅ Done |
-| 13 | Reporting suite | ⬜ Not started |
+| 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
 | 14 | Notifications | ⬜ Not started |
 | 15 | Identity, roles, MFA, audit trail | 🟡 Auth, roles and mandatory TOTP done; audit trail outstanding |
 | 16 | Dividend run | ⬜ Not started |

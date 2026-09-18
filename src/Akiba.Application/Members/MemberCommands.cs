@@ -38,7 +38,10 @@ public sealed class EnrolMemberValidator : AbstractValidator<EnrolMemberCommand>
     public EnrolMemberValidator()
     {
         RuleFor(command => command.MembershipNumber).NotEmpty();
-        RuleFor(command => command.PayrollNumber).NotEmpty();
+
+        // Deliberately NOT required. The society's own register carries shareholders who are
+        // not on the CAL payroll, written as staff number 0. Requiring it here would have
+        // refused them one layer above the domain, which had already been fixed to allow them.
         RuleFor(command => command.GivenName).NotEmpty();
         RuleFor(command => command.FamilyName).NotEmpty();
         RuleFor(command => command.NationalId).NotEmpty();
@@ -76,11 +79,15 @@ internal sealed class EnrolMemberHandler : IRequestHandler<EnrolMemberCommand, B
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var payrollNumber = PayrollNumber.Of(command.PayrollNumber);
+        var payrollNumber = PayrollNumber.FromRegister(command.PayrollNumber);
 
-        var existing = await _borrowers
-            .FindMemberByPayrollNumberAsync(payrollNumber, cancellationToken)
-            .ConfigureAwait(false);
+        // Only a payroll number that is actually present can clash. Several members may have
+        // none.
+        var existing = payrollNumber.IsSpecified
+            ? await _borrowers
+                .FindMemberByPayrollNumberAsync(payrollNumber, cancellationToken)
+                .ConfigureAwait(false)
+            : null;
 
         if (existing is not null)
         {

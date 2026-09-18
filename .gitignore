@@ -41,3 +41,7 @@ reports-output/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Generated sample reports. Useful to look at, not part of the system - and a real one would
+# contain member data.
+sample-reports/

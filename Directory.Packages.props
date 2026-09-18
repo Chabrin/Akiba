@@ -25,6 +25,15 @@
     <PackageVersion Include="MudBlazor" Version="9.10.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Reporting">
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <!--
+      QuestPDF is MIT below a revenue threshold Akiba is far beneath, and licensed above it.
+      Same footing as MediatR: fine here, worth knowing if the society ever changes shape.
+    -->
+    <PackageVersion Include="QuestPDF" Version="2026.9.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Application layer">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />

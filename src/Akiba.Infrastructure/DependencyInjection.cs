@@ -1,7 +1,9 @@
 using Akiba.Application.Abstractions;
+using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Infrastructure.Persistence.Repositories;
+using Akiba.Infrastructure.Reporting;
 using Akiba.Infrastructure.Identity;
 using Akiba.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +48,15 @@ public static class DependencyInjection
         services.AddScoped<IAkibaAccounts, AkibaAccounts>();
 
         services.AddScoped<ChartOfAccountsSeeder>();
+
+        services.AddSingleton<IDeductionScheduleWriter, DeductionScheduleWriter>();
+        services.AddSingleton<IMemberStatementWriter, MemberStatementWriter>();
+        services.AddSingleton<IShareholdingSummaryWriter, ShareholdingSummaryWriter>();
+        services.AddSingleton<IAgmPackWriter, AgmPackWriter>();
+
+        // QuestPDF is MIT below a revenue threshold Akiba is far beneath. Declaring it is a
+        // licence term, not a formality.
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
         services.AddSingleton<IClock, SystemClock>();
 

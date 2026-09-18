@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
+    <!-- The reporting tests open the generated workbook back and read its figures. -->
+    <PackageReference Include="ClosedXML" />
   </ItemGroup>
 
   <ItemGroup>
