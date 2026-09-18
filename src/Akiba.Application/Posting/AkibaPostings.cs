@@ -302,6 +302,61 @@ public static class AkibaPostings
             ]);
 
     /// <summary>
+    /// Declares a year's dividend.
+    /// </summary>
+    /// <param name="retainedSurplus">Where the society's accumulated surplus sits.</param>
+    /// <param name="dividendsPayable">What the members are now owed.</param>
+    /// <param name="lines">One member entitlement each, in the order the run computed them.</param>
+    /// <param name="declaredOn">The date the dividend is declared.</param>
+    /// <param name="year">The year being distributed, for the narration.</param>
+    /// <param name="postedBy">Who posted it.</param>
+    /// <param name="postedAtUtc">When.</param>
+    /// <remarks>
+    /// <para>
+    /// Debit Retained Surplus for the whole, credit Dividends Payable once per member. One
+    /// credit line each rather than a single total, because the point of the entry is that a
+    /// member can be shown their own figure in the journal, with their name against it.
+    /// </para>
+    /// <para>
+    /// This declares the dividend; it does not pay it. <b>Whether a member's dividend is added
+    /// to their shares or paid out has not been settled</b>, so Akiba stops at the point where
+    /// the society owes it and says so, rather than guessing. See docs/open-questions.md.
+    /// </para>
+    /// </remarks>
+    public static JournalEntry DividendDeclaration(
+        AccountId retainedSurplus,
+        AccountId dividendsPayable,
+        IReadOnlyList<(string MemberName, Money Amount)> lines,
+        DateOnly declaredOn,
+        int year,
+        Actor postedBy,
+        DateTimeOffset postedAtUtc)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        var total = lines.Sum(line => line.Amount, Currency.Kes);
+
+        var entryLines = new List<JournalLine>(lines.Count + 1)
+        {
+            JournalLine.Debit(retainedSurplus, total, $"Dividend for {year}"),
+        };
+
+        entryLines.AddRange(lines
+            .Where(line => line.Amount.IsPositive)
+            .Select(line => JournalLine.Credit(dividendsPayable, line.Amount, line.MemberName)));
+
+        return JournalEntry.Post(
+            declaredOn,
+            $"Dividend declared for {year}",
+            SourceDocument.Of(
+                SourceDocumentKind.DividendSchedule,
+                year.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            postedBy,
+            postedAtUtc,
+            entryLines);
+    }
+
+    /// <summary>
     /// An opening balance at go-live.
     /// </summary>
     /// <remarks>

@@ -109,6 +109,28 @@ one and says it is the member's - either added to shares or refunded - which mir
 overpayment rule already agreed for receipts. Nobody has confirmed that the same rule applies
 when the error is HR's rather than the member's.
 
+## Raised by building the dividend run (18 September 2026)
+
+**D. Open question 11 now has a screen that answers it with figures.** The dividend basis -
+time-weighted shareholding or closing balance - is still unsettled, so both are implemented as
+strategies and the run records which one it used. **Compare the two bases** on any computed run
+shows, member by member, what each answer is worth in shillings.
+
+Take that to the committee rather than the question. With every member contributing a steady
+amount for a full year the two bases agree exactly; they only diverge for somebody who joined
+part-way through, which is precisely the case nobody has ruled on.
+
+**E. The dividend is declared but not settled, and that is deliberate.** Posting a run debits
+Retained Surplus and credits Dividends Payable, one line per member. What happens next -
+**added to the member's shares, or paid out** - is not in any source document, so Akiba stops
+at the point where the society owes it. **Ask the committee**, and note that the answer changes
+what a member's next borrowing limit is: a dividend added to shares raises it, a dividend paid
+out does not.
+
+**F. Members who left CAL during the year are included in the run.** They held shares for part
+of it, and leaving is not obviously the same as forfeiting a year's dividend. This overlaps
+open question 14, which nobody has answered.
+
 ## Found while building, not yet raised
 
 **The graduated scale is a maximum, not a fixed term.** The application form's duration

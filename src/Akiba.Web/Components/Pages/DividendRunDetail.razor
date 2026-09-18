@@ -1,0 +1,246 @@
+@page "/dividends/{Id:guid}"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+
+<PageTitle>Akiba - Dividend run</PageTitle>
+
+@if (_run is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <PageHeader Title="@($"{_run.Year} dividend")" Description="@_run.BasisExplanation">
+        <Actions>
+            <MudButton Variant="Variant.Text" Href="/dividends"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">
+                All runs
+            </MudButton>
+
+            <MudButton Variant="Variant.Text" Class="ml-2"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       Href="@($"/reports/dividends/{Id}")">
+                Schedule
+            </MudButton>
+
+            @if (_run.Status == DividendRunStatus.Draft)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ReviewAsync">
+                    Review (treasurer)
+                </MudButton>
+            }
+
+            @if (_run.Status == DividendRunStatus.Reviewed)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.Gavel" OnClick="ApproveAsync">
+                    Approve (chairman)
+                </MudButton>
+            }
+
+            @if (_run.MayBePosted)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.PostAdd" OnClick="PostAsync">
+                    Post to the ledger
+                </MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <MudAlert Severity="@(_run.Status == DividendRunStatus.Posted ? Severity.Success : Severity.Info)"
+              Class="mb-4">
+        @_run.Verdict
+    </MudAlert>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Interest earned" Value="_run.InterestEarned"
+                      Icon="@Icons.Material.Filled.TrendingUp"
+                      Caption="On loans over the year" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Less bank charges" Value="_run.BankCharges"
+                      Icon="@Icons.Material.Filled.TrendingDown" Colour="Color.Warning"
+                      Caption="The account earns no interest but incurs these" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Distributed" Value="_run.Distributable"
+                      Icon="@Icons.Material.Filled.Savings" Colour="Color.Success"
+                      Caption="@($"Across {_run.Lines.Count} member(s)")" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Total shareholding" Value="_run.TotalBasis"
+                      Icon="@Icons.Material.Filled.AccountBalanceWallet" Colour="Color.Info"
+                      Caption="@($"{_run.RatePerShilling.ToString("0.000000", CultureInfo.InvariantCulture)} per shilling")" />
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Who has seen it</MudText>
+
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <Signature Role="Computed by" Who="@_run.ComputedBy?.DisplayName"
+                           At="_run.ComputedAtUtc" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <Signature Role="Reviewed by (treasurer)" Who="@_run.ReviewedBy?.DisplayName"
+                           At="_run.ReviewedAtUtc" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <Signature Role="Approved by (chairman)" Who="@_run.ApprovedBy?.DisplayName"
+                           At="_run.ApprovedAtUtc" />
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
+            The reviewer and the approver cannot be the same person. The whole value of the
+            sequence is that two officials looked at the figure before it became every member's
+            entitlement.
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Elevation="1" Class="pa-2 mb-4">
+        <div class="d-flex justify-space-between align-center pa-3 pb-1">
+            <MudText Typo="Typo.subtitle1">Members</MudText>
+
+            <MudButton Size="Size.Small" Variant="Variant.Text" Class="akiba-no-print"
+                       StartIcon="@Icons.Material.Filled.CompareArrows" OnClick="CompareAsync">
+                Compare the two bases
+            </MudButton>
+        </div>
+
+        <MudTable Items="_run.Lines" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Member no.</MudTh>
+                <MudTh>Member</MudTh>
+                <MudTh Style="text-align: right">@_run.BasisName</MudTh>
+                <MudTh Style="text-align: right">Dividend</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member no.">@context.MembershipNumber</MudTd>
+                <MudTd DataLabel="Member">@context.FullName</MudTd>
+                <MudTd DataLabel="Basis" Class="akiba-money-cell">
+                    <MoneyText Amount="context.BasisAmount" />
+                </MudTd>
+                <MudTd DataLabel="Dividend" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Amount" />
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            Every entitlement is allocated rather than multiplied by the rate, so the column
+            sums to @_run.Distributable.ToString() exactly. A dividend that lost a cent to
+            rounding would not post at all - the journal entry's lines would not sum to zero.
+        </MudText>
+    </MudPaper>
+
+    @if (_comparison is not null)
+    {
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-1">
+                @_comparison.RunsBasisName against @_comparison.OtherBasisName
+            </MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                What the unsettled rule is actually worth, member by member, biggest difference
+                first. The largest single member's difference is
+                <b><MoneyText Amount="_comparison.LargestDifference" /></b>.
+                Nothing here is posted; it is for the committee to look at.
+            </MudText>
+
+            <MudTable Items="_comparison.Lines" Dense="true" Striped="true" Elevation="0"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Member no.</MudTh>
+                    <MudTh>Member</MudTh>
+                    <MudTh Style="text-align: right">@_comparison.RunsBasisName</MudTh>
+                    <MudTh Style="text-align: right">@_comparison.OtherBasisName</MudTh>
+                    <MudTh Style="text-align: right">Difference</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Member no.">@context.MembershipNumber</MudTd>
+                    <MudTd DataLabel="Member">@context.FullName</MudTd>
+                    <MudTd DataLabel="This run" Class="akiba-money-cell">
+                        <MoneyText Amount="context.OnTheRunsBasis" />
+                    </MudTd>
+                    <MudTd DataLabel="The other" Class="akiba-money-cell">
+                        <MoneyText Amount="context.OnTheOtherBasis" />
+                    </MudTd>
+                    <MudTd DataLabel="Difference" Class="akiba-money-cell">
+                        <MoneyText Amount="context.Difference" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudButton Variant="Variant.Text" Class="mt-2" OnClick="@(() => _comparison = null)">
+                Hide
+            </MudButton>
+        </MudPaper>
+    }
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private DividendRun? _run;
+    private DividendBasisComparison? _comparison;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private Task ReviewAsync() =>
+        RunAsync(() => Mediator.Send(new ReviewDividendRunCommand(new DividendRunId(Id))));
+
+    private Task ApproveAsync() =>
+        RunAsync(() => Mediator.Send(new ApproveDividendRunCommand(new DividendRunId(Id))));
+
+    private Task PostAsync() =>
+        RunAsync(() => Mediator.Send(new PostDividendRunCommand(new DividendRunId(Id))));
+
+    private async Task CompareAsync()
+    {
+        _error = null;
+
+        try
+        {
+            _comparison = await Mediator.Send(
+                new CompareDividendBasesQuery(new DividendRunId(Id)));
+        }
+        catch (InvalidOperationException exception)
+        {
+            _error = exception.Message;
+        }
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _error = null;
+
+        try
+        {
+            await action();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _run = await Mediator.Send(new GetDividendRunQuery(new DividendRunId(Id)));
+}

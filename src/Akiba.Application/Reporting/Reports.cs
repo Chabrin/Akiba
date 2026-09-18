@@ -1,4 +1,5 @@
 using Akiba.Application.Abstractions;
+using Akiba.Domain.Dividends;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Guaranteeing;
 using Akiba.Domain.Ledger;
@@ -35,6 +36,18 @@ public interface IShareholdingSummaryWriter
 public interface IAgmPackWriter
 {
     GeneratedReport Write(AgmPack pack);
+}
+
+/// <summary>
+/// Writes the dividend computation schedule.
+/// </summary>
+/// <remarks>
+/// Excel rather than PDF: the committee checks it against the register, sorts it and sums the
+/// column. It is the working document a dividend is argued over before it is approved.
+/// </remarks>
+public interface IDividendScheduleWriter
+{
+    GeneratedReport Write(DividendRun run);
 }
 
 /// <summary>One member on the shareholding summary.</summary>

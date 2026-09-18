@@ -1,0 +1,174 @@
+@page "/dividends"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Akiba - Dividends</PageTitle>
+
+<PageHeader Title="Dividends"
+            Description="Interest earned, net of bank charges, shared out by shareholding. Computed, reviewed by the treasurer, approved by the chairman, and only then posted.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Calculate"
+                   OnClick="@(() => _computing = true)">
+            Compute a year
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@if (_computing)
+{
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-1">Compute a dividend</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Nothing is posted by computing. The figures are read from the ledger, and the run
+            waits for the treasurer and the chairman.
+        </MudText>
+
+        <MudGrid>
+            <MudItem xs="12" sm="4" md="3">
+                <MudSelect T="int" @bind-Value="_year" Label="Year" Dense="true">
+                    @foreach (var year in Years)
+                    {
+                        <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="8" md="5">
+                <MudSelect T="DividendBasisChoice" @bind-Value="_basis" Label="Basis" Dense="true">
+                    <MudSelectItem T="DividendBasisChoice" Value="DividendBasisChoice.ClosingShareholding">
+                        Closing shareholding (the default)
+                    </MudSelectItem>
+                    <MudSelectItem T="DividendBasisChoice" Value="DividendBasisChoice.TimeWeightedShareholding">
+                        Time-weighted shareholding
+                    </MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="_busy" OnClick="ComputeAsync">
+                    Compute
+                </MudButton>
+                <MudButton Variant="Variant.Text" OnClick="@(() => _computing = false)">
+                    Cancel
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            <b>The committee has not settled which basis applies.</b> The only rule anybody
+            wrote down is "interest earned divided by the total shareholding", which does not
+            say whether a member who joined in November shares equally with one who contributed
+            all year. Compute a run, then use <i>Compare the two bases</i> on it to show the
+            committee what the choice is actually worth to a member.
+        </MudAlert>
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+        }
+    </MudPaper>
+}
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_runs is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_runs.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            No dividend has been computed yet.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_runs" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm"
+                  OnRowClick="@((TableRowClickEventArgs<DividendRunSummary> row) => Open(row.Item))"
+                  RowStyle="cursor: pointer">
+            <HeaderContent>
+                <MudTh>Year</MudTh>
+                <MudTh Style="text-align: right">Distributed</MudTh>
+                <MudTh Style="text-align: right">Members</MudTh>
+                <MudTh>Basis</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Year">@context.Year</MudTd>
+                <MudTd DataLabel="Distributed" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Distributable" />
+                </MudTd>
+                <MudTd DataLabel="Members" Class="akiba-money-cell">@context.MemberCount</MudTd>
+                <MudTd DataLabel="Basis">@context.BasisName</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColour(context.Status)">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private IReadOnlyList<DividendRunSummary>? _runs;
+
+    private bool _computing;
+    private bool _busy;
+    private string? _error;
+
+    private int _year = DateTime.Today.Year - 1;
+    private DividendBasisChoice _basis = DividendBasisChoice.ClosingShareholding;
+
+    private static IEnumerable<int> Years => Enumerable.Range(DateTime.Today.Year - 4, 5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _year = Clock.TodayInNairobi.Year - 1;
+        await LoadAsync();
+    }
+
+    private static Color StatusColour(DividendRunStatus status) => status switch
+    {
+        DividendRunStatus.Draft => Color.Warning,
+        DividendRunStatus.Reviewed => Color.Info,
+        DividendRunStatus.Approved => Color.Primary,
+        DividendRunStatus.Posted => Color.Success,
+        _ => Color.Default,
+    };
+
+    private void Open(DividendRunSummary? run)
+    {
+        if (run is not null)
+        {
+            Navigation.NavigateTo($"/dividends/{run.RunId.Value}");
+        }
+    }
+
+    private async Task ComputeAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var runId = await Mediator.Send(new ComputeDividendRunCommand(_year, _basis));
+            Navigation.NavigateTo($"/dividends/{runId.Value}");
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LoadAsync() => _runs = await Mediator.Send(new ListDividendRunsQuery());
+}

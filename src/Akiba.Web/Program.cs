@@ -4,6 +4,8 @@ using Akiba.Application.Abstractions;
 using Akiba.Application.Members;
 using Akiba.Application.Ledger;
 using Akiba.Application.Reconciliation;
+using Akiba.Application.Dividends;
+using Akiba.Domain.Dividends;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Domain.Financial;
@@ -279,6 +281,15 @@ reports.MapGet("/members/{id:guid}/statement", async (
         new GetMemberStatementQuery(new BorrowerId(id), asAt ?? clock.TodayInNairobi));
 
     var file = writer.Write(statement);
+
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.ViewsLedger);
+
+reports.MapGet("/dividends/{id:guid}", async (
+    IMediator mediator, IDividendScheduleWriter writer, Guid id) =>
+{
+    var run = await mediator.Send(new GetDividendRunQuery(new DividendRunId(id)));
+    var file = writer.Write(run);
 
     return Results.File(file.Content, file.ContentType, file.FileName);
 }).RequireAuthorization(AkibaPolicies.ViewsLedger);

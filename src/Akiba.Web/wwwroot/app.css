@@ -64,3 +64,9 @@
     display: block;
     line-height: 1.25;
 }
+
+/* One official's signature on a dividend run: who, and when. */
+.akiba-signature {
+    border-left: 3px solid var(--mud-palette-lines-default);
+    padding-left: 12px;
+}

@@ -104,6 +104,8 @@ public sealed class PostgresFixture : IAsyncLifetime
         await context.Database.ExecuteSqlRawAsync(
             $"""
             TRUNCATE TABLE
+                "{AkibaDbContext.Schema}"."dividend_lines",
+                "{AkibaDbContext.Schema}"."dividend_runs",
                 "{AkibaDbContext.Schema}"."bank_statement_lines",
                 "{AkibaDbContext.Schema}"."bank_reconciliations",
                 "{AkibaDbContext.Schema}"."journal_lines",

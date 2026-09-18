@@ -33,7 +33,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
 | 14 | Notifications | ⬜ Not started |
 | 15 | Identity, roles, MFA, audit trail | 🟡 Auth, roles and mandatory TOTP done; audit trail outstanding |
-| 16 | Dividend run | ⬜ Not started |
+| 16 | Dividend run | ✅ Done — compute, review, approve, post, and a schedule |
 | 17 | Migration tooling | ✅ Done — loads the real deduction register |
 | 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
 
@@ -121,6 +121,7 @@ who do not exist.
 | `/members/{id}/statement?asAt=` | A member's statement as at any date |
 | `/api/reconciliations` | Every imported statement and what is outstanding on it |
 | `/api/ledger/period-close/{year}/{month}` | Whether a month may be closed, and what is stopping it |
+| `/reports/dividends/{id}` | A dividend run's computation schedule |
 
 These are a read-only window on the same queries the Blazor panel will use.
 

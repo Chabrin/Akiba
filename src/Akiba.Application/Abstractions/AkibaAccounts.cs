@@ -26,6 +26,9 @@ public interface IAkibaAccounts
 
     Task<AccountId> DividendsPayableAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>The society's accumulated surplus, which a dividend is declared out of.</summary>
+    Task<AccountId> RetainedSurplusAsync(CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Opens a share account for a new member, or a receivable for a new loan. These are the
     /// two account kinds that are created as the society goes along rather than seeded.

@@ -1,0 +1,32 @@
+@*
+    One official's signature on something: who, and when.
+
+    Shown greyed with "not yet" rather than hidden when nobody has signed, because the gap is
+    the point - an approval that has not happened should be visible on the screen beside the
+    ones that have.
+*@
+
+<div class="akiba-signature">
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">@Role</MudText>
+
+    <MudText Typo="Typo.body1" Class="@(Signed ? null : "mud-text-secondary")">
+        @(Signed ? Who : "not yet")
+    </MudText>
+
+    @if (At is { } moment)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            @moment.UtcDateTime.ToString("d MMMM yyyy HH:mm 'UTC'", CultureInfo.InvariantCulture)
+        </MudText>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Role { get; set; } = string.Empty;
+
+    [Parameter] public string? Who { get; set; }
+
+    [Parameter] public DateTimeOffset? At { get; set; }
+
+    private bool Signed => !string.IsNullOrWhiteSpace(Who);
+}

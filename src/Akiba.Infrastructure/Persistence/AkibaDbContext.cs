@@ -69,6 +69,10 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
 
     internal DbSet<BankStatementLineRow> BankStatementLines => Set<BankStatementLineRow>();
 
+    internal DbSet<DividendRunRow> DividendRuns => Set<DividendRunRow>();
+
+    internal DbSet<DividendLineRow> DividendLines => Set<DividendLineRow>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);

@@ -40,6 +40,9 @@ internal sealed class AkibaAccounts : IAkibaAccounts
     public Task<AccountId> DividendsPayableAsync(CancellationToken cancellationToken = default) =>
         ByCodeAsync(ChartOfAccounts.DividendsPayable, cancellationToken);
 
+    public Task<AccountId> RetainedSurplusAsync(CancellationToken cancellationToken = default) =>
+        ByCodeAsync(ChartOfAccounts.RetainedSurplus, cancellationToken);
+
     public async Task<Account> OpenMemberSharesAccountAsync(
         string membershipNumber,
         string memberName,

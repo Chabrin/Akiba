@@ -1,4 +1,5 @@
 using Akiba.Application.Abstractions;
+using Akiba.Application.Dividends;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Infrastructure.Persistence;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ILoanRepository, LoanRepository>();
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
         services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
+        services.AddScoped<IDividendRunRepository, DividendRunRepository>();
         services.AddScoped<IAkibaAccounts, AkibaAccounts>();
 
         services.AddSingleton<IBankStatementReader, BankStatementReader>();
@@ -57,6 +59,7 @@ public static class DependencyInjection
         services.AddSingleton<IMemberStatementWriter, MemberStatementWriter>();
         services.AddSingleton<IShareholdingSummaryWriter, ShareholdingSummaryWriter>();
         services.AddSingleton<IAgmPackWriter, AgmPackWriter>();
+        services.AddSingleton<IDividendScheduleWriter, DividendScheduleWriter>();
 
         // QuestPDF is MIT below a revenue threshold Akiba is far beneath. Declaring it is a
         // licence term, not a formality.
