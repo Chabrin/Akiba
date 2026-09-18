@@ -32,7 +32,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 12 | Arrears and ageing | ✅ Done |
 | 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
 | 14 | Notifications | ⬜ Not started |
-| 15 | Identity, roles, MFA, audit trail | 🟡 Auth, roles and mandatory TOTP done; audit trail outstanding |
+| 15 | Identity, roles, MFA, audit trail | ✅ Done — auth, roles, mandatory TOTP, and an append-only audit trail |
 | 16 | Dividend run | ✅ Done — compute, review, approve, post, and a schedule |
 | 17 | Migration tooling | ✅ Done — loads the real deduction register |
 | 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
@@ -122,6 +122,7 @@ who do not exist.
 | `/api/reconciliations` | Every imported statement and what is outstanding on it |
 | `/api/ledger/period-close/{year}/{month}` | Whether a month may be closed, and what is stopping it |
 | `/reports/dividends/{id}` | A dividend run's computation schedule |
+| `/reports/audit` | The audit trail as CSV |
 
 These are a read-only window on the same queries the Blazor panel will use.
 
@@ -187,7 +188,9 @@ This system holds member financial records and the group requires confidentialit
   secretary have view access, plus their own approval actions. HR can download the monthly
   deduction schedules and nothing else.
 - **Every change is audited**: actor, timestamp, before and after values, IP address.
-  The trail is immutable and exportable.
+  Built on Audit.NET, viewable at `/audit` and exportable as CSV. **The trail is immutable at
+  the database level** — a trigger refuses `UPDATE` and `DELETE` on it, so the claim holds
+  against somebody with a psql prompt and not only against Akiba's own code.
 - **Financial records are never hard-deleted.** Ledger tables carry no soft-delete flag.
   Corrections are reversing entries.
 - **A month is not closed until it reconciles.** The close is refused while the trial balance

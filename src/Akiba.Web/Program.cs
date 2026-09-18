@@ -4,6 +4,7 @@ using Akiba.Application.Abstractions;
 using Akiba.Application.Members;
 using Akiba.Application.Ledger;
 using Akiba.Application.Reconciliation;
+using Akiba.Application.Auditing;
 using Akiba.Application.Dividends;
 using Akiba.Domain.Dividends;
 using Akiba.Application.Reporting;
@@ -70,12 +71,19 @@ builder.Services.AddAkibaIdentity(
 builder.Services.AddScoped<
     IUserClaimsPrincipalFactory<AkibaUser>, AkibaClaimsPrincipalFactory>();
 
+// Needed by the audit trail, which records the address a change came from.
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AkibaDbContext>("database");
 
 var app = builder.Build();
 
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Akiba.Startup");
+
+// Before anything writes to the database, including the migrations and the startup seed, so
+// that the very first changes are recorded too.
+app.UseAkibaAuditTrail();
 
 // One database, on one machine, upgraded by one person who is not a DBA. Migrating at
 // startup suits that; it would be the wrong call for several instances racing to migrate the
@@ -283,6 +291,22 @@ reports.MapGet("/members/{id:guid}/statement", async (
     var file = writer.Write(statement);
 
     return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.ViewsLedger);
+
+// The audit trail as CSV. The brief requires it exportable, and CSV is what an auditor asks
+// for - it opens in anything and nothing about it depends on Akiba still running.
+reports.MapGet("/audit", async (
+    IMediator mediator, DateOnly? from, DateOnly? to, string? table, int? take) =>
+{
+    var entries = await mediator.Send(
+        new ListAuditEntriesQuery(from, to, table, null, take ?? 5_000));
+
+    var csv = Akiba.Infrastructure.Auditing.AuditTrailQueries.ToCsv(entries);
+
+    return Results.File(
+        csv,
+        "text/csv",
+        $"akiba-audit-trail-{DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.csv");
 }).RequireAuthorization(AkibaPolicies.ViewsLedger);
 
 reports.MapGet("/dividends/{id:guid}", async (

@@ -1,0 +1,198 @@
+@page "/audit"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Audit trail</PageTitle>
+
+<PageHeader Title="Audit trail"
+            Description="Every change to every table: who, when, from which machine, and what the value was before and after. The trail is append-only, and the database itself refuses to alter it.">
+    <Actions>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download"
+                   Href="@ExportUrl">
+            Export as CSV
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+<MudPaper Elevation="1" Class="pa-4 mb-4 akiba-no-print">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="From" @bind-Date="_from" DateFormat="dd MMM yyyy"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="To" @bind-Date="_to" DateFormat="dd MMM yyyy"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="8" md="4">
+            <MudSelect T="string" @bind-Value="_table" Label="Table" Dense="true" Clearable="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="string" Value="@(null!)">Every table</MudSelectItem>
+                @foreach (var table in _tables)
+                {
+                    <MudSelectItem T="string" Value="@table">@table</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4" md="2" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadAsync">
+                Show
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_entries is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            Nothing was changed in that period.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_entries" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>When (UTC)</MudTh>
+                <MudTh>Official</MudTh>
+                <MudTh>From</MudTh>
+                <MudTh>What changed</MudTh>
+                <MudTh>Row</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="When">
+                    @context.OccurredAtUtc.UtcDateTime.ToString(
+                        "d MMM yyyy HH:mm:ss", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="Official">
+                    @if (string.IsNullOrWhiteSpace(context.ActorName))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            no signed-in official
+                        </MudText>
+                    }
+                    else
+                    {
+                        @context.ActorName
+                    }
+                </MudTd>
+                <MudTd DataLabel="From">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @(context.IpAddress ?? "-")
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="What changed">
+                    @context.Summary
+
+                    @if (context.Changes.Count > 0)
+                    {
+                        <MudTooltip>
+                            <ChildContent>
+                                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small"
+                                         Class="ml-1 mud-text-secondary" />
+                            </ChildContent>
+                            <TooltipContent>
+                                <div class="akiba-audit-changes">
+                                    @foreach (var change in context.Changes)
+                                    {
+                                        <div>
+                                            <b>@change.ColumnName</b>:
+                                            @(change.Before ?? "(empty)")
+                                            &rarr;
+                                            @(change.After ?? "(empty)")
+                                        </div>
+                                    }
+                                </div>
+                            </TooltipContent>
+                        </MudTooltip>
+                    }
+
+                    @if (!context.Succeeded)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-1">
+                            Failed
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Row">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @context.PrimaryKey
+                    </MudText>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            Showing the most recent @_entries.Count change(s) in the period. The trail grows
+            without limit, so a screen always shows a page of it; the CSV export takes the whole
+            period.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    private IReadOnlyList<AuditEntry>? _entries;
+    private IReadOnlyList<string> _tables = [];
+
+    private DateTime? _from;
+    private DateTime? _to;
+    private string? _table;
+
+    private string ExportUrl
+    {
+        get
+        {
+            var query = new List<string>(3);
+
+            if (_from is { } from)
+            {
+                query.Add($"from={from:yyyy-MM-dd}");
+            }
+
+            if (_to is { } to)
+            {
+                query.Add($"to={to:yyyy-MM-dd}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(_table))
+            {
+                query.Add($"table={Uri.EscapeDataString(_table)}");
+            }
+
+            return query.Count == 0 ? "/reports/audit" : $"/reports/audit?{string.Join('&', query)}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = Clock.TodayInNairobi;
+
+        _from = today.AddDays(-30).ToDateTime(TimeOnly.MinValue);
+        _to = today.ToDateTime(TimeOnly.MinValue);
+
+        _tables = await Mediator.Send(new ListAuditedTablesQuery());
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _entries = null;
+
+        _entries = await Mediator.Send(new ListAuditEntriesQuery(
+            _from is { } from ? DateOnly.FromDateTime(from) : null,
+            _to is { } to ? DateOnly.FromDateTime(to) : null,
+            _table,
+            null,
+            500));
+    }
+}

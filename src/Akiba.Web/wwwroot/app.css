@@ -70,3 +70,11 @@
     border-left: 3px solid var(--mud-palette-lines-default);
     padding-left: 12px;
 }
+
+/* The before-and-after values behind one audited change. */
+.akiba-audit-changes {
+    max-width: 520px;
+    text-align: left;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}

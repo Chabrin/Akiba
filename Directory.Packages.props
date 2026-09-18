@@ -18,6 +18,10 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.12" />
+    <!-- Milestone 15: the audit trail. Chosen over a hand-rolled SaveChanges
+         interceptor by the brief, and only one of the two is ever built. -->
+    <PackageVersion Include="Audit.NET" Version="33.0.0" />
+    <PackageVersion Include="Audit.EntityFramework.Core" Version="33.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Web">

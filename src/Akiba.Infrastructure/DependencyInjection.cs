@@ -1,7 +1,9 @@
 using Akiba.Application.Abstractions;
+using Akiba.Application.Auditing;
 using Akiba.Application.Dividends;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
+using Akiba.Infrastructure.Auditing;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Infrastructure.Persistence.Repositories;
 using Akiba.Infrastructure.Reconciliation;
@@ -31,9 +33,12 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        services.AddDbContext<AkibaDbContext>(options =>
-            options.UseNpgsql(connectionString, npgsql =>
-                npgsql.MigrationsHistoryTable("__migrations", AkibaDbContext.Schema)));
+        services.AddDbContext<AkibaDbContext>(options => options
+            .UseNpgsql(connectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__migrations", AkibaDbContext.Schema))
+            // Every write to every table is recorded: actor, time, before and after values, IP.
+            // The host decides who the actor is - see AuditTrail.Configure.
+            .AddInterceptors(AuditTrail.Interceptor()));
 
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<AkibaDbContext>());
 
@@ -49,6 +54,13 @@ public static class DependencyInjection
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
         services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
         services.AddScoped<IDividendRunRepository, DividendRunRepository>();
+        services.AddScoped<IAuditTrailQueries, AuditTrailQueries>();
+
+        // The trail is on from the moment the infrastructure is registered, recording changes
+        // with no actor against them. A host that knows who is signed in refines that by
+        // calling AuditTrail.Configure with its own subject - see Akiba.Web. Doing it this way
+        // round means a host that forgets still has a trail, rather than silently having none.
+        AuditTrail.Configure(() => null);
         services.AddScoped<IAkibaAccounts, AkibaAccounts>();
 
         services.AddSingleton<IBankStatementReader, BankStatementReader>();

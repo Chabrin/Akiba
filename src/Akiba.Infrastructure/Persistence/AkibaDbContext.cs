@@ -73,6 +73,16 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
 
     internal DbSet<DividendLineRow> DividendLines => Set<DividendLineRow>();
 
+    /// <summary>
+    /// The audit trail, mapped so it can be read and exported.
+    /// </summary>
+    /// <remarks>
+    /// Written by the audit provider through raw SQL on the connection that made the change,
+    /// never through this change tracker - auditing the audit would be a loop. The table also
+    /// carries a trigger refusing UPDATE and DELETE.
+    /// </remarks>
+    internal DbSet<AuditEntryRow> AuditEntries => Set<AuditEntryRow>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);

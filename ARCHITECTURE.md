@@ -326,6 +326,35 @@ violation shows up as such, rather than buried in the full test run.
 
 ---
 
+## 5a. The audit trail
+
+Every write to every table is recorded: the official, the time, the row, and the value of each
+column before and after. The address the change came from is taken from the connection, never
+from a forwarded header — Akiba is LAN-only with no proxy in front of it, so a header claiming
+to say where a request came from would be an assertion by the very person being audited.
+
+It is built on **Audit.NET**, not on a hand-rolled `SaveChanges` interceptor. The brief chose
+one over the other and the reason is worth keeping: two audit mechanisms that disagree about
+what happened are worse than either alone.
+
+**The entries are written on the same connection and inside the same transaction as the change
+they record.** A separate connection would leave the two able to disagree — a rolled-back
+transaction with an audit row saying it happened — which is precisely the failure an audit
+trail cannot have.
+
+**The trail is immutable at the database level, not by convention.** `akiba.audit_entries`
+carries a trigger that refuses `UPDATE` and `DELETE` and says why. Nothing in Akiba maps either
+operation, but "our code does not do it" is a weaker promise than an auditor deserves: the
+database has other users, and whoever holds its password has a psql prompt. There is a test
+that connects as that user and proves the refusal.
+
+Three tables are not audited, and each for a stated reason: the audit table itself, because
+auditing the audit is a loop, and the ASP.NET Identity token and login tables, because they
+hold authenticator secrets and rotate on every sign-in — recording them would fill the trail
+with noise and copy secrets into a second place.
+
+---
+
 ## 6. Conventions that are not negotiable
 
 - **Domain logic lives in aggregates and domain services.** Never in Blazor components,

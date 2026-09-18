@@ -104,6 +104,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await context.Database.ExecuteSqlRawAsync(
             $"""
             TRUNCATE TABLE
+                "{AkibaDbContext.Schema}"."audit_entries",
                 "{AkibaDbContext.Schema}"."dividend_lines",
                 "{AkibaDbContext.Schema}"."dividend_runs",
                 "{AkibaDbContext.Schema}"."bank_statement_lines",
@@ -125,6 +126,10 @@ public sealed class PostgresFixture : IAsyncLifetime
                 "{AkibaDbContext.Schema}"."accounts"
             RESTART IDENTITY CASCADE
             """);
+
+        // The audit table is truncated too. Its trigger refuses UPDATE and DELETE, which is
+        // the point of it, but TRUNCATE is neither - and a test database that kept every
+        // change made by every test would grow without anybody noticing.
 
         // Npgsql pools connections across contexts, and a pooled connection can hold a stale
         // view of a type that a migration has since changed.
