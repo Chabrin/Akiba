@@ -32,7 +32,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 12 | Arrears and ageing | ✅ Done |
 | 13 | Reporting suite | ⬜ Not started |
 | 14 | Notifications | ⬜ Not started |
-| 15 | Identity, roles, MFA, audit trail | ⬜ Not started |
+| 15 | Identity, roles, MFA, audit trail | 🟡 Auth, roles and mandatory TOTP done; audit trail outstanding |
 | 16 | Dividend run | ⬜ Not started |
 | 17 | Migration tooling | ✅ Done — loads the real deduction register |
 | 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
@@ -122,9 +122,17 @@ who do not exist.
 
 These are a read-only window on the same queries the Blazor panel will use.
 
-Outside Production the panel runs as a fixed development user, and says so in the startup
-log. Every ledger entry records its author, so attributing them all to one person is only
-tolerable while ASP.NET Core Identity is still to come — it is disabled in Production.
+### Signing in
+
+Akiba requires a signed-in official with an enrolled authenticator. On a fresh database it
+creates a one-time `setup` account and logs its password once; set `Akiba:SetupPassword` to
+choose one yourself. Sign in as `setup`, enrol an authenticator, create the real accounts, and
+then deactivate it.
+
+**TOTP is mandatory and enforced, not merely prompted for.** A password-only session is
+authenticated but permitted nothing except enrolling an authenticator — every authorization
+policy requires the enrolment claim, and the fallback policy means a page that forgets to name
+one is locked rather than open.
 
 ### Project layout
 

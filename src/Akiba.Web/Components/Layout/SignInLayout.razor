@@ -1,0 +1,17 @@
+@inherits LayoutComponentBase
+
+@* Sign-in has no navigation, no user chip and no theme toggle - there is nobody signed in to
+   have a preference, and nothing to navigate to. *@
+
+<MudThemeProvider Theme="AkibaTheme.Instance" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Small">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>

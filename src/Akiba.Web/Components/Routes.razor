@@ -1,12 +1,32 @@
-<Router AppAssembly="typeof(Program).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-    <NotFound>
-        <LayoutView Layout="typeof(MainLayout)">
-            <MudText Typo="Typo.h5" Class="mb-4">Page not found</MudText>
-            <MudText>That address does not exist in Akiba.</MudText>
-        </LayoutView>
-    </NotFound>
-</Router>
+@using Microsoft.AspNetCore.Components.Authorization
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            @* Every page requires a signed-in official. Akiba holds member financial records
+               and there is no part of it that is public - so authorisation is opt-out by page,
+               never opt-in. *@
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated == true)
+                    {
+                        <LayoutView Layout="typeof(MainLayout)">
+                            <NotPermitted />
+                        </LayoutView>
+                    }
+                    else
+                    {
+                        <RedirectToSignIn />
+                    }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="typeof(MainLayout)">
+                <MudText Typo="Typo.h5" Class="mb-4">Page not found</MudText>
+                <MudText>That address does not exist in Akiba.</MudText>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

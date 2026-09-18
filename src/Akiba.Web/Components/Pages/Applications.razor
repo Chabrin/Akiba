@@ -1,4 +1,5 @@
 @page "/applications"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
 @inject IMediator Mediator
 
 <PageTitle>Akiba - Applications</PageTitle>

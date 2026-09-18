@@ -1,0 +1,122 @@
+@page "/security/authenticator"
+@attribute [Authorize(Policy = AkibaPolicies.EnrollingTwoFactor)]
+@using System.Text
+@using System.Text.Encodings.Web
+@using Akiba.Infrastructure.Identity
+@using Microsoft.AspNetCore.Identity
+@inject UserManager<AkibaUser> Users
+@inject AuthenticationStateProvider AuthenticationState
+
+<PageTitle>Akiba - Authenticator</PageTitle>
+
+<MudPaper Elevation="1" Class="pa-8" Style="max-width: 34rem; margin: 3rem auto;">
+    <MudText Typo="Typo.h6" Class="mb-2">
+        <h1 style="all: unset">Set up your authenticator</h1>
+    </MudText>
+
+    @if (Required)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Every Akiba account uses an authenticator app. You cannot use the system until this
+            is set up.
+        </MudAlert>
+    }
+
+    @if (Error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+            That code was not accepted. Check the app is showing the right account, wait for the
+            next code, and try again.
+        </MudAlert>
+    }
+
+    @if (_key is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Install an authenticator app - Google Authenticator and Microsoft Authenticator both
+            work - then add an account using this key:
+        </MudText>
+
+        <MudPaper Elevation="0" Outlined="true" Class="pa-3 mb-4">
+            <MudText Typo="Typo.h6" Style="letter-spacing: 0.2em; word-break: break-all">
+                @FormattedKey
+            </MudText>
+        </MudPaper>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-4 d-block">
+            If your app scans codes, use this address instead:
+            <br />
+            <span style="word-break: break-all">@_uri</span>
+        </MudText>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Then enter the six-digit code the app shows, to confirm it is working.
+        </MudText>
+
+        <form method="post" action="/auth/authenticator">
+            <MudTextField T="string"
+                          Label="Code from the app"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          UserAttributes="@(new() { ["name"] = "code", ["inputmode"] = "numeric", ["autocomplete"] = "one-time-code", ["required"] = true, ["maxlength"] = "7" })"
+                          Class="mb-4" />
+
+            <MudButton ButtonType="ButtonType.Submit"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true">
+                Confirm
+            </MudButton>
+        </form>
+    }
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "required")]
+    public bool Required { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    private string? _key;
+    private string? _uri;
+
+    private string FormattedKey => _key is null
+        ? string.Empty
+        : string.Join(' ', Enumerable.Range(0, (_key.Length + 3) / 4)
+            .Select(chunk => _key.Substring(chunk * 4, Math.Min(4, _key.Length - (chunk * 4)))));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationState.GetAuthenticationStateAsync();
+        var user = await Users.GetUserAsync(state.User);
+
+        if (user is null)
+        {
+            return;
+        }
+
+        var key = await Users.GetAuthenticatorKeyAsync(user);
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            await Users.ResetAuthenticatorKeyAsync(user);
+            key = await Users.GetAuthenticatorKeyAsync(user);
+        }
+
+        _key = key;
+
+        // The otpauth URI an authenticator app reads. The issuer is what the member sees in
+        // their app's list, so it says Akiba rather than a hostname.
+        _uri = string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"otpauth://totp/{UrlEncoder.Default.Encode("Akiba")}:{UrlEncoder.Default.Encode(user.UserName ?? "user")}" +
+            $"?secret={key}&issuer={UrlEncoder.Default.Encode("Akiba")}&digits=6");
+    }
+}

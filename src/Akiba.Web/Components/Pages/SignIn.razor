@@ -1,0 +1,71 @@
+@page "/sign-in"
+@attribute [AllowAnonymous]
+@layout SignInLayout
+@using Microsoft.AspNetCore.Components.Web
+
+<PageTitle>Akiba - Sign in</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-8" Style="max-width: 26rem; margin: 6rem auto;">
+    <div class="d-flex align-center mb-6">
+        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary" Size="Size.Large" Class="mr-3" />
+        <div>
+            <MudText Typo="Typo.h5">
+                <h1 style="all: unset">Akiba</h1>
+            </MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Welfare Society</MudText>
+        </div>
+    </div>
+
+    @if (Error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@ErrorMessage</MudAlert>
+    }
+
+    @* A plain form post. Signing in sets a cookie, and a Blazor circuit cannot - the response
+       headers have gone by the time a component would handle the event. *@
+    <form method="post" action="/auth/password">
+        <MudTextField T="string"
+                      Label="User name"
+                      InputType="InputType.Text"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      UserAttributes="@(new() { ["name"] = "userName", ["autocomplete"] = "username", ["required"] = true, ["autofocus"] = true })"
+                      Class="mb-3" />
+
+        <MudTextField T="string"
+                      Label="Password"
+                      InputType="InputType.Password"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      UserAttributes="@(new() { ["name"] = "password", ["autocomplete"] = "current-password", ["required"] = true })"
+                      Class="mb-5" />
+
+        <MudButton ButtonType="ButtonType.Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Size="Size.Large">
+            Sign in
+        </MudButton>
+    </form>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-6 d-block">
+        Every account uses an authenticator app. After your password you will be asked for a
+        six-digit code.
+    </MudText>
+</MudPaper>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    private string ErrorMessage => Error switch
+    {
+        // Deliberately the same message for a wrong user name and a wrong password. Telling
+        // somebody which one they got right narrows the guess, and there are only five accounts.
+        "lockedout" =>
+            "That account is locked for fifteen minutes after five failed attempts. " +
+            "Wait, or ask the treasurer.",
+        _ => "That user name and password do not match.",
+    };
+}

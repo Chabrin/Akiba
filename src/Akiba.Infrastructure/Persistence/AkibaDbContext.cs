@@ -1,5 +1,7 @@
 using Akiba.Application.Abstractions;
+using Akiba.Infrastructure.Identity;
 using Akiba.Infrastructure.Persistence.Rows;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Akiba.Infrastructure.Persistence;
@@ -20,7 +22,7 @@ namespace Akiba.Infrastructure.Persistence;
 /// any of them would mean holding two numbers with no way to tell which is real.
 /// </para>
 /// </remarks>
-public sealed class AkibaDbContext : DbContext, IUnitOfWork
+public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Guid>, IUnitOfWork
 {
     /// <summary>The schema every Akiba table lives in.</summary>
     public const string Schema = "akiba";
@@ -63,17 +65,24 @@ public sealed class AkibaDbContext : DbContext, IUnitOfWork
 
     internal DbSet<ReceiptAllocationRow> ReceiptAllocations => Set<ReceiptAllocationRow>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder builder)
     {
-        ArgumentNullException.ThrowIfNull(modelBuilder);
+        ArgumentNullException.ThrowIfNull(builder);
 
-        modelBuilder.HasDefaultSchema(Schema);
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AkibaDbContext).Assembly);
+        builder.HasDefaultSchema(Schema);
+
+        // IdentityDbContext maps the user and role tables; this must run before Akiba's own
+        // configurations so they can override anything they need to.
+        base.OnModelCreating(builder);
+
+        builder.ApplyConfigurationsFromAssembly(typeof(AkibaDbContext).Assembly);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
+
+        base.ConfigureConventions(configurationBuilder);
 
         // Belt and braces: even a decimal property somebody forgets to configure gets the
         // right column type rather than silently defaulting to a lower precision.

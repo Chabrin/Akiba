@@ -9,7 +9,9 @@ using Akiba.Infrastructure;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Web;
 using Akiba.Web.Components;
+using Akiba.Infrastructure.Identity;
 using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
@@ -38,15 +40,17 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
+builder.Services.AddCascadingAuthenticationState();
 
-// Identity arrives in milestone 15. Until then the panel runs as a fixed clerk, and only
-// outside Production - every ledger entry records its author, and attributing them all to the
-// same person regardless of who acted would be the opposite of an audit trail.
-if (!builder.Environment.IsProduction())
-{
-    builder.Services.AddAkibaTestUser(
-        new Actor(Guid.Parse("0000A11B-0000-0000-0000-000000000001"), "Oliver Kamau (development)"));
-}
+// Authentication, TOTP and the role policies. Registered unconditionally - there is no
+// environment in which Akiba is open, because the same code runs on the machine holding the
+// society's records.
+builder.Services.AddAkibaIdentity(
+    builder.Environment.IsProduction()
+        ? null
+        : new Actor(Guid.Parse("0000A11B-0000-0000-0000-00000000DE11"), "Development seeder"));
+builder.Services.AddScoped<
+    IUserClaimsPrincipalFactory<AkibaUser>, AkibaClaimsPrincipalFactory>();
 
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AkibaDbContext>("database");
@@ -55,33 +59,41 @@ var app = builder.Build();
 
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Akiba.Startup");
 
-if (!app.Environment.IsProduction())
-{
-    startupLogger.LogWarning(
-        "Running as a fixed development user. Every entry will be attributed to the same " +
-        "person. This is disabled in Production.");
-}
-
 // One database, on one machine, upgraded by one person who is not a DBA. Migrating at
 // startup suits that; it would be the wrong call for several instances racing to migrate the
 // same database, and Akiba is deliberately not that.
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    await DatabaseStartup.MigrateAndSeedAsync(
+    await AkibaStartup.PrepareAsync(
         scope.ServiceProvider.GetRequiredService<AkibaDbContext>(),
         scope.ServiceProvider.GetRequiredService<ChartOfAccountsSeeder>(),
-        startupLogger);
+        scope.ServiceProvider.GetRequiredService<RoleManager<AkibaRole>>(),
+        scope.ServiceProvider.GetRequiredService<UserManager<AkibaUser>>(),
+        startupLogger,
+        builder.Configuration["Akiba:SetupPassword"]);
 }
 
 app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
-app.MapHealthChecks("/health");
+// Anonymous on purpose: the deployment guide tells an administrator to check it, and a probe
+// that needs a password is a probe nobody runs. It says Healthy or Unhealthy and nothing else.
+app.MapHealthChecks("/health").AllowAnonymous();
+
+app.MapAkibaAuthentication();
+
+// The JSON endpoints read the same figures the panel does, so they need the same permission.
+// Left open they would have been a way to read every member's position without signing in.
+var api = app.MapGroup("/api").RequireAuthorization(AkibaPolicies.ViewsLedger);
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapGet("/api/ledger/accounts", async (IAccountRepository accounts) =>
+api.MapGet("/ledger/accounts", async (IAccountRepository accounts) =>
 {
     var chart = await accounts.AllAsync();
 
@@ -95,7 +107,7 @@ app.MapGet("/api/ledger/accounts", async (IAccountRepository accounts) =>
     }));
 });
 
-app.MapGet("/api/ledger/trial-balance", async (IBalanceQueries balances, IClock clock, DateOnly? asAt) =>
+api.MapGet("/ledger/trial-balance", async (IBalanceQueries balances, IClock clock, DateOnly? asAt) =>
 {
     var date = asAt ?? clock.TodayInNairobi;
     var difference = await balances.TrialBalanceDifferenceAsAtAsync(date);
@@ -110,7 +122,7 @@ app.MapGet("/api/ledger/trial-balance", async (IBalanceQueries balances, IClock 
     });
 });
 
-app.MapGet("/api/members", async (IMediator mediator, IClock clock, DateOnly? asAt, bool? includeExited) =>
+api.MapGet("/members", async (IMediator mediator, IClock clock, DateOnly? asAt, bool? includeExited) =>
 {
     var members = await mediator.Send(
         new ListMembersQuery(asAt ?? clock.TodayInNairobi, includeExited ?? false));
@@ -128,7 +140,7 @@ app.MapGet("/api/members", async (IMediator mediator, IClock clock, DateOnly? as
     }));
 });
 
-app.MapGet("/api/members/{id:guid}/statement", async (
+api.MapGet("/members/{id:guid}/statement", async (
     IMediator mediator, IClock clock, Guid id, DateOnly? asAt) =>
 {
     var statement = await mediator.Send(
@@ -169,7 +181,7 @@ app.MapGet("/api/members/{id:guid}/statement", async (
 if (!app.Environment.IsProduction())
 {
     app.MapPost("/api/dev/seed-demo", async (IServiceProvider services) =>
-        Results.Ok(await DemoData.SeedAsync(services)));
+        Results.Ok(await DemoData.SeedAsync(services))).AllowAnonymous();
 }
 
 await app.RunAsync();
