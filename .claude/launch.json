@@ -3,10 +3,19 @@
   "configurations": [
     {
       "name": "akiba-web",
-      "runtimeExecutable": "C:\Program Files\dotnet\dotnet.exe",
-      "runtimeArgs": ["run", "--project", "src/Akiba.Web", "--no-launch-profile", "--urls", "http://localhost:5000"],
-      "port": 5000,
-      "url": "http://localhost:5000"
+      "runtimeExecutable": "C:/Program Files/dotnet/dotnet.exe",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/Akiba.Web",
+        "--no-launch-profile",
+        "--urls",
+        "http://localhost:5280",
+        "-c",
+        "Release"
+      ],
+      "port": 5280,
+      "url": "http://localhost:5280"
     }
   ]
 }

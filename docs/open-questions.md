@@ -82,6 +82,33 @@ shape to be recognisable.
 says nothing about what is in the account, and migration cannot commit an opening-balance
 entry that nets to zero without it.
 
+## Raised by building reconciliation (18 September 2026)
+
+**A. The chart of accounts has one bank account; the society appears to run two.** The brief
+distinguishes the **main** account, on which landlord rent offsets are drawn, from the
+**business** account, on which employee payroll cheques are drawn - and says they reconcile
+against different statements. The seeded chart has a single `1000 Bank`. Reconciliation is
+keyed on an account id rather than on that one code, so splitting the chart later needs no
+code change, but until the committee confirms whether there are two accounts and what they
+are called, both channels land in one account and one statement. **Ask before go-live**: after
+opening balances are posted, splitting them is a journal entry somebody has to justify.
+
+**B. A month can only be closed once a signed-off statement covers its month end.** That is
+how Akiba now enforces the brief's rule, and it has a consequence worth stating plainly:
+because statements arrive **quarterly**, months will close in threes, a quarter at a time,
+rather than one a month.
+
+The alternative - letting a month close before its statement arrives - is worse than it
+sounds. The bank charges that statement reveals are dated inside the closed month, and a
+closed month cannot be posted into, so they would have to be posted in the wrong period or
+not at all. But if the committee wants monthly closes, the answer is to ask the bank for
+monthly statements, not to relax the rule. **Confirm which they want.**
+
+**C. What does the office do with an over-deduction?** The payroll reconciliation reports
+one and says it is the member's - either added to shares or refunded - which mirrors the
+overpayment rule already agreed for receipts. Nobody has confirmed that the same rule applies
+when the error is HR's rather than the member's.
+
 ## Found while building, not yet raised
 
 **The graduated scale is a maximum, not a fixed term.** The application form's duration

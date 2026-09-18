@@ -117,6 +117,47 @@ This is enforced **at the repository level, not in the UI**. A closed period tha
 written to by any code path that forgets to check is not closed. The treasurer closes a
 period; the chairman can reopen one, and the reason is logged.
 
+### What has to be true before a month closes
+
+Closing is checked, never forced. `GetPeriodClosePreflightQuery` answers with the obstacles
+rather than a yes or no, because "no" is not something an official can act on. A month closes
+only when all three hold:
+
+1. the trial balance as at the month end is zero;
+2. every bank reconciliation whose statement period overlaps the month is signed off; and
+3. a signed-off statement actually covers the month end.
+
+The third is the one that surprises people, and it is the important one. Statements arrive
+quarterly, so closing a month before its statement lands would mean the bank charges that
+statement reveals - dated inside a month that is now closed - could never be posted where they
+belong. The practical effect is that months close a quarter at a time. That is the honest
+consequence of quarterly statements, and it is written down in `docs/open-questions.md` rather
+than worked around.
+
+### The reconciliation identity
+
+A reconciliation is proved by
+
+```
+ledger balance + unreconciled statement movement  =  statement closing + unpresented ledger movement
+```
+
+where *unreconciled statement movement* is the signed sum of every statement line a clerk has
+not matched - bank charges, interest, and anything written off as not Akiba's - and
+*unpresented ledger movement* is the signed sum of Akiba's own movements the bank has not yet
+shown.
+
+It is written that way on purpose: **posting a bank charge and matching it does not change the
+answer.** The charge moves out of the unreconciled column and into the ledger balance by the
+same amount. A formula whose difference improved when you posted something would, sooner or
+later, be used to make a difference go away.
+
+Matching itself **suggests but never decides**. Akiba proposes a match only where exactly one
+unmatched movement has the same signed amount within a few days; two candidates produce none,
+because two members paying 5,000 on the same day is ordinary and picking one would be a guess
+wearing a decision's clothes. A clerk confirms every match, and a signed-off reconciliation
+cannot be altered afterwards - the period close rests on it.
+
 ---
 
 ## 3. Money in code

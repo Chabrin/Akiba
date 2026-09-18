@@ -72,6 +72,31 @@ internal sealed class JournalRepository : IJournalRepository
         return [.. rows.Select(LedgerMapper.ToDomain)];
     }
 
+    public async Task<IReadOnlyList<JournalEntry>> ForAccountBetweenAsync(
+        AccountId accountId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default)
+    {
+        if (to < from)
+        {
+            throw new ArgumentException(
+                $"The period end {to:yyyy-MM-dd} is before its start {from:yyyy-MM-dd}.", nameof(to));
+        }
+
+        var rows = await _context.JournalEntries
+            .AsNoTracking()
+            .Where(entry => entry.EntryDate >= from
+                && entry.EntryDate <= to
+                && entry.Lines.Any(line => line.AccountId == accountId.Value))
+            .OrderBy(entry => entry.EntryDate)
+            .ThenBy(entry => entry.PostedAtUtc)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(LedgerMapper.ToDomain)];
+    }
+
     public async Task<IReadOnlyList<JournalEntry>> AsOfAsync(
         DateOnly asAt,
         CancellationToken cancellationToken = default)

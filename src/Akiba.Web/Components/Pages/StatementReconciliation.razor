@@ -1,0 +1,388 @@
+@page "/reconciliation/{Id:guid}"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+
+<PageTitle>Akiba - Reconciliation</PageTitle>
+
+@if (_view is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <PageHeader Title="@_view.Reconciliation.AccountLabel"
+                Description="@Period">
+        <Actions>
+            <MudButton Variant="Variant.Text" Href="/reconciliation"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">
+                All statements
+            </MudButton>
+
+            @if (!_view.Reconciliation.IsSignedOff)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.AutoFixHigh" OnClick="SuggestAsync">
+                    Suggest matches
+                </MudButton>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.CheckCircle"
+                           Disabled="@(!_view.Result.MayClosePeriod)" OnClick="SignOffAsync">
+                    Sign off
+                </MudButton>
+            }
+        </Actions>
+    </PageHeader>
+
+    <MudAlert Severity="@(_view.Result.MayClosePeriod ? Severity.Success : Severity.Warning)"
+              Class="mb-4">
+        @_view.Result.Verdict
+    </MudAlert>
+
+    @if (!_view.Reconciliation.IsSelfConsistent)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">
+            The statement's own figures do not add up: its opening balance plus its lines does
+            not come to its closing balance. The file lost a line, or a column was read wrongly.
+            There is no point matching anything until that is settled.
+        </MudAlert>
+    }
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Per the ledger" Value="_view.Result.LedgerBalance"
+                      Icon="@Icons.Material.Filled.MenuBook"
+                      Caption="Summed from the journal as at the closing date" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Per the bank" Value="_view.Result.StatementClosingBalance"
+                      Icon="@Icons.Material.Filled.AccountBalance" Colour="Color.Info"
+                      Caption="The figure being proved" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Not yet in the ledger" Value="_view.Result.UnreconciledStatementMovement"
+                      Icon="@Icons.Material.Filled.CallReceived" Colour="Color.Warning"
+                      Caption="Charges, interest and anything written off as not ours" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Not yet at the bank" Value="_view.Result.UnpresentedLedgerMovement"
+                      Icon="@Icons.Material.Filled.CallMade" Colour="Color.Secondary"
+                      Caption="Cheques unpresented, deposits in transit" />
+        </MudItem>
+    </MudGrid>
+
+    <MudPaper Elevation="1" Class="pa-2 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="pa-3 pb-1">Statement lines</MudText>
+
+        <MudTable Items="_view.Reconciliation.Lines" Dense="true" Hover="true" Striped="true"
+                  Elevation="0" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh Style="text-align: right">#</MudTh>
+                <MudTh>Value date</MudTh>
+                <MudTh>As the bank printed it</MudTh>
+                <MudTh Style="text-align: right">Amount</MudTh>
+                <MudTh>Matched to</MudTh>
+                <MudTh Class="akiba-no-print"></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="#" Class="akiba-money-cell">@context.LineNumber</MudTd>
+                <MudTd DataLabel="Value date">
+                    @context.ValueDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="Description">
+                    @context.Description
+                    @if (!string.IsNullOrWhiteSpace(context.BankReference))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            @context.BankReference
+                        </MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Amount" Class="akiba-money-cell">
+                    <MoneyText Amount="context.SignedAmount" />
+                </MudTd>
+                <MudTd DataLabel="Matched to">
+                    @switch (context.State)
+                    {
+                        case MatchState.Matched:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Matched</MudChip>
+                            <MudText Typo="Typo.caption" Class="d-block">
+                                @context.MatchedToDescription
+                            </MudText>
+                            break;
+
+                        case MatchState.Suggested:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">Suggested</MudChip>
+                            <MudText Typo="Typo.caption" Class="d-block">
+                                @context.MatchedToDescription
+                            </MudText>
+                            break;
+
+                        case MatchState.NotOurs:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Not ours</MudChip>
+                            <MudText Typo="Typo.caption" Class="d-block mud-text-secondary">
+                                @context.NotOursReason
+                            </MudText>
+                            break;
+
+                        default:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Unmatched</MudChip>
+                            break;
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    @if (!_view.Reconciliation.IsSignedOff)
+                    {
+                        @if (context.State == MatchState.Suggested)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                       OnClick="@(() => ConfirmAsync(context.LineNumber, context.MatchedToId!.Value))">
+                                Confirm
+                            </MudButton>
+                        }
+                        else if (context.State == MatchState.Unmatched)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                       OnClick="@(() => BeginMatching(context.LineNumber))">
+                                Match
+                            </MudButton>
+                        }
+
+                        @if (context.IsResolved || context.State == MatchState.Suggested)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                       OnClick="@(() => ClearAsync(context.LineNumber))">
+                                Clear
+                            </MudButton>
+                        }
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            Akiba suggests a match only where exactly one movement of the same amount falls
+            within a few days. Two candidates produce none - two members paying 5,000 on the
+            same day is ordinary, and picking one would be a guess wearing a decision's clothes.
+        </MudText>
+    </MudPaper>
+
+    @if (_matchingLine is { } lineNumber)
+    {
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-1">What is line @lineNumber?</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                @_view.Reconciliation.Line(lineNumber).Description
+                &mdash;
+                <MoneyText Amount="_view.Reconciliation.Line(lineNumber).SignedAmount" />
+            </MudText>
+
+            @if (_view.Candidates.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3">
+                    Every movement Akiba has recorded on this account is already matched. If this
+                    line is something the bank did that Akiba never recorded - a charge, say -
+                    post it first, then match it. If it is not Akiba's money at all, write it off.
+                </MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_view.Candidates" Dense="true" Hover="true" Elevation="0"
+                          Breakpoint="Breakpoint.Sm" Class="mb-3">
+                    <HeaderContent>
+                        <MudTh>Entry date</MudTh>
+                        <MudTh>Narration</MudTh>
+                        <MudTh Style="text-align: right">Amount</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Entry date">
+                            @context.EntryDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                        </MudTd>
+                        <MudTd DataLabel="Narration">@context.Narration</MudTd>
+                        <MudTd DataLabel="Amount" Class="akiba-money-cell">
+                            <MoneyText Amount="context.SignedAmount" />
+                        </MudTd>
+                        <MudTd>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary"
+                                       OnClick="@(() => ConfirmAsync(lineNumber, context.JournalEntryId.Value))">
+                                This one
+                            </MudButton>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+
+            @if (_view.Reconciliation.Line(lineNumber).Direction == StatementDirection.Debit)
+            {
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-1">
+                    Or the bank charged it and Akiba never recorded it
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    This posts an ordinary journal entry - debit Bank Charges, credit Bank -
+                    dated the day the bank took it, in your name, and then matches this line to
+                    it. Bank charges matter beyond bookkeeping: they are deducted when working
+                    out the interest the dividend is calculated from.
+                </MudText>
+
+                <MudTextField @bind-Value="_chargeNarration" Label="What it was for"
+                              Variant="Variant.Outlined" Class="mb-2" />
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mr-2"
+                           Disabled="@string.IsNullOrWhiteSpace(_chargeNarration)"
+                           OnClick="@(() => PostBankChargeAsync(lineNumber))">
+                    Post it as a bank charge
+                </MudButton>
+            }
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Or it is not Akiba's money</MudText>
+            <MudTextField @bind-Value="_notOursReason" Label="Why" Variant="Variant.Outlined"
+                          Lines="2" Class="mb-2"
+                          HelperText="Recorded permanently. It is the only record of a decision that leaves money on the bank's side for good." />
+
+            <MudButton Variant="Variant.Outlined" Class="mr-2"
+                       Disabled="@string.IsNullOrWhiteSpace(_notOursReason)"
+                       OnClick="@(() => NotOursAsync(lineNumber))">
+                Write it off
+            </MudButton>
+
+            <MudButton Variant="Variant.Text" OnClick="@(() => _matchingLine = null)">Cancel</MudButton>
+        </MudPaper>
+    }
+
+    <MudPaper Elevation="1" Class="pa-2">
+        <MudText Typo="Typo.subtitle1" Class="pa-3 pb-1">
+            Akiba movements with no statement line against them
+        </MudText>
+
+        @if (_view.Result.UnmatchedMovements.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary pa-3">
+                None. Everything Akiba recorded on this account over the period appears on the
+                statement.
+            </MudText>
+        }
+        else
+        {
+            <MudTable Items="_view.Result.UnmatchedMovements" Dense="true" Striped="true"
+                      Elevation="0" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Entry date</MudTh>
+                    <MudTh>Narration</MudTh>
+                    <MudTh Style="text-align: right">Amount</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Entry date">
+                        @context.EntryDate.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                    </MudTd>
+                    <MudTd DataLabel="Narration">@context.Narration</MudTd>
+                    <MudTd DataLabel="Amount" Class="akiba-money-cell">
+                        <MoneyText Amount="context.SignedAmount" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+                A cheque written but not presented, or a deposit still in transit. These are
+                reconciling items rather than errors - they do not make the statement disagree
+                with the ledger.
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private BankReconciliationView? _view;
+    private int? _matchingLine;
+    private string _notOursReason = string.Empty;
+    private string _chargeNarration = string.Empty;
+    private string? _error;
+
+    private string Period => _view is null
+        ? string.Empty
+        : $"{_view.Reconciliation.From.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)} " +
+          $"to {_view.Reconciliation.To.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}";
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private void BeginMatching(int lineNumber)
+    {
+        _matchingLine = lineNumber;
+        _notOursReason = string.Empty;
+        _chargeNarration = _view?.Reconciliation.Line(lineNumber).Description ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Posts a charge the statement revealed, then matches this line to it.
+    /// </summary>
+    /// <remarks>
+    /// Two separate actions, deliberately in that order. The entry is posted first and stands
+    /// on its own, with a date and an author; matching it is then an ordinary match like any
+    /// other. Nothing here is a side effect of opening a file.
+    /// </remarks>
+    private Task PostBankChargeAsync(int lineNumber) =>
+        RunAsync(async () =>
+        {
+            var line = _view!.Reconciliation.Line(lineNumber);
+
+            var entryId = await Mediator.Send(new RecordBankChargeCommand(
+                line.Amount.Amount,
+                line.ValueDate,
+                _chargeNarration,
+                $"{_view.Reconciliation.AccountLabel} statement to {_view.Reconciliation.To:yyyy-MM-dd}"));
+
+            await Mediator.Send(new ConfirmStatementMatchCommand(
+                new BankStatementId(Id), lineNumber, entryId));
+        });
+
+    private Task SuggestAsync() =>
+        RunAsync(() => Mediator.Send(new SuggestReconciliationMatchesCommand(new BankStatementId(Id))));
+
+    private Task ConfirmAsync(int lineNumber, Guid journalEntryId) =>
+        RunAsync(() => Mediator.Send(new ConfirmStatementMatchCommand(
+            new BankStatementId(Id), lineNumber, new JournalEntryId(journalEntryId))));
+
+    private Task NotOursAsync(int lineNumber) =>
+        RunAsync(() => Mediator.Send(new MarkStatementLineNotOursCommand(
+            new BankStatementId(Id), lineNumber, _notOursReason)));
+
+    private Task ClearAsync(int lineNumber) =>
+        RunAsync(() => Mediator.Send(new ClearStatementLineCommand(
+            new BankStatementId(Id), lineNumber)));
+
+    private Task SignOffAsync() =>
+        RunAsync(() => Mediator.Send(new SignOffReconciliationCommand(new BankStatementId(Id))));
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _error = null;
+
+        try
+        {
+            await action();
+            _matchingLine = null;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _view = await Mediator.Send(new GetBankReconciliationQuery(new BankStatementId(Id)));
+}

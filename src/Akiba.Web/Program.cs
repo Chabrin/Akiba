@@ -2,6 +2,8 @@ using System.Globalization;
 using Akiba.Application;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Members;
+using Akiba.Application.Ledger;
+using Akiba.Application.Reconciliation;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Domain.Financial;
@@ -23,6 +25,19 @@ using MudBlazor.Services;
 //
 // Blazor Server with MudBlazor, ASP.NET Core Identity with mandatory TOTP, Serilog and
 // Hangfire arrive in their own milestones. Nothing is added ahead of its milestone.
+
+// Pin the culture.
+//
+// Left alone, .NET takes the culture from the machine's Windows locale, and the panel's date
+// and number fields then behave differently on different boxes - a date an official typed
+// happily on one machine is rejected on another, because one abbreviates September as "Sep"
+// and the other as "Sept". Akiba serves one office in Nairobi, so the culture is a property of
+// the software rather than of whatever the machine was set up as.
+//
+// Money is unaffected either way: Money.ToString formats invariantly by design.
+var akibaCulture = new CultureInfo("en-KE");
+CultureInfo.DefaultThreadCurrentCulture = akibaCulture;
+CultureInfo.DefaultThreadCurrentUICulture = akibaCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -171,6 +186,46 @@ api.MapGet("/members/{id:guid}/statement", async (
             Outstanding = loan.OutstandingBalance.ToString(),
             MonthlyInstalment = loan.MonthlyInstalment.ToString(),
             FirstDueDate = loan.FirstDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        }),
+    });
+});
+
+api.MapGet("/reconciliations", async (IMediator mediator) =>
+{
+    var summaries = await mediator.Send(new ListBankReconciliationsQuery());
+
+    return Results.Ok(summaries.Select(summary => new
+    {
+        Id = summary.ReconciliationId.Value,
+        summary.AccountLabel,
+        From = summary.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        To = summary.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        summary.LineCount,
+        summary.UnresolvedLineCount,
+        Difference = summary.Difference.ToString(),
+        summary.IsSignedOff,
+    }));
+});
+
+// What is stopping a month being closed, which is the question an official actually has. It
+// answers with the obstacles rather than a yes or no, because "no" is not actionable.
+api.MapGet("/ledger/period-close/{year:int}/{month:int}", async (
+    IMediator mediator, int year, int month) =>
+{
+    var preflight = await mediator.Send(new GetPeriodClosePreflightQuery(year, month));
+
+    return Results.Ok(new
+    {
+        preflight.Year,
+        preflight.Month,
+        MonthEnd = preflight.MonthEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        preflight.AlreadyClosed,
+        preflight.MayClose,
+        TrialBalanceDifference = preflight.TrialBalanceDifference.ToString(),
+        Obstacles = preflight.Obstacles.Select(obstacle => new
+        {
+            obstacle.Problem,
+            obstacle.Remedy,
         }),
     });
 });

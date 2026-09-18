@@ -3,6 +3,7 @@ using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Infrastructure.Persistence.Repositories;
+using Akiba.Infrastructure.Reconciliation;
 using Akiba.Infrastructure.Reporting;
 using Akiba.Infrastructure.Identity;
 using Akiba.Infrastructure.Time;
@@ -45,7 +46,10 @@ public static class DependencyInjection
         services.AddScoped<ILoanApplicationRepository, LoanApplicationRepository>();
         services.AddScoped<ILoanRepository, LoanRepository>();
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
+        services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
         services.AddScoped<IAkibaAccounts, AkibaAccounts>();
+
+        services.AddSingleton<IBankStatementReader, BankStatementReader>();
 
         services.AddScoped<ChartOfAccountsSeeder>();
 

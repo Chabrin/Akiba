@@ -1,0 +1,154 @@
+@page "/ledger/period-close"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Closing a month</PageTitle>
+
+<PageHeader Title="Closing a month"
+            Description="Once a month is closed nothing may post into it, which is what lets an official trust a trial balance they signed. It is checked first, not forced." />
+
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="4" md="3">
+            <MudSelect T="int" @bind-Value="_year" Label="Year" Dense="true">
+                @foreach (var year in Years)
+                {
+                    <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" sm="4" md="3">
+            <MudSelect T="int" @bind-Value="_month" Label="Month" Dense="true">
+                @for (var month = 1; month <= 12; month++)
+                {
+                    var value = month;
+                    <MudSelectItem T="int" Value="@value">
+                        @CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(value)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" sm="4" md="3" Class="d-flex align-end">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CheckAsync">
+                Check
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_preflight is not null)
+{
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-2">
+            @_preflight.MonthEnd.ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+        </MudText>
+
+        @if (_preflight.AlreadyClosed)
+        {
+            <MudAlert Severity="Severity.Info">
+                This month is already closed. Nothing can post into it. Only the chairman may
+                reopen it, and the reason is recorded permanently.
+            </MudAlert>
+        }
+        else if (_preflight.MayClose)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                Everything is in order. The trial balance is zero and every statement covering
+                this month has been signed off.
+            </MudAlert>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Lock" Disabled="_busy" OnClick="CloseAsync">
+                Close @_preflight.MonthEnd.ToString("MMMM yyyy", CultureInfo.InvariantCulture)
+            </MudButton>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                This month cannot be closed yet. Everything outstanding is listed below.
+            </MudAlert>
+
+            <MudList T="string">
+                @foreach (var obstacle in _preflight.Obstacles)
+                {
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.ErrorOutline">
+                        <MudText Typo="Typo.body1">@obstacle.Problem</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@obstacle.Remedy</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/reconciliation"
+                       StartIcon="@Icons.Material.Filled.AccountBalance" Class="mt-3">
+                Go to bank reconciliation
+            </MudButton>
+        }
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Trial balance as at @_preflight.MonthEnd.ToString("d MMMM yyyy", CultureInfo.InvariantCulture):
+            <MoneyText Amount="_preflight.TrialBalanceDifference" />.
+            Every journal entry sums to zero by construction, so this cannot be anything but zero
+            unless something wrote to the database without going through Akiba.
+        </MudText>
+    </MudPaper>
+}
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private int _year = DateTime.Today.Year;
+    private int _month = DateTime.Today.Month;
+    private PeriodClosePreflight? _preflight;
+    private bool _busy;
+    private string? _error;
+
+    private static IEnumerable<int> Years =>
+        Enumerable.Range(DateTime.Today.Year - 3, 5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Default to the month just gone: the one an official is likely to be closing.
+        var lastMonth = new DateOnly(Clock.TodayInNairobi.Year, Clock.TodayInNairobi.Month, 1)
+            .AddMonths(-1);
+
+        _year = lastMonth.Year;
+        _month = lastMonth.Month;
+
+        await CheckAsync();
+    }
+
+    private async Task CheckAsync()
+    {
+        _error = null;
+        _preflight = await Mediator.Send(new GetPeriodClosePreflightQuery(_year, _month));
+    }
+
+    private async Task CloseAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _preflight = await Mediator.Send(new ClosePeriodCommand(_year, _month));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+            await CheckAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

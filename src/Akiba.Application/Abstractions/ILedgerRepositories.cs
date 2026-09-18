@@ -75,6 +75,18 @@ public interface IJournalRepository
     Task<IReadOnlyList<JournalEntry>> ForAccountAsOfAsync(
         AccountId accountId, DateOnly asAt, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Every entry touching an account within a date range, for a reconciliation.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="ForAccountAsOfAsync"/>, which returns everything up to a date.
+    /// A bank reconciliation wants the quarter's movements, not the account's whole history -
+    /// and the bank account is the busiest account Akiba has.
+    /// </remarks>
+    Task<IReadOnlyList<JournalEntry>> ForAccountBetweenAsync(
+        AccountId accountId, DateOnly from, DateOnly to,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Every entry up to and including a date, for a trial balance.</summary>
     Task<IReadOnlyList<JournalEntry>> AsOfAsync(
         DateOnly asAt, CancellationToken cancellationToken = default);

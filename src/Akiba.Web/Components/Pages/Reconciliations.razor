@@ -1,0 +1,228 @@
+@page "/reconciliation"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject NavigationManager Navigation
+
+<PageTitle>Akiba - Bank reconciliation</PageTitle>
+
+<PageHeader Title="Bank reconciliation"
+            Description="Statements arrive quarterly, so this is where the office finds out about everything it never saw. A month cannot be closed until its statement reconciles.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.UploadFile"
+                   OnClick="@(() => _importing = true)">
+            Import a statement
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@if (_importing)
+{
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" Class="mb-1">Import a statement</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            A CSV or Excel file as the bank exported it. Nothing is posted by importing: lines
+            are read, and anything the bank charged that Akiba never recorded is posted by hand
+            afterwards, so it has a date and an author like every other entry.
+        </MudText>
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Statement file</MudText>
+                <InputFile OnChange="OnFileChanged" accept=".csv,.xlsx,.xls" class="d-block mt-1" />
+                @if (_file is not null)
+                {
+                    <MudText Typo="Typo.caption" Class="d-block mt-1">@_file.Name</MudText>
+                }
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Statement from" @bind-Date="_from"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker Label="Statement to" @bind-Date="_to"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" />
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_opening" Label="Opening balance"
+                                 HideSpinButtons="true" Format="N2" Culture="@CultureInfo.InvariantCulture" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="decimal" @bind-Value="_closing" Label="Closing balance"
+                                 HideSpinButtons="true" Format="N2" Culture="@CultureInfo.InvariantCulture" />
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           Disabled="@(_file is null || _busy)" OnClick="ImportAsync">
+                    Import
+                </MudButton>
+                <MudButton Variant="Variant.Text" OnClick="@(() => _importing = false)">
+                    Cancel
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_busy)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
+        }
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+        }
+    </MudPaper>
+}
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_summaries is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_summaries.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            No statement has been imported yet. Until one is, no month can be closed.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_summaries" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm"
+                  OnRowClick="@((TableRowClickEventArgs<ReconciliationSummary> row) => Open(row.Item))"
+                  RowStyle="cursor: pointer">
+            <HeaderContent>
+                <MudTh>Account</MudTh>
+                <MudTh>Period</MudTh>
+                <MudTh Style="text-align: right">Lines</MudTh>
+                <MudTh Style="text-align: right">Unresolved</MudTh>
+                <MudTh Style="text-align: right">Difference</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Account">@context.AccountLabel</MudTd>
+                <MudTd DataLabel="Period">
+                    @context.From.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                    to
+                    @context.To.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="Lines" Class="akiba-money-cell">@context.LineCount</MudTd>
+                <MudTd DataLabel="Unresolved" Class="akiba-money-cell">
+                    @if (context.UnresolvedLineCount == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">None</MudText>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                            @context.UnresolvedLineCount
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Difference" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Difference" />
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsSignedOff)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Signed off</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Draft</MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private IReadOnlyList<ReconciliationSummary>? _summaries;
+
+    private bool _importing;
+    private bool _busy;
+    private string? _error;
+
+    private IBrowserFile? _file;
+    private DateTime? _from = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-3);
+    private DateTime? _to = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddDays(-1);
+    private decimal _opening;
+    private decimal _closing;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private void OnFileChanged(InputFileChangeEventArgs args)
+    {
+        _file = args.FileCount > 0 ? args.File : null;
+        _error = null;
+    }
+
+    private void Open(ReconciliationSummary? summary)
+    {
+        if (summary is not null)
+        {
+            Navigation.NavigateTo($"/reconciliation/{summary.ReconciliationId.Value}");
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_file is null)
+        {
+            _error = "Choose the statement file first.";
+
+            return;
+        }
+
+        if (_from is null || _to is null)
+        {
+            // Said out loud rather than quietly doing nothing. A date the picker could not read
+            // leaves its field empty, and a button that silently does nothing is the least
+            // helpful thing a screen can do.
+            _error = "Both statement dates are needed. Pick them from the calendar if the " +
+                     "typed date was not understood.";
+
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            // 8 MB. A quarterly statement for four officials is a few hundred rows; anything
+            // materially larger is not a statement.
+            await using var stream = _file.OpenReadStream(8 * 1024 * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            var imported = await Mediator.Send(new ImportBankStatementCommand(
+                _file.Name,
+                buffer.ToArray(),
+                DateOnly.FromDateTime(_from.Value),
+                DateOnly.FromDateTime(_to.Value),
+                _opening,
+                _closing));
+
+            Navigation.NavigateTo($"/reconciliation/{imported.ReconciliationId.Value}");
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LoadAsync() =>
+        _summaries = await Mediator.Send(new ListBankReconciliationsQuery());
+}

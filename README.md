@@ -27,7 +27,7 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 7 | Guarantors, coverage, liability, exposure | ✅ Done |
 | 8 | Applications, lock period, approvals, disbursement | ✅ Done |
 | 9 | Receipts, three channels, allocation, clearance | ✅ Done |
-| 10 | Payroll and bank reconciliation | ⬜ Not started |
+| 10 | Payroll and bank reconciliation | ✅ Done — import, match, sign off, and the period-close gate |
 | 11 | Restructuring | 🟡 Domain done; no screen yet |
 | 12 | Arrears and ageing | ✅ Done |
 | 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
@@ -119,6 +119,8 @@ who do not exist.
 | `/ledger/trial-balance?asAt=` | The trial balance, which must be zero |
 | `/members?asAt=yyyy-MM-dd` | Members with their shareholding as at a date |
 | `/members/{id}/statement?asAt=` | A member's statement as at any date |
+| `/api/reconciliations` | Every imported statement and what is outstanding on it |
+| `/api/ledger/period-close/{year}/{month}` | Whether a month may be closed, and what is stopping it |
 
 These are a read-only window on the same queries the Blazor panel will use.
 
@@ -145,7 +147,7 @@ src/
 tests/
   Akiba.Domain.Tests           pure unit tests, no database
   Akiba.Application.Tests      handler tests with in-memory ports
-  Akiba.Infrastructure.Tests   integration tests on real PostgreSQL (Testcontainers)
+  Akiba.Infrastructure.Tests   integration tests on real PostgreSQL
   Akiba.ArchitectureTests      dependency rules, enforced in CI
 ```
 
@@ -187,6 +189,9 @@ This system holds member financial records and the group requires confidentialit
   The trail is immutable and exportable.
 - **Financial records are never hard-deleted.** Ledger tables carry no soft-delete flag.
   Corrections are reversing entries.
+- **A month is not closed until it reconciles.** The close is refused while the trial balance
+  is non-zero, while any statement covering the month is unsigned, or while no signed-off
+  statement covers the month end at all. There is no override.
 - **Break-glass credentials are held by the treasurer and the chairman**, not by ICT. The
   procedure is documented in milestone 18.
 - `.env`, backups, scanned forms and generated reports are gitignored. **Never commit
