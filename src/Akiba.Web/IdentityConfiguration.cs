@@ -28,10 +28,26 @@ public static class IdentityConfiguration
     /// Used when nobody is signed in. <b>Must be null in Production.</b> It exists so the
     /// development seeder, which runs with no request behind it, can post entries.
     /// </param>
+    /// <param name="requireHttps">
+    /// Whether the session cookie may only travel over HTTPS. True unless an administrator has
+    /// deliberately turned it off - see <c>Akiba:RequireHttps</c> in docs/deployment.md.
+    /// </param>
     public static IServiceCollection AddAkibaIdentity(
-        this IServiceCollection services, Akiba.Domain.Common.Actor? developmentFallbackActor = null)
+        this IServiceCollection services,
+        Akiba.Domain.Common.Actor? developmentFallbackActor = null,
+        bool requireHttps = true)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // PBKDF2-HMAC-SHA256, which is what Identity has used since v3. The iteration count is
+        // raised well above the framework default because the whole cost is paid five times a
+        // day by five people signing in, and the whole benefit is paid to an attacker who has
+        // walked off with the database. OWASP's current floor for this algorithm is 600,000.
+        services.Configure<PasswordHasherOptions>(options =>
+        {
+            options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
+            options.IterationCount = 600_000;
+        });
 
         services.AddIdentity<AkibaUser, AkibaRole>(options =>
             {
@@ -72,6 +88,14 @@ public static class IdentityConfiguration
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.Name = "akiba.session";
+
+            // Over plain HTTP the session cookie travels in clear text across the office
+            // network, and so does the password that produced it. Default is Always; an
+            // administrator who genuinely cannot serve HTTPS turns it off knowingly, and
+            // startup says so in the log every time.
+            options.Cookie.SecurePolicy = requireHttps
+                ? CookieSecurePolicy.Always
+                : CookieSecurePolicy.SameAsRequest;
         });
 
         // Policies are named for what somebody is doing, not for who they are, so a page stays
@@ -102,12 +126,25 @@ public static class IdentityConfiguration
                 .RequireTwoFactor()
                 .Build());
 
+        // The antiforgery cookie gets the same treatment as the session cookie: it is half of
+        // the pair that proves a form post came from Akiba's own page.
+        services.AddAntiforgery(options =>
+        {
+            options.Cookie.Name = "akiba.antiforgery";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Strict;
+            options.Cookie.SecurePolicy = requireHttps
+                ? CookieSecurePolicy.Always
+                : CookieSecurePolicy.SameAsRequest;
+        });
+
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser>(provider => new HttpContextCurrentUser(
             provider.GetRequiredService<IHttpContextAccessor>(), developmentFallbackActor));
 
         return services;
     }
+
 }
 
 internal static class AuthorizationPolicyBuilderExtensions

@@ -39,6 +39,19 @@
                        Color="Color.Inherit"
                        aria-label="Toggle light and dark"
                        OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+
+        @* Signing out is a form post, not a link: it has to clear the cookie, and it carries an
+           antiforgery token so that no other page can sign an official out from under them.
+
+           The panel had no way to end a session at all until now, which on a shared office
+           machine meant the only way out was to close the browser and hope. *@
+        <form method="post" action="/auth/sign-out" class="d-flex">
+            <AntiforgeryToken />
+            <MudIconButton ButtonType="ButtonType.Submit"
+                           Icon="@Icons.Material.Filled.Logout"
+                           Color="Color.Inherit"
+                           aria-label="Sign out" />
+        </form>
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Class="akiba-no-print">

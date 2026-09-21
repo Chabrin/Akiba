@@ -9,7 +9,7 @@
 param(
     [string]$Database = 'akiba_demo',
     [string]$PgUser = 'postgres',
-    [string]$PgPassword = '123',
+    [securestring]$PgPassword,
     [string]$PgHost = 'localhost',
     [int]$PgPort = 5432,
     [int]$Port = 5280
@@ -17,19 +17,28 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Asked for rather than defaulted. A password written into a file in source control is a
+# password that eventually gets used somewhere it should not be - and a default that happens to
+# work on one machine is the reason nobody notices.
+if (-not $PgPassword) {
+    $PgPassword = Read-Host -AsSecureString "PostgreSQL password for '$PgUser'"
+}
+
+$PgPasswordPlain = [System.Net.NetworkCredential]::new('', $PgPassword).Password
+
 if ($Database -eq 'akiba') {
     throw "Refusing to seed a database called 'akiba' - that is the production name."
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$env:PGPASSWORD = $PgPassword
+$env:PGPASSWORD = $PgPasswordPlain
 $psql = Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' | Select-Object -Last 1
 
 Write-Host "Recreating $Database..." -ForegroundColor Cyan
 & $psql.FullName -U $PgUser -h $PgHost -p $PgPort -c "DROP DATABASE IF EXISTS $Database;" | Out-Null
 & $psql.FullName -U $PgUser -h $PgHost -p $PgPort -c "CREATE DATABASE $Database;" | Out-Null
 
-$env:ConnectionStrings__Akiba = "Host=$PgHost;Port=$PgPort;Database=$Database;Username=$PgUser;Password=$PgPassword"
+$env:ConnectionStrings__Akiba = "Host=$PgHost;Port=$PgPort;Database=$Database;Username=$PgUser;Password=$PgPasswordPlain"
 $env:ASPNETCORE_ENVIRONMENT = 'Development'
 
 Write-Host "Starting Akiba on port $Port..." -ForegroundColor Cyan
@@ -57,9 +66,14 @@ try {
 
     Write-Host ""
     Write-Host "Done. Run Akiba against it with:" -ForegroundColor Green
-    Write-Host "  `$env:ConnectionStrings__Akiba = '$($env:ConnectionStrings__Akiba)'"
+    Write-Host "  `$env:ConnectionStrings__Akiba = 'Host=$PgHost;Port=$PgPort;Database=$Database;Username=$PgUser;Password=<the password you just typed>'"
+    Write-Host "  `$env:Akiba__RequireHttps = 'false'   # only for a local HTTP demo"
     Write-Host "  dotnet run --project src/Akiba.Web"
 }
 finally {
     if (-not $app.HasExited) { $app.Kill() }
+
+    # Do not leave it sitting in the shell for whatever runs next.
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    $PgPasswordPlain = $null
 }

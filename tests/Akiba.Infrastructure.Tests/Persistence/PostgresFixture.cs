@@ -76,10 +76,21 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// A context configured the way the application configures it.
+    /// </summary>
+    /// <remarks>
+    /// The migrations history table has to match <c>AddAkibaInfrastructure</c>. It did not, and
+    /// the consequence was not a failing test but a working one: these tests recorded their
+    /// migrations in EF Core's default history table while the application looks in
+    /// <c>akiba.__migrations</c>. A database the tests had touched then looked un-migrated to
+    /// the application, which tried to create every table again and failed on the first one.
+    /// </remarks>
     public AkibaDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AkibaDbContext>()
-            .UseNpgsql(ConnectionString)
+            .UseNpgsql(ConnectionString, npgsql =>
+                npgsql.MigrationsHistoryTable("__migrations", AkibaDbContext.Schema))
             .Options;
 
         return new AkibaDbContext(options);

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    ================================================================
+    Akiba.Web.Tests
+
+    The security properties of the running application: the headers
+    every response carries, which endpoints answer without a session,
+    and whether a form post with no antiforgery token is refused.
+
+    These exercise the real pipeline through WebApplicationFactory,
+    against the real PostgreSQL the other integration tests use -
+    because a middleware ordering mistake is invisible to a unit test
+    and obvious to a request.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>Akiba.Web.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Akiba.Web\Akiba.Web.csproj" />
+  </ItemGroup>
+
+</Project>

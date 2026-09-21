@@ -21,6 +21,10 @@
     }
 
     <form method="post" action="/auth/code">
+        @* Proves this post came from Akiba's own page. Without it another site could
+           post here and sign an official into an account somebody else controls. *@
+        <AntiforgeryToken />
+
         <MudTextField T="string"
                       Label="Code"
                       Variant="Variant.Outlined"

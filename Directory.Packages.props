@@ -58,10 +58,12 @@
       both differ from PostgreSQL exactly where a ledger is sensitive.
     -->
     <PackageVersion Include="Npgsql" Version="10.0.3" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageVersion Include="xunit" Version="2.9.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <!-- Hosts the real application in-process so the security tests exercise the real pipeline. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <!--
       FluentAssertions 8.x moved to a paid commercial licence (Xceed).
       7.x is the last Apache-2.0 release. Do NOT upgrade past 7 without a decision.

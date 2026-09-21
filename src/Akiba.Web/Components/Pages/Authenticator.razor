@@ -60,6 +60,10 @@
         </MudText>
 
         <form method="post" action="/auth/authenticator">
+            @* Proves this post came from Akiba's own page. Without it another site could
+               post here and sign an official into an account somebody else controls. *@
+            <AntiforgeryToken />
+
             <MudTextField T="string"
                           Label="Code from the app"
                           Variant="Variant.Outlined"

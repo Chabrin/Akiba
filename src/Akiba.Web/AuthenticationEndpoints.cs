@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Akiba.Infrastructure.Identity;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
 
 namespace Akiba.Web;
@@ -44,15 +45,34 @@ public static class AuthenticationEndpoints
         // fallback authorization policy would otherwise redirect the sign-in POST to the
         // sign-in page, which is a loop nobody escapes. /auth/authenticator overrides this
         // below, because enrolling does require a session.
-        var group = endpoints.MapGroup("/auth").DisableAntiforgery().AllowAnonymous();
+        //
+        // Rate limited by machine. Account lockout already stops five guesses at one account;
+        // this is what stops one machine working through every account, and what stops somebody
+        // locking all five officials out of their own system in a few seconds.
+        //
+        // The antiforgery middleware is turned off for the group and the check is made by hand
+        // in each handler instead. These read the form themselves rather than model-binding it,
+        // and the middleware only validates endpoints whose parameters it recognises as form
+        // data - so relying on it here would mean relying on a check that silently does not run.
+        var group = endpoints.MapGroup("/auth")
+            .AllowAnonymous()
+            .DisableAntiforgery()
+            .RequireRateLimiting(RateLimiting.Authentication);
 
         group.MapPost("/password", async (
             HttpContext context,
             SignInManager<AkibaUser> signInManager,
             UserManager<AkibaUser> userManager,
+            IAntiforgery antiforgery,
             ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("Akiba.SignIn");
+
+            if (!await IsRequestGenuineAsync(context, antiforgery, logger))
+            {
+                return Results.Redirect("/sign-in?error=expired");
+            }
+
             var form = await context.Request.ReadFormAsync();
             var userName = form["userName"].ToString().Trim();
             var password = form["password"].ToString();
@@ -105,8 +125,16 @@ public static class AuthenticationEndpoints
         group.MapPost("/code", async (
             HttpContext context,
             SignInManager<AkibaUser> signInManager,
+            IAntiforgery antiforgery,
             ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("Akiba.SignIn");
+
+            if (!await IsRequestGenuineAsync(context, antiforgery, logger))
+            {
+                return Results.Redirect("/sign-in?error=expired");
+            }
+
             var form = await context.Request.ReadFormAsync();
             var code = form["code"].ToString().Replace(" ", string.Empty, StringComparison.Ordinal);
 
@@ -118,25 +146,46 @@ public static class AuthenticationEndpoints
                 return Results.Redirect("/");
             }
 
-            loggerFactory.CreateLogger("Akiba.SignIn")
-                .LogWarning("Failed two-factor code from {Ip}", context.Connection.RemoteIpAddress);
+            logger.LogWarning(
+                "Failed two-factor code from {Ip}", context.Connection.RemoteIpAddress);
 
             return Results.Redirect(result.IsLockedOut
                 ? "/sign-in?error=lockedout"
                 : "/sign-in/code?error=invalid");
         });
 
-        group.MapPost("/sign-out", async (SignInManager<AkibaUser> signInManager) =>
+        group.MapPost("/sign-out", async (
+            HttpContext context,
+            SignInManager<AkibaUser> signInManager,
+            IAntiforgery antiforgery,
+            ILoggerFactory loggerFactory) =>
         {
+            // Forcing somebody to sign out is only an annoyance, but it is an annoyance any
+            // other page on the network can cause, and the check costs nothing.
+            if (!await IsRequestGenuineAsync(
+                    context, antiforgery, loggerFactory.CreateLogger("Akiba.SignIn")))
+            {
+                return Results.Redirect("/");
+            }
+
             await signInManager.SignOutAsync();
-            return Results.Redirect("/sign-in");
+
+            return Results.Redirect("/sign-in?error=signedout");
         });
 
         group.MapPost("/authenticator", async (
             HttpContext context,
             UserManager<AkibaUser> userManager,
-            SignInManager<AkibaUser> signInManager) =>
+            SignInManager<AkibaUser> signInManager,
+            IAntiforgery antiforgery,
+            ILoggerFactory loggerFactory) =>
         {
+            if (!await IsRequestGenuineAsync(
+                    context, antiforgery, loggerFactory.CreateLogger("Akiba.SignIn")))
+            {
+                return Results.Redirect("/security/authenticator?error=expired");
+            }
+
             var form = await context.Request.ReadFormAsync();
             var code = form["code"].ToString().Replace(" ", string.Empty, StringComparison.Ordinal);
 
@@ -162,6 +211,43 @@ public static class AuthenticationEndpoints
 
             return Results.Redirect("/?enrolled=true");
         }).RequireAuthorization(AkibaPolicies.EnrollingTwoFactor);
+    }
+
+    /// <summary>
+    /// Whether this post came from Akiba's own form rather than from somewhere else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without it, a page anywhere else can post to <c>/auth/password</c> and sign an official
+    /// into an account the attacker controls - after which everything that official records
+    /// that afternoon lands in the attacker's books rather than the society's. It is a quieter
+    /// attack than most, and a system of record is exactly where it does damage.
+    /// </para>
+    /// <para>
+    /// A failure is treated as an expired page rather than as an attack, because that is what
+    /// it almost always is: a sign-in screen left open overnight. The official is sent back to
+    /// a fresh one.
+    /// </para>
+    /// </remarks>
+    private static async Task<bool> IsRequestGenuineAsync(
+        HttpContext context, IAntiforgery antiforgery, ILogger logger)
+    {
+        try
+        {
+            await antiforgery.ValidateRequestAsync(context).ConfigureAwait(false);
+
+            return true;
+        }
+        catch (AntiforgeryValidationException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Rejected a form post to {Path} from {Ip}: no valid antiforgery token.",
+                context.Request.Path,
+                context.Connection.RemoteIpAddress);
+
+            return false;
+        }
     }
 }
 

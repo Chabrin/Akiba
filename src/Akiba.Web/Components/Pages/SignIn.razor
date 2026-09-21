@@ -18,12 +18,17 @@
 
     @if (Error is not null)
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@ErrorMessage</MudAlert>
+        <MudAlert Severity="@(Error == "signedout" ? Severity.Success : Severity.Error)"
+                  Dense="true" Class="mb-4">@ErrorMessage</MudAlert>
     }
 
     @* A plain form post. Signing in sets a cookie, and a Blazor circuit cannot - the response
        headers have gone by the time a component would handle the event. *@
     <form method="post" action="/auth/password">
+        @* Proves this post came from Akiba's own page. Without it another site could
+           post here and sign an official into an account somebody else controls. *@
+        <AntiforgeryToken />
+
         <MudTextField T="string"
                       Label="User name"
                       InputType="InputType.Text"
@@ -66,6 +71,9 @@
         "lockedout" =>
             "That account is locked for fifteen minutes after five failed attempts. " +
             "Wait, or ask the treasurer.",
+        "expired" =>
+            "That page had been open too long to be used. This is a fresh one - try again.",
+        "signedout" => "You are signed out.",
         _ => "That user name and password do not match.",
     };
 }

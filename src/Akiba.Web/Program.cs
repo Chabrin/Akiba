@@ -49,8 +49,19 @@ var connectionString = builder.Configuration.GetConnectionString("Akiba")
         "No connection string named 'Akiba'. Set the ConnectionStrings__Akiba environment " +
         "variable - see docs/deployment.md.");
 
+// Whether the session cookie may only travel over HTTPS. On by default: over plain HTTP the
+// cookie and the password that produced it cross the office network in clear text, and every
+// member's financial position is behind that cookie. An administrator who genuinely cannot
+// serve HTTPS turns it off knowingly - and startup says so, loudly, every time.
+var requireHttps = builder.Configuration.GetValue("Akiba:RequireHttps", true);
+
+// Kestrel announces itself by name and version in every response by default, which tells an
+// attacker which advisories to read. It costs nothing to stop.
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
+
 builder.Services.AddAkibaApplication();
 builder.Services.AddAkibaInfrastructure(connectionString);
+builder.Services.AddAkibaRateLimiting();
 
 // Blazor Server. Four officials on a LAN: rendering on the server keeps one language across
 // the whole system and means no figure is ever computed twice, once here and once in a
@@ -67,7 +78,8 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddAkibaIdentity(
     builder.Environment.IsProduction()
         ? null
-        : new Actor(Guid.Parse("0000A11B-0000-0000-0000-00000000DE11"), "Development seeder"));
+        : new Actor(Guid.Parse("0000A11B-0000-0000-0000-00000000DE11"), "Development seeder"),
+    requireHttps);
 builder.Services.AddScoped<
     IUserClaimsPrincipalFactory<AkibaUser>, AkibaClaimsPrincipalFactory>();
 
@@ -80,6 +92,33 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Akiba.Startup");
+
+if (!requireHttps)
+{
+    startupLogger.LogWarning(
+        "Akiba:RequireHttps is off. Passwords and session cookies cross the network in clear " +
+        "text, and anybody on the same network can read a member's position or take over a " +
+        "session. Turn it back on as soon as the machine has a certificate.");
+}
+
+// Host header filtering. A request whose Host is not on this list is refused before it reaches
+// anything, which stops cache-poisoning and password-reset-style tricks that turn on a forged
+// host. It has to name the address officials actually use - see docs/deployment.md.
+if (builder.Configuration["AllowedHosts"] is null or "" or "*")
+{
+    startupLogger.LogWarning(
+        "AllowedHosts is not restricted, so Akiba answers to any Host header. Set it to the " +
+        "address officials use, e.g. AllowedHosts=\"akiba.local;192.168.1.40\".");
+}
+
+if (!app.Environment.IsProduction())
+{
+    startupLogger.LogWarning(
+        "Running in the {Environment} environment. Detailed errors are shown, the development " +
+        "seed endpoint is mapped, and entries made with nobody signed in are attributed to a " +
+        "placeholder. Never do this on the society's machine.",
+        app.Environment.EnvironmentName);
+}
 
 // Before anything writes to the database, including the migrations and the startup seed, so
 // that the very first changes are recorded too.
@@ -99,7 +138,19 @@ await using (var scope = app.Services.CreateAsyncScope())
         builder.Configuration["Akiba:SetupPassword"]);
 }
 
+// First, so that a response refused by authorisation carries them too.
+app.UseAkibaSecurityHeaders();
+
+if (requireHttps)
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 app.UseStaticFiles();
+
+app.UseRouting();
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -246,13 +297,30 @@ api.MapGet("/ledger/period-close/{year:int}/{month:int}", async (
 // whole stack. Never mapped in Production.
 if (!app.Environment.IsProduction())
 {
-    app.MapPost("/api/dev/seed-demo", async (IServiceProvider services) =>
-        Results.Ok(await DemoData.SeedAsync(services))).AllowAnonymous();
+    app.MapPost("/api/dev/seed-demo", async (IServiceProvider services, AkibaDbContext database) =>
+    {
+        // The same guard tools/seed-demo.ps1 has. This endpoint invents members, and the one
+        // mistake worth defending against is somebody running a development build against the
+        // society's own database - a mistake that is one stale environment variable away.
+        var name = database.Database.GetDbConnection().Database;
+
+        if (string.Equals(name, "akiba", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(
+                "Refusing to seed a database called 'akiba' - that is the production name. " +
+                "This endpoint creates people who do not exist.");
+        }
+
+        return Results.Ok(await DemoData.SeedAsync(services));
+    }).AllowAnonymous();
 }
 
 // Reports. Each returns a file, and each is reproducible as at a past date because every
 // figure in it is summed from the ledger rather than read from a stored total.
-var reports = app.MapGroup("/reports");
+// Every report is generated rather than fetched - an AGM pack is a whole PDF and the
+// shareholding summary sums every member's ledger - so this group is rate limited as well as
+// authorised.
+var reports = app.MapGroup("/reports").RequireRateLimiting(RateLimiting.Reports);
 
 reports.MapGet("/deductions/{kind}/{year:int}/{month:int}", async (
     IMediator mediator,

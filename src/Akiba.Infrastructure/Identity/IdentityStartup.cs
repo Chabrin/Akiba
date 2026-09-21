@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Akiba.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
@@ -135,20 +136,30 @@ public static class IdentityStartup
     /// A password nobody chose and nobody can guess.
     /// </summary>
     /// <remarks>
-    /// Long enough that it does not matter that it goes through a log file once, and built
-    /// from a cryptographic source rather than <see cref="Random"/>.
+    /// <para>
+    /// Long enough that it does not matter that it goes through a log file once, and built from
+    /// a cryptographic source rather than <see cref="Random"/>.
+    /// </para>
+    /// <para>
+    /// <see cref="RandomNumberGenerator.GetString"/> rather than a byte modulo the alphabet
+    /// length: 256 does not divide by 57, so taking the remainder makes the first few letters
+    /// of the alphabet slightly likelier than the rest. The effect here is small, but a biased
+    /// password generator in a financial system is not a thing to leave written down for the
+    /// next person to copy.
+    /// </para>
     /// </remarks>
     private static string GeneratePassword()
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
         const string symbols = "!@#$%^&*-_=+";
 
-        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(24);
-        var password = new string([.. bytes.Select(b => alphabet[b % alphabet.Length])]);
+        var password = RandomNumberGenerator.GetString(alphabet, 24);
 
-        // Identity's default policy wants a digit, an upper, a lower and a symbol. The alphabet
-        // above covers the first three by weight of probability; this guarantees the fourth.
-        return password + symbols[System.Security.Cryptography.RandomNumberGenerator.GetInt32(symbols.Length)] + "7";
+        // Identity's policy wants a digit, an upper, a lower and a symbol. The alphabet above
+        // covers the first three by weight of probability; these guarantee all four.
+        return password
+            + RandomNumberGenerator.GetString(symbols, 1)
+            + RandomNumberGenerator.GetString("23456789", 1);
     }
 
     private static string Describe(IdentityResult result) =>

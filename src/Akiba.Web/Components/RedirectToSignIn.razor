@@ -1,13 +1,21 @@
 @inject NavigationManager Navigation
 
-@* Sends an unauthenticated visitor to sign in, remembering where they were headed. *@
+@*
+    Sends an unauthenticated visitor to sign in.
+
+    This used to append a returnUrl of its own, and nothing has ever read one: signing in always
+    lands on the dashboard. A parameter that is written, echoed in the address bar and never
+    acted on is worse than none - it reads like a working feature, and the next person to make
+    it work would be building an open redirect into a sign-in page without noticing that is what
+    they were doing.
+
+    The cookie handler still appends its own ReturnUrl when it redirects, and that one is always
+    a local path the framework produced rather than anything a request supplied. It is also
+    still not read. If the office wants to be returned to the page they asked for, it needs
+    adding deliberately, with the destination checked against Akiba's own base path.
+*@
 
 @code {
-    protected override void OnInitialized()
-    {
-        var returnUrl = Navigation.ToBaseRelativePath(Navigation.Uri);
-
-        Navigation.NavigateTo(
-            $"/sign-in?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
-    }
+    protected override void OnInitialized() =>
+        Navigation.NavigateTo("/sign-in", forceLoad: true);
 }

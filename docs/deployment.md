@@ -40,12 +40,45 @@ During installation:
 Then create Akiba's database and its own login. Open **SQL Shell (psql)** and run:
 
 ```sql
-CREATE USER akiba WITH PASSWORD 'choose-a-long-random-password';
-CREATE DATABASE akiba OWNER akiba;
+-- The login that owns the schema. Used only when upgrading Akiba, never day to day.
+CREATE USER akiba_owner WITH PASSWORD 'choose-a-long-random-password';
+CREATE DATABASE akiba OWNER akiba_owner;
+
+-- The login the application runs as. It reads and writes rows and owns nothing.
+CREATE USER akiba_app WITH PASSWORD 'choose-a-different-long-random-password';
 ```
 
-Akiba connects as `akiba`, not as `postgres`. If the application is ever compromised, it
-cannot drop other databases.
+Then connect to the new database (`\c akiba`) and give the application login exactly what it
+needs and nothing else:
+
+```sql
+GRANT USAGE ON SCHEMA akiba TO akiba_app;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA akiba TO akiba_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA akiba TO akiba_app;
+
+-- And the same for anything a future upgrade adds.
+ALTER DEFAULT PRIVILEGES FOR ROLE akiba_owner IN SCHEMA akiba
+    GRANT SELECT, INSERT, UPDATE ON TABLES TO akiba_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE akiba_owner IN SCHEMA akiba
+    GRANT USAGE, SELECT ON SEQUENCES TO akiba_app;
+```
+
+### Why two logins rather than one
+
+Neither is `postgres`, so a compromised Akiba cannot touch another database. That much is
+obvious. The split between the two is less obvious and matters more.
+
+**No `DELETE` anywhere.** Akiba never deletes a financial record — corrections are reversing
+entries — so the login it runs as has no way to delete one either. If a bug ever tried, the
+database would refuse.
+
+**The application does not own its tables.** The audit trail is protected by a trigger that
+refuses `UPDATE` and `DELETE` on it, and the *owner* of a table can switch a trigger off.
+Running as a login that owns nothing means the one account an attacker reaches through the web
+application cannot quietly disable the thing that records what they did.
+
+The cost is one extra step when upgrading: migrations run as `akiba_owner`, which is covered in
+section 7.
 
 ---
 
@@ -70,8 +103,23 @@ Akiba reads standard .NET configuration. The two settings that matter:
 
 | Setting | What it is |
 |---|---|
-| `ConnectionStrings__Akiba` | `Host=localhost;Port=5432;Database=akiba;Username=akiba;Password=...` |
+| `ConnectionStrings__Akiba` | `Host=localhost;Port=5432;Database=akiba;Username=akiba_app;Password=...` |
 | `ASPNETCORE_URLS` | The address Akiba listens on |
+| `AllowedHosts` | The address officials type, e.g. `akiba.local;192.168.1.40`. Akiba refuses a request for any other host |
+| `Akiba__RequireHttps` | Leave unset. It defaults to `true` and should stay that way — see below |
+
+### `Akiba__RequireHttps`
+
+On, Akiba marks its cookies `Secure`, sends HSTS and redirects plain HTTP. **Leave it on.**
+
+Off, every password and every session cookie crosses the office network in clear text. Anybody
+who can see that traffic — another machine on the same switch, a compromised printer, somebody
+with the wifi key — can read a member's position or take over an official's session. Akiba logs
+a warning at startup every time it starts with this off, and the warning is not decoration.
+
+If the machine has no certificate, get one before go-live. On an internal machine that means
+either a certificate from the organisation's own authority, or a self-signed certificate
+installed as trusted on the four machines that use Akiba. It is an afternoon's work once.
 
 **On `ASPNETCORE_URLS`, read this twice.** Akiba holds member financial records.
 
@@ -83,9 +131,10 @@ Akiba reads standard .NET configuration. The two settings that matter:
 Set them as machine-level environment variables so the service picks them up:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('ConnectionStrings__Akiba', 'Host=localhost;Port=5432;Database=akiba;Username=akiba;Password=...', 'Machine')
-[Environment]::SetEnvironmentVariable('ASPNETCORE_URLS', 'http://192.168.1.40:8080', 'Machine')
+[Environment]::SetEnvironmentVariable('ConnectionStrings__Akiba', 'Host=localhost;Port=5432;Database=akiba;Username=akiba_app;Password=...', 'Machine')
+[Environment]::SetEnvironmentVariable('ASPNETCORE_URLS', 'https://192.168.1.40:8443', 'Machine')
 [Environment]::SetEnvironmentVariable('ASPNETCORE_ENVIRONMENT', 'Production', 'Machine')
+[Environment]::SetEnvironmentVariable('AllowedHosts', 'akiba.local;192.168.1.40', 'Machine')
 ```
 
 ---
@@ -164,7 +213,7 @@ $date  = Get-Date -Format 'yyyy-MM-dd'
 $dump  = "C:\Akiba\backups\akiba-$date.dump"
 
 & 'C:\Program Files\PostgreSQL\17\bin\pg_dump.exe' `
-    --host=localhost --username=akiba --format=custom --file=$dump akiba
+    --host=localhost --username=akiba_owner --format=custom --file=$dump akiba
 
 # Encrypt it. The backup contains every member's financial position.
 & 'C:\Program Files\7-Zip\7z.exe' a -tzip -p"$env:AKIBA_BACKUP_PASSWORD" "$dump.zip" $dump
@@ -199,11 +248,24 @@ reads zero and a member's shareholding looks right. Drop the scratch database af
 1. Stop the service.
 2. **Take a backup, and confirm the file exists and has a sensible size.**
 3. Replace the files in `C:\Akiba` with the new publish output.
-4. Start the service.
+4. **Run the migrations as `akiba_owner`, then put the connection string back.** The login
+   Akiba runs as day to day cannot create or alter tables, deliberately — see section 1:
+
+   ```powershell
+   # Once, as the owner, to apply any new migrations.
+   $env:ConnectionStrings__Akiba = 'Host=localhost;Port=5432;Database=akiba;Username=akiba_owner;Password=...'
+   C:\Akiba\Akiba.Web.exe --urls http://127.0.0.1:5999
+   # Wait for "Now listening on", check the log says which migrations it applied, then Ctrl+C.
+   ```
+
+5. Start the service, which runs as `akiba_app` again.
 
 Akiba applies any new migrations itself at startup and logs what it applied. If a migration
-fails the service will not start — which is the correct behaviour. Restore the backup and get
-help rather than trying to patch the database by hand.
+fails it will not start — which is the correct behaviour. Restore the backup and get help
+rather than trying to patch the database by hand.
+
+If you skip step 4, the service will fail to start with a permissions error rather than
+silently running against a half-upgraded database. That is also the correct behaviour.
 
 ---
 

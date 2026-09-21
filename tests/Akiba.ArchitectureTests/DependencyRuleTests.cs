@@ -70,17 +70,29 @@ public sealed class DependencyRuleTests
     [Fact]
     public void Nothing_references_the_web_project()
     {
+        // Test projects may reference it. Akiba.ArchitectureTests reads its project file, and
+        // Akiba.Web.Tests hosts the real application so that the security of the pipeline -
+        // middleware order, which endpoints answer without a session - is proved by making
+        // requests rather than by reading code. Neither ships.
+        //
+        // The rule that matters is the one below: nothing under src/ may reference it, because
+        // a dependency pointing outward from the composition root is how the layering stops
+        // meaning anything.
         var offenders = SolutionLayout.Projects.Values
-            .Where(project => project.Name != "Akiba.ArchitectureTests")
+            .Where(project => !IsTestProject(project.RelativePath))
             .Where(project => project.ProjectReferences.Contains("Akiba.Web"))
             .Select(project => project.RelativePath)
             .ToList();
 
         offenders.Should().BeEmpty(
             because:
-                "Akiba.Web is the composition root and the outermost layer. Only the " +
-                "architecture tests may reference it, and only in order to inspect it.");
+                "Akiba.Web is the composition root and the outermost layer. Nothing in src/ " +
+                "may reference it; a test project may, and only in order to inspect or host it.");
     }
+
+    /// <summary>Whether a project lives under tests/ and therefore never ships.</summary>
+    private static bool IsTestProject(string relativePath) =>
+        relativePath.Replace('\\', '/').StartsWith("tests/", StringComparison.Ordinal);
 
     [Fact]
     public void Every_project_on_disk_is_in_the_solution()

@@ -20,7 +20,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
+    <!--
+      Design-time only: this is what "dotnet ef migrations" runs on. PrivateAssets keeps it out
+      of the published output, where a migration scaffolder has no business being.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="Audit.NET" />

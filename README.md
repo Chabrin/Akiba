@@ -151,6 +151,7 @@ tests/
   Akiba.Application.Tests      handler tests with in-memory ports
   Akiba.Infrastructure.Tests   integration tests on real PostgreSQL
   Akiba.ArchitectureTests      dependency rules, enforced in CI
+  Akiba.Web.Tests              the running pipeline: headers, authorisation, antiforgery
 ```
 
 Dependencies point inward. `Akiba.Domain` has no NuGet references at all. See
@@ -183,6 +184,8 @@ This system holds member financial records and the group requires confidentialit
 
 ## Security
 
+**Full write-up, including what is still outstanding: [`docs/security.md`](docs/security.md).**
+
 - **TOTP multi-factor is mandatory** for every account.
 - **Only the accounts clerk creates or edits records.** The treasurer, chairman and
   secretary have view access, plus their own approval actions. HR can download the monthly
@@ -200,6 +203,14 @@ This system holds member financial records and the group requires confidentialit
   procedure is documented in milestone 18.
 - `.env`, backups, scanned forms and generated reports are gitignored. **Never commit
   member data.**
+- **HTTPS is required by default** (`Akiba:RequireHttps`). Turning it off puts every password
+  and session cookie on the network in clear text, and startup says so every time.
+- **Rate limiting** on the sign-in and report endpoints, by machine. The panel itself is not
+  limited — a Blazor circuit is one long connection, not a stream of requests.
+- **Security headers on every response**, including a content security policy that forbids
+  inline script and `eval`.
+- The application's database login **owns nothing and cannot delete anything**. See
+  [`docs/deployment.md`](docs/deployment.md) §1.
 
 ---
 
