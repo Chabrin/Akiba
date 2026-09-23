@@ -1,89 +1,392 @@
-/*
- * Akiba is read by four officials on office screens, often while comparing what is on the
- * screen with a paper form on the desk. So: money right-aligned and tabular, dates
- * unambiguous, and nothing that moves on its own.
- */
+/* ===========================================================================
+   Akiba
 
-/* Money lines up column-wise when the digits are the same width. On a ledger page that is
-   not decoration - a figure that is out by a factor of ten should look wrong. */
+   What MudBlazor's theme cannot express: density, table behaviour, the money
+   treatment, loading skeletons and the privacy blur.
+
+   Everything here is a deliberate departure from the framework's defaults,
+   which are tuned for consumer applications. This is a ledger four officials
+   read for hours with a paper form beside the screen.
+
+   Design tokens live on :root so a change happens once. Nothing below should
+   contain a raw colour that is not a token.
+   =========================================================================== */
+
+:root {
+    /* Spacing. A 4px base, because a dense table needs finer steps than 8. */
+    --akiba-space-1: 4px;
+    --akiba-space-2: 8px;
+    --akiba-space-3: 12px;
+    --akiba-space-4: 16px;
+    --akiba-space-5: 24px;
+    --akiba-space-6: 32px;
+
+    --akiba-radius: 8px;
+    --akiba-radius-sm: 6px;
+
+    /* Money and anything else that must line up column-wise. The feature
+       settings matter more than the family: tnum forces equal-width digits, so
+       a figure out by a factor of ten is visibly wrong before it is read. */
+    --akiba-font-numeric: "Inter", "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+    --akiba-numeric-features: "tnum" 1, "lnum" 1, "zero" 1, "ss01" 1;
+
+    --akiba-row-height: 38px;
+    --akiba-transition: 120ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   Page chrome
+   --------------------------------------------------------------------------- */
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+body {
+    margin: 0;
+    font-feature-settings: "cv05" 1, "cv11" 1;
+}
+
+/* Clears the dense app bar. Tied to the same 56px the theme sets, so the two cannot drift. */
+.akiba-main {
+    padding-top: 56px;
+}
+
+/* The title block at the top of every screen: what this is, what it is for,
+   and whatever acts on it. One component so no two pages disagree. */
+.akiba-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--akiba-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--akiba-space-5);
+    padding-bottom: var(--akiba-space-4);
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.akiba-page-header h1 {
+    margin: 0;
+}
+
+.akiba-page-header .akiba-page-description {
+    max-width: 68ch;
+    margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Money
+   --------------------------------------------------------------------------- */
+
 .akiba-money {
-    font-variant-numeric: tabular-nums;
+    font-family: var(--akiba-font-numeric);
+    font-feature-settings: var(--akiba-numeric-features);
+    font-variant-numeric: tabular-nums lining-nums;
     white-space: nowrap;
 }
 
-.akiba-money-cell {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-
-/* A negative figure is always a real event in a ledger, never a rendering artefact. */
+/* A negative figure in a ledger is always a real event, never a rendering
+   artefact, so it is coloured rather than merely signed. */
 .akiba-negative {
     color: var(--mud-palette-error);
 }
 
-.akiba-page-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-/* The "as at" control appears on every screen that reports a figure, because every figure
-   Akiba reports is answerable as at a past date. */
-.akiba-as-at {
-    min-width: 12rem;
-}
-
-@media print {
-    .akiba-no-print {
-        display: none !important;
-    }
-}
-
-/* A headline figure must never be clipped. "KES 30,937.5" is not a smaller number than
-   "KES 30,937.50" - it is a different one, and a reader cannot tell which they are looking
-   at. Shrinking the type is the lesser evil. */
-.akiba-figure {
-    font-variant-numeric: tabular-nums;
+.akiba-money-cell {
+    text-align: right;
+    font-family: var(--akiba-font-numeric);
+    font-feature-settings: var(--akiba-numeric-features);
+    font-variant-numeric: tabular-nums lining-nums;
     white-space: nowrap;
-    overflow-wrap: normal;
-    font-size: clamp(0.95rem, 2.2vw, 1.25rem);
 }
 
-/* A stat card title wraps to two lines at narrow widths - "Loans outstanding" does, "Bank"
-   does not. Giving the header a fixed height keeps every figure in a row on the same
-   baseline, so the eye can compare them without hopping up and down. */
+.akiba-figure {
+    font-family: var(--akiba-font-numeric);
+    font-feature-settings: var(--akiba-numeric-features);
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: -0.015em;
+}
+
+/* ---------------------------------------------------------------------------
+   Tables
+
+   The densest part of the application and the part officials spend the day in.
+   Stock padding is nearly doubled from what a ledger wants.
+   --------------------------------------------------------------------------- */
+
+.mud-table-root {
+    font-variant-numeric: tabular-nums;
+}
+
+.mud-table-head .mud-table-cell {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    background-color: var(--mud-palette-background-gray);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+    white-space: nowrap;
+    padding-top: var(--akiba-space-2);
+    padding-bottom: var(--akiba-space-2);
+}
+
+/* The header stays put when a long journal or audit trail is scrolled. */
+.mud-table-sticky-header .mud-table-head .mud-table-cell {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.mud-table-dense .mud-table-body .mud-table-cell {
+    height: var(--akiba-row-height);
+    padding-top: var(--akiba-space-1);
+    padding-bottom: var(--akiba-space-1);
+}
+
+.mud-table-body .mud-table-row:hover {
+    background-color: var(--mud-palette-table-hover);
+}
+
+/* A row you can act on says so before it is clicked. */
+.akiba-row-actionable {
+    cursor: pointer;
+}
+
+.akiba-row-actionable:hover .akiba-row-affordance {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.akiba-row-affordance {
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity var(--akiba-transition), transform var(--akiba-transition);
+}
+
+/* ---------------------------------------------------------------------------
+   Statistic cards
+   --------------------------------------------------------------------------- */
+
+.akiba-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    height: 100%;
+    padding: var(--akiba-space-4);
+    border-radius: var(--akiba-radius);
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    transition: border-color var(--akiba-transition);
+}
+
+.akiba-stat:hover {
+    border-color: var(--mud-palette-primary);
+}
+
 .akiba-stat-header {
-    min-height: 2.75rem;
+    display: flex;
+    align-items: center;
+    gap: var(--akiba-space-2);
+    min-width: 0;
 }
 
 .akiba-stat-title {
-    display: block;
-    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-/* One official's signature on a dividend run: who, and when. */
+/* A rule beneath the figure, in the card's own semantic colour. It is the only
+   decoration on the card and it carries meaning: the eye learns that amber
+   cards are the ones waiting on somebody. */
+.akiba-stat-accent {
+    width: 28px;
+    height: 2px;
+    border-radius: 2px;
+    margin: var(--akiba-space-2) 0 var(--akiba-space-1);
+    background-color: currentColor;
+    opacity: .5;
+}
+
+/* ---------------------------------------------------------------------------
+   Loading
+
+   A skeleton in the shape of what is coming, not a bar. A bar tells somebody
+   to wait; a skeleton tells them what they are waiting for, and stops the
+   layout jumping when the data lands.
+   --------------------------------------------------------------------------- */
+
+.akiba-skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--mud-palette-background-gray) 25%,
+        var(--mud-palette-divider) 37%,
+        var(--mud-palette-background-gray) 63%
+    );
+    background-size: 400% 100%;
+    animation: akiba-shimmer 1.4s ease infinite;
+    border-radius: var(--akiba-radius-sm);
+}
+
+@keyframes akiba-shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
+}
+
+/* Somebody who has asked not to see motion gets a still placeholder. */
+@media (prefers-reduced-motion: reduce) {
+    .akiba-skeleton {
+        animation: none;
+    }
+
+    * {
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Covers the content while an action is in flight, so nothing beneath it can
+   be clicked twice. The handlers are idempotent regardless; this is so the
+   screen does not look broken while they prove it. */
+.akiba-busy {
+    position: relative;
+}
+
+.akiba-busy::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--mud-palette-surface);
+    opacity: .55;
+    border-radius: var(--akiba-radius);
+    z-index: 5;
+    cursor: progress;
+}
+
+/* ---------------------------------------------------------------------------
+   Empty states
+
+   An empty table should say why it is empty and what to do, because on this
+   system "no rows" is usually good news - nothing is overdue, nothing is
+   waiting - and a blank panel reads as a fault.
+   --------------------------------------------------------------------------- */
+
+.akiba-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--akiba-space-2);
+    padding: var(--akiba-space-6) var(--akiba-space-4);
+    color: var(--mud-palette-text-secondary);
+}
+
+.akiba-empty-icon {
+    opacity: .35;
+}
+
+.akiba-empty-body {
+    max-width: 46ch;
+}
+
+/* ---------------------------------------------------------------------------
+   Privacy blur
+
+   One keystroke obscures every figure and name on screen. Akiba is used in an
+   office where somebody walks up to the desk, and an official should not have
+   to choose between closing the browser and letting a colleague read a
+   member's position over their shoulder.
+
+   Deliberately blurs content and leaves the chrome legible, so the official
+   can still navigate, and so the state is obviously on rather than looking
+   like a rendering fault.
+   --------------------------------------------------------------------------- */
+
+.akiba-private .akiba-money,
+.akiba-private .akiba-figure,
+.akiba-private .akiba-money-cell,
+.akiba-private .mud-table-body .mud-table-cell,
+.akiba-private .akiba-private-text {
+    filter: blur(6px);
+    transition: filter var(--akiba-transition);
+    user-select: none;
+}
+
+/* The official can still read one row by pointing at it, without turning the
+   whole screen back on. */
+.akiba-private .mud-table-body .mud-table-row:hover .mud-table-cell {
+    filter: none;
+}
+
+.akiba-privacy-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--akiba-space-2);
+    padding: var(--akiba-space-1) var(--akiba-space-3);
+    border-radius: 999px;
+    background-color: var(--mud-palette-warning-lighten);
+    color: var(--mud-palette-warning-darken);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Signatures on a dividend run
+   --------------------------------------------------------------------------- */
+
 .akiba-signature {
-    border-left: 3px solid var(--mud-palette-lines-default);
-    padding-left: 12px;
+    border-left: 2px solid var(--mud-palette-lines-default);
+    padding-left: var(--akiba-space-3);
 }
 
-/* The before-and-after values behind one audited change. */
-.akiba-audit-changes {
-    max-width: 520px;
-    text-align: left;
-    font-size: 0.8rem;
-    line-height: 1.5;
-}
+/* ---------------------------------------------------------------------------
+   Tooltip contents
+   --------------------------------------------------------------------------- */
 
-/* The text of a queued message, shown on hover. */
+.akiba-audit-changes,
 .akiba-message-preview {
     max-width: 520px;
     text-align: left;
-    font-size: 0.8rem;
-    line-height: 1.5;
+    font-size: 0.75rem;
+    line-height: 1.55;
+}
+
+.akiba-message-preview {
     white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Printing
+
+   Officials print statements and schedules. What goes on paper should be the
+   document, not the application around it.
+   --------------------------------------------------------------------------- */
+
+@media print {
+    .akiba-no-print,
+    .mud-appbar,
+    .mud-drawer {
+        display: none !important;
+    }
+
+    .mud-main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .mud-paper {
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    /* Never print a blurred figure. */
+    .akiba-private * {
+        filter: none !important;
+    }
+
+    body {
+        background: #fff !important;
+    }
 }

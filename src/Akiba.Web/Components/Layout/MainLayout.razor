@@ -1,66 +1,147 @@
 @inherits LayoutComponentBase
+@implements IAsyncDisposable
 @inject ICurrentUser CurrentUser
 @inject IWebHostEnvironment Environment
+@inject IJSRuntime JS
+@inject ILogger<MainLayout> Logger
 
 <MudThemeProvider Theme="AkibaTheme.Instance" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1" Class="akiba-no-print">
+<MudLayout Class="@(_privacy ? "akiba-private" : null)">
+    <MudAppBar Elevation="0" Class="akiba-no-print" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu"
                        Color="Color.Inherit"
                        Edge="Edge.Start"
                        aria-label="Toggle navigation"
                        OnClick="@(() => _drawerOpen = !_drawerOpen)" />
 
-        <MudText Typo="Typo.h6" Class="ml-2">Akiba</MudText>
-        <MudText Typo="Typo.caption" Class="ml-3 d-none d-sm-flex">Welfare Society</MudText>
+        <MudText Typo="Typo.h5" Class="ml-2" Style="font-weight: 650; letter-spacing: -.02em;">
+            Akiba
+        </MudText>
+        <MudText Typo="Typo.caption" Class="ml-2 d-none d-sm-flex" Style="opacity: .7;">
+            Welfare Society
+        </MudText>
 
         <MudSpacer />
 
-        @if (!Environment.IsProduction())
+        @if (_privacy)
         {
-            @* Every ledger entry records its author. While Identity is still to come, every
-               entry is attributed to the same person, and nobody should be in any doubt. *@
-            <MudChip T="string"
-                     Color="Color.Warning"
-                     Size="Size.Small"
-                     Icon="@Icons.Material.Filled.Warning"
-                     Class="mr-3">
-                Development user
-            </MudChip>
+            <span class="akiba-privacy-banner mr-3 d-none d-sm-flex">
+                <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" />
+                Figures hidden
+            </span>
         }
 
-        <MudText Typo="Typo.body2" Class="mr-3 d-none d-md-flex">@_actorName</MudText>
+        @if (!Environment.IsProduction())
+        {
+            @* Every ledger entry records its author. Outside Production an entry made with
+               nobody signed in is attributed to a placeholder, and nobody should be in any
+               doubt which they are looking at. *@
+            <MudTooltip Text="Not Production. Nothing is sent, and unattributed entries get a placeholder author.">
+                <MudChip T="string" Color="Color.Warning" Size="Size.Small"
+                         Icon="@Icons.Material.Filled.Warning" Class="mr-3">
+                    @Environment.EnvironmentName
+                </MudChip>
+            </MudTooltip>
+        }
 
-        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
-                       Color="Color.Inherit"
-                       aria-label="Toggle light and dark"
-                       OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+        <MudText Typo="Typo.body2" Class="mr-2 d-none d-md-flex" Style="opacity: .85;">
+            @_actorName
+        </MudText>
 
-        @* Signing out is a form post, not a link: it has to clear the cookie, and it carries an
-           antiforgery token so that no other page can sign an official out from under them.
+        @* Ctrl+Shift+H as well, so a hand already on the keyboard does not have to find the
+           mouse while somebody is walking towards the desk. *@
+        <MudTooltip Text="@(_privacy ? "Show figures (Ctrl+Shift+H)" : "Hide every figure and name (Ctrl+Shift+H)")">
+            <MudIconButton Icon="@(_privacy ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                           Color="Color.Inherit"
+                           aria-label="Hide figures"
+                           OnClick="TogglePrivacy" />
+        </MudTooltip>
 
-           The panel had no way to end a session at all until now, which on a shared office
-           machine meant the only way out was to close the browser and hope. *@
+        <MudTooltip Text="@(_isDarkMode ? "Light" : "Dark")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit"
+                           aria-label="Toggle light and dark"
+                           OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+        </MudTooltip>
+
+        @* A form post, not a link: it has to clear the cookie, and it carries an antiforgery
+           token so no other page can sign an official out from under them. *@
         <form method="post" action="/auth/sign-out" class="d-flex">
             <AntiforgeryToken />
-            <MudIconButton ButtonType="ButtonType.Submit"
-                           Icon="@Icons.Material.Filled.Logout"
-                           Color="Color.Inherit"
-                           aria-label="Sign out" />
+            <MudTooltip Text="Sign out">
+                <MudIconButton ButtonType="ButtonType.Submit"
+                               Icon="@Icons.Material.Filled.Logout"
+                               Color="Color.Inherit"
+                               aria-label="Sign out" />
+            </MudTooltip>
         </form>
     </MudAppBar>
 
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" ClipMode="DrawerClipMode.Always" Class="akiba-no-print">
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always"
+               Class="akiba-no-print">
         <NavMenu />
     </MudDrawer>
 
-    <MudMainContent Class="pt-16 px-4">
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="my-6">
-            @Body
+    @* The top padding clears the dense app bar (56px). Losing it puts the page heading
+       underneath the bar, which looks like a rendering fault rather than a layout one. *@
+    <MudMainContent Class="akiba-main">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6 px-4">
+            @* Nothing below this line can take the whole panel down.
+
+               A database that times out mid-query, a report that cannot be generated, a screen
+               with a bug in it - without this, any of them leaves an official looking at a
+               blank page with no idea whether their work was saved. With it they get a
+               readable account and a way back, and the rest of the application keeps working. *@
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="problem">
+                    <MudPaper Elevation="1" Class="pa-6">
+                        <div class="d-flex align-start gap-4">
+                            <MudIcon Icon="@Icons.Material.Filled.ReportProblem"
+                                     Color="Color.Error" Size="Size.Large" />
+
+                            <div class="flex-grow-1">
+                                <MudText Typo="Typo.h4" Class="mb-2">This screen could not be shown</MudText>
+
+                                <MudText Typo="Typo.body1" Class="mb-4" Style="max-width: 70ch;">
+                                    Something went wrong while building this page.
+                                    <b>Nothing has been changed by it</b> — Akiba saves a change or
+                                    refuses it, never half of one, so whatever you were looking at
+                                    is as it was.
+                                </MudText>
+
+                                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+                                    @Describe(problem)
+                                </MudAlert>
+
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                                    It has been written to the application log with the time and
+                                    this page's address. If it keeps happening, that log is what
+                                    ICT needs.
+                                </MudText>
+
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Refresh"
+                                               OnClick="RecoverAsync">
+                                        Try this screen again
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Text" Href="/"
+                                               StartIcon="@Icons.Material.Filled.Home">
+                                        Back to the dashboard
+                                    </MudButton>
+                                </div>
+                            </div>
+                        </div>
+                    </MudPaper>
+                </ErrorContent>
+            </ErrorBoundary>
         </MudContainer>
     </MudMainContent>
 </MudLayout>
@@ -68,7 +149,11 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
+    private bool _privacy;
     private string _actorName = "Not signed in";
+    private ErrorBoundary? _errorBoundary;
+    private IJSObjectReference? _shortcuts;
+    private DotNetObjectReference<MainLayout>? _self;
 
     protected override void OnInitialized()
     {
@@ -82,5 +167,93 @@
         {
             _actorName = "Not signed in";
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _self = DotNetObjectReference.Create(this);
+
+            _shortcuts = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./js/akiba-shortcuts.js");
+
+            await _shortcuts.InvokeVoidAsync("register", _self);
+        }
+        catch (JSException exception)
+        {
+            // The shortcut is a convenience and the button beside it does the same thing. A
+            // browser that refuses the module should not take the panel with it.
+            Logger.LogWarning(exception, "The keyboard shortcut could not be registered.");
+        }
+    }
+
+    /// <summary>Called from the keyboard shortcut.</summary>
+    [JSInvokable]
+    public Task TogglePrivacyFromKeyboard()
+    {
+        TogglePrivacy();
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void TogglePrivacy() => _privacy = !_privacy;
+
+    /// <summary>
+    /// Clears the error and re-renders the page beneath.
+    /// </summary>
+    /// <remarks>
+    /// Worth trying, because most of what lands here is transient - a query that timed out
+    /// while the nightly backup held a lock, say. If it is not transient the boundary catches
+    /// it again, which is still a better answer than a page that cannot be retried.
+    /// </remarks>
+    private async Task RecoverAsync()
+    {
+        _errorBoundary?.Recover();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// What an official is told about a failure.
+    /// </summary>
+    /// <remarks>
+    /// The message, never the stack trace. An official cannot act on a stack trace and it
+    /// discloses more about the application than a screen in an office needs to. The full
+    /// detail goes to the log, which is where ICT looks.
+    /// </remarks>
+    private string Describe(Exception problem)
+    {
+        Logger.LogError(problem, "A screen failed to render.");
+
+        return problem switch
+        {
+            InvalidOperationException or ArgumentException => problem.Message,
+            TimeoutException => "The database did not answer in time. It may be busy — try again in a moment.",
+            _ => "An unexpected error occurred. The details are in the application log.",
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_shortcuts is not null)
+        {
+            try
+            {
+                await _shortcuts.InvokeVoidAsync("unregister");
+                await _shortcuts.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // The circuit has already gone. Nothing to clean up on the other side.
+            }
+        }
+
+        _self?.Dispose();
     }
 }

@@ -35,9 +35,19 @@ on a public site matter a great deal on a shared office network.
 
 ### Cross-site scripting
 
-**There is no `MarkupString`, no `innerHTML`, no `Html.Raw` and no JavaScript interop anywhere
-in Akiba.** Razor encodes everything it renders, and nothing bypasses it. That — not the
-Content Security Policy — is what actually stops a member's name being turned into a script.
+**There is no `MarkupString`, no `innerHTML` and no `Html.Raw` anywhere in Akiba.** Razor
+encodes everything it renders, and nothing bypasses it. That — not the Content Security
+Policy — is what actually stops a member's name being turned into a script.
+
+There is exactly **one** JavaScript file, `wwwroot/js/akiba-shortcuts.js`, and one call site,
+`MainLayout`. It registers a `keydown` handler for Ctrl+Shift+H and calls back into .NET to
+toggle the privacy blur. It reads no data, writes nothing into the DOM, and takes no argument
+from the page. It exists because a keyboard shortcut cannot be done any other way in Blazor
+Server, and it is worth having because an official reaching for the mouse while somebody walks
+up to the desk is the case the blur is for.
+
+**If you add a second one, this section stops being true.** Anything that writes to the DOM
+from JavaScript is outside Razor's encoding and has to be argued for on its own terms.
 
 The policy is the second line, for the day somebody adds the first one of those. It allows
 inline **styles**, because MudBlazor positions every popover and dialog by writing a `style`

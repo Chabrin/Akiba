@@ -147,6 +147,7 @@ public static class SecurityHeaders
     private static bool IsStaticAsset(PathString path) =>
         path.StartsWithSegments("/_content", StringComparison.OrdinalIgnoreCase)
         || path.StartsWithSegments("/_framework", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/js", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/app.css", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/favicon.svg", StringComparison.OrdinalIgnoreCase);
 }

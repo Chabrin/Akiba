@@ -13,7 +13,26 @@
 
 @if (_summary is null)
 {
-    <MudProgressLinear Color="Color.Primary" Indeterminate />
+    @* Four cards in the shape of the four that are coming, so the layout does not jump when
+       the figures land - and so an official can see which figure is arriving where. *@
+    <MudGrid Spacing="3">
+        @for (var card = 0; card < 4; card++)
+        {
+            <MudItem xs="12" sm="6" md="3">
+                <StatCard Title="&nbsp;" Value="Money.ZeroKes" Loading="true"
+                          Icon="@Icons.Material.Filled.Circle" Caption="&nbsp;" />
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudGrid Spacing="3" Class="mt-2">
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1"><TableSkeleton Rows="4" /></MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1"><TableSkeleton Rows="6" /></MudPaper>
+        </MudItem>
+    </MudGrid>
 }
 else
 {
@@ -44,13 +63,15 @@ else
             <StatCard Title="Member shares"
                       Value="_summary.TotalShareholding"
                       Caption="What Akiba owes its members"
-                      Icon="@Icons.Material.Filled.Savings" />
+                      Icon="@Icons.Material.Filled.Savings"
+                      Colour="Color.Tertiary" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
             <StatCard Title="Loans outstanding"
                       Value="_summary.TotalLoansOutstanding"
                       Caption="What members owe Akiba"
-                      Icon="@Icons.Material.Filled.RequestQuote" />
+                      Icon="@Icons.Material.Filled.RequestQuote"
+                      Colour="@(_summary.LoansInArrears > 0 ? Color.Error : Color.Secondary)" />
         </MudItem>
         <MudItem xs="12" sm="6" md="3">
             <StatCard Title="Unallocated"

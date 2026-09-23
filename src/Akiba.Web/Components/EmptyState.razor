@@ -1,0 +1,35 @@
+@*
+    What a screen says when there is nothing on it.
+
+    On this system an empty table is usually good news - nothing overdue, nothing waiting for a
+    decision, every statement reconciled - and a blank panel reads as a fault. So each one says
+    what the emptiness means, and offers the thing an official would do next if it is not what
+    they expected.
+*@
+
+<div class="akiba-empty">
+    <MudIcon Icon="@Icon" Size="Size.Large" Class="akiba-empty-icon" />
+
+    <MudText Typo="Typo.subtitle1">@Title</MudText>
+
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <MudText Typo="Typo.body2" Class="akiba-empty-body">@Description</MudText>
+    }
+
+    @if (ChildContent is not null)
+    {
+        <div class="mt-2">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Description { get; set; }
+
+    [Parameter] public string Icon { get; set; } = Icons.Material.Outlined.Inbox;
+
+    /// <summary>An action, where there is an obvious one.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

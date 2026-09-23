@@ -1,0 +1,28 @@
+@*
+    A placeholder in the shape of the table that is coming.
+
+    A progress bar tells somebody to wait. A skeleton tells them what they are waiting for, and
+    the layout does not jump when the rows land - which on a screen where the next click might
+    be "approve" matters more than it sounds.
+*@
+
+<div aria-busy="true" aria-live="polite">
+    @for (var row = 0; row < Rows; row++)
+    {
+        var width = Widths[row % Widths.Length];
+
+        <div class="d-flex align-center gap-4 px-3" style="height: var(--akiba-row-height);">
+            <div class="akiba-skeleton" style="height: .75rem; width: @(width)%;"></div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>How many rows to suggest. Roughly what the table usually holds.</summary>
+    [Parameter] public int Rows { get; set; } = 6;
+
+    /// <summary>
+    /// Varying widths, so it reads as text rather than as a loading bar repeated.
+    /// </summary>
+    private static readonly int[] Widths = [82, 64, 91, 58, 75, 69, 88, 61];
+}

@@ -1,20 +1,35 @@
-@* A single headline figure. *@
+@*
+    A single headline figure.
 
-<MudPaper Class="pa-4" Elevation="1" Style="height: 100%">
-    <div class="d-flex align-start mb-2 akiba-stat-header">
-        <MudIcon Icon="@Icon" Color="@Colour" Class="mr-2" />
+    The accent rule under the figure carries the card's semantic colour, and that is the only
+    decoration on it. An official learns quickly that amber cards are the ones waiting on
+    somebody and red ones are money owed, so a dashboard can be scanned rather than read.
+*@
+
+<div class="akiba-stat" style="@AccentStyle">
+    <div class="akiba-stat-header">
+        <MudIcon Icon="@Icon" Color="@Colour" Size="Size.Small" />
         <MudText Typo="Typo.overline" Class="mud-text-secondary akiba-stat-title">@Title</MudText>
     </div>
 
-    <MudText Typo="Typo.h6" Class="akiba-figure">
-        <MoneyText Amount="Value" />
-    </MudText>
+    @if (Loading)
+    {
+        <div class="akiba-skeleton" style="height: 1.75rem; width: 8rem; margin: 6px 0 2px;"></div>
+    }
+    else
+    {
+        <MudText Typo="Typo.h3" Class="akiba-figure">
+            <MoneyText Amount="Value" HighlightNegative="HighlightNegative" />
+        </MudText>
+    }
+
+    <div class="akiba-stat-accent"></div>
 
     @if (!string.IsNullOrWhiteSpace(Caption))
     {
         <MudText Typo="Typo.caption" Class="mud-text-secondary">@Caption</MudText>
     }
-</MudPaper>
+</div>
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
@@ -26,4 +41,20 @@
     [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Circle;
 
     [Parameter] public Color Colour { get; set; } = Color.Primary;
+
+    /// <summary>Off where a negative is expected and colouring it would be noise.</summary>
+    [Parameter] public bool HighlightNegative { get; set; } = true;
+
+    /// <summary>Shows a skeleton in place of the figure while it is being derived.</summary>
+    [Parameter] public bool Loading { get; set; }
+
+    /// <summary>
+    /// Ties the accent rule to the card's colour.
+    /// </summary>
+    /// <remarks>
+    /// The rule uses <c>currentColor</c>, so setting the colour once here colours both it and
+    /// nothing else - the figure itself stays in the text colour, because a green balance and
+    /// a red one would imply a judgement the dashboard is not making.
+    /// </remarks>
+    private string AccentStyle => $"color: var(--mud-palette-{Colour.ToString().ToLowerInvariant()});";
 }

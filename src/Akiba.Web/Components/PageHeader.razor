@@ -4,12 +4,14 @@
 
 <div class="akiba-page-header">
     <div>
-        <MudText Typo="Typo.h5" Class="mb-1">
+        <MudText Typo="Typo.h1" Class="mb-0">
             <h1 style="all: unset">@Title</h1>
         </MudText>
         @if (!string.IsNullOrWhiteSpace(Description))
         {
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">@Description</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary akiba-page-description">
+                @Description
+            </MudText>
         }
     </div>
 
