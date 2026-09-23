@@ -38,7 +38,7 @@
 
     @if (_members is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="10" Columns="5" />
     }
     else if (Filtered.Count == 0)
     {

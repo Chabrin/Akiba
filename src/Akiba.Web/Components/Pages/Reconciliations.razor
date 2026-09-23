@@ -82,7 +82,7 @@
 <MudPaper Elevation="1" Class="pa-2">
     @if (_summaries is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="8" Columns="4" />
     }
     else if (_summaries.Count == 0)
     {

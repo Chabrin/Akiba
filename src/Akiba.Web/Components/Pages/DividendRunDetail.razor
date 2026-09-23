@@ -1,12 +1,13 @@
 @page "/dividends/{Id:guid}"
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
 @inject IMediator Mediator
+@inject ICurrentUser CurrentUser
 
 <PageTitle>Akiba - Dividend run</PageTitle>
 
 @if (_run is null)
 {
-    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    <TableSkeleton Rows="6" Columns="3" />
 }
 else
 {
@@ -26,23 +27,36 @@ else
             @if (_run.Status == DividendRunStatus.Draft)
             {
                 <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
-                           StartIcon="@Icons.Material.Filled.FactCheck" OnClick="ReviewAsync">
+                           StartIcon="@Icons.Material.Filled.FactCheck"
+                           Disabled="_busy" OnClick="ReviewAsync">
                     Review (treasurer)
                 </MudButton>
             }
 
             @if (_run.Status == DividendRunStatus.Reviewed)
             {
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
-                           StartIcon="@Icons.Material.Filled.Gavel" OnClick="ApproveAsync">
-                    Approve (chairman)
-                </MudButton>
+                @* Two people, or it is not a control.
+
+                   DividendRun.Approve refuses an approval from whoever reviewed it, so this
+                   has never been possible - but a button that is offered, clicked and then
+                   refused teaches an official that the system is unpredictable. Saying so
+                   before the click, and saying who has to do it instead, is the difference
+                   between a rule and an error message. *@
+                <MudTooltip Text="@ApprovalObstacle" Disabled="@(ApprovalObstacle is null)">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="ml-2"
+                               StartIcon="@Icons.Material.Filled.Gavel"
+                               Disabled="@(_busy || ApprovalObstacle is not null)"
+                               OnClick="ApproveAsync">
+                        Approve (chairman)
+                    </MudButton>
+                </MudTooltip>
             }
 
             @if (_run.MayBePosted)
             {
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2"
-                           StartIcon="@Icons.Material.Filled.PostAdd" OnClick="PostAsync">
+                           StartIcon="@Icons.Material.Filled.PostAdd"
+                           Disabled="_busy" OnClick="PostAsync">
                     Post to the ledger
                 </MudButton>
             }
@@ -197,8 +211,47 @@ else
     private DividendRun? _run;
     private DividendBasisComparison? _comparison;
     private string? _error;
+    private bool _busy;
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    /// <summary>
+    /// Why the official looking at this run may not be the one to approve it, or null.
+    /// </summary>
+    /// <remarks>
+    /// This is the screen agreeing with the domain, not the screen deciding. If these two ever
+    /// disagree the domain wins and the command is refused, which is the right way round - this
+    /// only changes whether an official finds out before the click or after it.
+    /// </remarks>
+    private string? ApprovalObstacle
+    {
+        get
+        {
+            if (_run?.ReviewedBy is not { } reviewer)
+            {
+                return null;
+            }
+
+            // Nobody signed in at all is a development-only case, and there is nothing
+            // useful to say about it here.
+            Actor actor;
+
+            try
+            {
+                actor = CurrentUser.Actor;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+
+            return actor.UserId == reviewer.UserId
+                ? "You reviewed this run, so you cannot also approve it. "
+                  + "The review and the approval are two people on purpose - "
+                  + "somebody else has to approve it."
+                : null;
+        }
+    }
 
     private Task ReviewAsync() =>
         RunAsync(() => Mediator.Send(new ReviewDividendRunCommand(new DividendRunId(Id))));
@@ -226,6 +279,17 @@ else
 
     private async Task RunAsync(Func<Task> action)
     {
+        // Reviewing, approving and posting a dividend run are each one-way. A second click
+        // that lands while the first is still in flight would be a second attempt at the same
+        // transition - refused by the domain, but refused with an error an official did not
+        // earn and cannot interpret. Disabling the buttons is the visible half; this is the
+        // half that holds when the click arrives before the render does.
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
         _error = null;
 
         try
@@ -236,6 +300,10 @@ else
             or ArgumentException or FluentValidation.ValidationException)
         {
             _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
         }
 
         await LoadAsync();

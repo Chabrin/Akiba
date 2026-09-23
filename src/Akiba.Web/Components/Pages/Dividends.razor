@@ -76,13 +76,17 @@
 <MudPaper Elevation="1" Class="pa-2">
     @if (_runs is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="5" Columns="5" />
     }
     else if (_runs.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            No dividend has been computed yet.
-        </MudAlert>
+        <EmptyState Icon="@Icons.Material.Outlined.Savings"
+                    Title="No dividend computed yet"
+                    Description="A dividend is worked out once a year, after the November
+                                 deduction has been posted and the year has been closed.
+                                 Computing one does not pay anything out - it produces a
+                                 schedule for the treasurer to review and the chairman to
+                                 approve." />
     }
     else
     {

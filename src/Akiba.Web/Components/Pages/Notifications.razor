@@ -44,13 +44,15 @@
 <MudPaper Elevation="1" Class="pa-2">
     @if (_messages is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="8" Columns="5" />
     }
     else if (_messages.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            Nothing here.
-        </MudAlert>
+        <EmptyState Icon="@Icons.Material.Outlined.MarkEmailRead"
+                    Title="Nothing waiting"
+                    Description="Messages are queued when something happens that a member
+                                 should be told about, and leave on the next pass. An empty
+                                 queue means everything that was raised has gone." />
     }
     else
     {

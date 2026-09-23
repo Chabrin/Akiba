@@ -28,13 +28,15 @@
 
     @if (_applications is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="8" Columns="6" />
     }
     else if (_applications.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            No applications match that filter.
-        </MudAlert>
+        <EmptyState Icon="@Icons.Material.Outlined.Assignment"
+                    Title="No applications here"
+                    Description="Nothing matches that filter. An application arrives as a
+                                 paper form and is entered by the accounts clerk, so an empty
+                                 list usually means the forms have not been keyed in yet." />
     }
     else
     {

@@ -18,7 +18,7 @@
 <MudPaper Elevation="1" Class="pa-2 mt-2">
     @if (_receipts is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="8" Columns="6" />
     }
     else if (_receipts.Count == 0)
     {

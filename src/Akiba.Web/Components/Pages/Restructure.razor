@@ -8,7 +8,7 @@
 
 @if (_proposal is null)
 {
-    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    <TableSkeleton Rows="8" Columns="4" />
 }
 else
 {
@@ -141,6 +141,16 @@ else
 
     private async Task RestructureAsync()
     {
+        // The one on this screen that would do visible damage. A restructure settles the old
+        // loan and opens a replacement; running it twice would put two replacements on one
+        // member. The domain refuses the second because the original is no longer running by
+        // then, but "refused with an error" is a worse outcome than "not attempted", and the
+        // race is one click wide.
+        if (_busy)
+        {
+            return;
+        }
+
         _busy = true;
         _error = null;
 

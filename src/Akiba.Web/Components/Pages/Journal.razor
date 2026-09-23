@@ -30,13 +30,15 @@
 <MudPaper Elevation="1" Class="pa-2">
     @if (_entries is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <TableSkeleton Rows="10" Columns="5" />
     }
     else if (_entries.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            No entries in that period.
-        </MudAlert>
+        <EmptyState Icon="@Icons.Material.Outlined.MenuBook"
+                    Title="Nothing posted in that period"
+                    Description="Every figure in Akiba is summed from entries like these, so
+                                 an empty period means nothing has been recorded between those
+                                 dates - not that a page failed to load." />
     }
     else
     {

@@ -32,7 +32,8 @@
         </MudItem>
 
         <MudItem xs="12" sm="4" md="3" Class="d-flex align-end">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CheckAsync">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       Disabled="_busy" OnClick="CheckAsync">
                 Check
             </MudButton>
         </MudItem>
@@ -127,12 +128,35 @@
 
     private async Task CheckAsync()
     {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
         _error = null;
-        _preflight = await Mediator.Send(new GetPeriodClosePreflightQuery(_year, _month));
+
+        try
+        {
+            _preflight = await Mediator.Send(new GetPeriodClosePreflightQuery(_year, _month));
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task CloseAsync()
     {
+        // Closing a period writes the closing entries and locks everything before the date.
+        // The flag was already set here and the button already disabled, but neither stops a
+        // second click that lands in the gap between the click and the re-render - and that
+        // gap is exactly where an impatient double-click goes.
+        if (_busy)
+        {
+            return;
+        }
+
         _busy = true;
         _error = null;
 
