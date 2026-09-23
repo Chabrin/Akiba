@@ -18,8 +18,7 @@
 
     @if (Error is not null)
     {
-        <MudAlert Severity="@(Error == "signedout" ? Severity.Success : Severity.Error)"
-                  Dense="true" Class="mb-4">@ErrorMessage</MudAlert>
+        <MudAlert Severity="@Tone" Dense="true" Class="mb-4">@ErrorMessage</MudAlert>
     }
 
     @* A plain form post. Signing in sets a cookie, and a Blazor circuit cannot - the response
@@ -74,6 +73,27 @@
         "expired" =>
             "That page had been open too long to be used. This is a fresh one - try again.",
         "signedout" => "You are signed out.",
+
+        // Being cleared for being away is not a failure, and saying so in red teaches
+        // officials to read every red bar on this screen as somebody getting it wrong.
+        "timeout" =>
+            "This screen was left for a few minutes, so Akiba signed you out and cleared it. "
+            + "Anything you had already saved is saved.",
         _ => "That user name and password do not match.",
+    };
+
+    /// <summary>
+    /// Red means somebody got something wrong.
+    /// </summary>
+    /// <remarks>
+    /// Signing out and being cleared for being away are both the system working. Colouring
+    /// them like a failure teaches officials that the red bar on this screen means nothing,
+    /// and then the one that does mean something is not read either.
+    /// </remarks>
+    private Severity Tone => Error switch
+    {
+        "signedout" => Severity.Success,
+        "timeout" or "expired" => Severity.Info,
+        _ => Severity.Error,
     };
 }

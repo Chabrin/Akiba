@@ -170,7 +170,14 @@ public static class AuthenticationEndpoints
 
             await signInManager.SignOutAsync();
 
-            return Results.Redirect("/sign-in?error=signedout");
+            // The idle clock posts here too, so an official who comes back to a cleared screen
+            // is told why rather than left wondering whether they were logged out by a fault.
+            var timedOut = context.Request.HasFormContentType
+                && context.Request.Form["reason"] == "timeout";
+
+            return Results.Redirect(timedOut
+                ? "/sign-in?error=timeout"
+                : "/sign-in?error=signedout");
         });
 
         group.MapPost("/authenticator", async (

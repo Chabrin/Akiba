@@ -210,6 +210,24 @@ public sealed class SecurityTests : IClassFixture<AkibaApplication>
     }
 
     [Fact]
+    public async Task The_idle_timeout_goes_out_through_the_same_antiforgery_check()
+    {
+        // The idle clock signs out by submitting a form, not by calling a softer endpoint of
+        // its own. If somebody ever gives it one, this test says so: a post carrying the
+        // timeout reason and no token is refused exactly like any other.
+        using var client = _application.CreateStrictClient();
+
+        var content = new FormUrlEncodedContent([
+            new KeyValuePair<string, string>("reason", "timeout"),
+        ]);
+
+        var response = await client.PostAsync("/auth/sign-out", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Found);
+        response.Headers.Location!.OriginalString.Should().Be("/");
+    }
+
+    [Fact]
     public async Task The_sign_in_page_hands_out_an_antiforgery_token()
     {
         // The other half of the check above. If the form stopped emitting one, every sign-in

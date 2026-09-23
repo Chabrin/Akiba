@@ -81,8 +81,19 @@ public static class IdentityConfiguration
             options.LogoutPath = "/sign-out";
             options.AccessDeniedPath = "/not-permitted";
 
-            // A back-office screen left open on a desk is a risk. Thirty minutes idle, and the
-            // cookie does not outlive the browser session.
+            // This is the backstop, not the thing that clears a screen left on a desk. The idle
+            // clock in MainLayout does that, five minutes after the last keystroke or click,
+            // and it signs out through this same cookie. What is left here is the case the
+            // browser cannot report: somebody kills it, or the machine loses power, with a
+            // session still open.
+            //
+            // Worth knowing before shortening it. Sliding expiration slides on HTTP requests,
+            // and a Blazor circuit talks over a WebSocket that makes none. An official working
+            // without a full page load for longer than this keeps working - the circuit holds
+            // the principal it started with - but a reconnect or a refresh lands them back on
+            // the sign-in screen. Thirty minutes is long enough that they rarely meet it; five
+            // would put them there several times a morning, and the idle clock has already
+            // covered what shortening it would buy.
             options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
             options.SlidingExpiration = true;
             options.Cookie.HttpOnly = true;

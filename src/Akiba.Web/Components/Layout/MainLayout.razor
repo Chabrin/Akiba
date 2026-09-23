@@ -79,6 +79,14 @@
                                aria-label="Sign out" />
             </MudTooltip>
         </form>
+
+        @* Submitted by the idle clock. A separate form rather than a different route, so the
+           timeout signs out through the same endpoint and the same antiforgery check as the
+           button above it, and the only difference is what the sign-in screen then says. *@
+        <form method="post" action="/auth/sign-out" data-akiba-timed-out hidden>
+            <AntiforgeryToken />
+            <input type="hidden" name="reason" value="timeout" />
+        </form>
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always"
@@ -146,14 +154,52 @@
     </MudMainContent>
 </MudLayout>
 
+@* The idle warning.
+
+   An official who is genuinely reading gets it and clicks once. An official who has gone to
+   lunch does not, and the screen clears itself. The alternative - dropping them without notice
+   - is how people learn to keep a second browser open to avoid being dropped, which defeats
+   the whole point. *@
+<MudOverlay Visible="_warning" DarkBackground="true" ZIndex="2000">
+    <MudPaper Elevation="8" Class="pa-6" Style="max-width: 30rem;">
+        <div class="d-flex align-start gap-4">
+            <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Warning" Size="Size.Large" />
+
+            <div>
+                <MudText Typo="Typo.h4" Class="mb-2">Still there?</MudText>
+
+                <MudText Typo="Typo.body1" Class="mb-4">
+                    Nothing has been touched on this screen for a few minutes, so Akiba is about
+                    to sign you out and clear it.
+                    <b>Anything you have already saved is saved.</b>
+                </MudText>
+
+                <MudText Typo="Typo.h3" Class="akiba-figure mb-4"
+                         Color="@(_secondsLeft <= 10 ? Color.Error : Color.Warning)">
+                    @_secondsLeft s
+                </MudText>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Check"
+                           OnClick="StayAsync">
+                    I am still here
+                </MudButton>
+            </div>
+        </div>
+    </MudPaper>
+</MudOverlay>
+
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
     private bool _privacy;
     private string _actorName = "Not signed in";
     private ErrorBoundary? _errorBoundary;
-    private IJSObjectReference? _shortcuts;
+    private IJSObjectReference? _session;
     private DotNetObjectReference<MainLayout>? _self;
+    private bool _warning;
+    private int _secondsLeft;
+    private CancellationTokenSource? _countdown;
 
     protected override void OnInitialized()
     {
@@ -180,16 +226,72 @@
         {
             _self = DotNetObjectReference.Create(this);
 
-            _shortcuts = await JS.InvokeAsync<IJSObjectReference>(
-                "import", "./js/akiba-shortcuts.js");
+            _session = await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./js/akiba-session.js");
 
-            await _shortcuts.InvokeVoidAsync("register", _self);
+            await _session.InvokeVoidAsync("register", _self);
         }
         catch (JSException exception)
         {
-            // The shortcut is a convenience and the button beside it does the same thing. A
-            // browser that refuses the module should not take the panel with it.
-            Logger.LogWarning(exception, "The keyboard shortcut could not be registered.");
+            // The shortcut has a button beside it that does the same thing, and the session
+            // cookie expires on its own schedule whatever the browser does here. A module that
+            // will not load should not take the panel with it.
+            Logger.LogWarning(exception, "The session module could not be registered.");
+        }
+    }
+
+    /// <summary>
+    /// Called from the idle clock shortly before it signs the official out.
+    /// </summary>
+    [JSInvokable]
+    public async Task WarnSessionEndingAsync(int seconds)
+    {
+        _warning = true;
+        _secondsLeft = seconds;
+
+        await InvokeAsync(StateHasChanged);
+
+        // The browser owns the deadline; this only counts down beside it. If the two ever
+        // disagree the browser wins, which is the right way round - it is the one that can see
+        // whether anybody is at the desk.
+        _countdown?.Cancel();
+        _countdown = new CancellationTokenSource();
+
+        var token = _countdown.Token;
+
+        try
+        {
+            using var tick = new PeriodicTimer(TimeSpan.FromSeconds(1));
+
+            while (_secondsLeft > 0 && await tick.WaitForNextTickAsync(token))
+            {
+                _secondsLeft--;
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Answered, or the circuit went. Either way there is nothing left to count.
+        }
+    }
+
+    /// <summary>Dismisses the warning and starts the idle clock again.</summary>
+    private async Task StayAsync()
+    {
+        _countdown?.Cancel();
+        _warning = false;
+
+        if (_session is not null)
+        {
+            try
+            {
+                await _session.InvokeVoidAsync("staySignedIn");
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "The idle clock could not be restarted.");
+            }
         }
     }
 
@@ -241,12 +343,15 @@
 
     public async ValueTask DisposeAsync()
     {
-        if (_shortcuts is not null)
+        _countdown?.Cancel();
+        _countdown?.Dispose();
+
+        if (_session is not null)
         {
             try
             {
-                await _shortcuts.InvokeVoidAsync("unregister");
-                await _shortcuts.DisposeAsync();
+                await _session.InvokeVoidAsync("unregister");
+                await _session.DisposeAsync();
             }
             catch (JSDisconnectedException)
             {
