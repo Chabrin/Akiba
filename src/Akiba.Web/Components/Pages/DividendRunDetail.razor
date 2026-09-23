@@ -52,6 +52,18 @@ else
                 </MudTooltip>
             }
 
+            @* A run that has not been posted can still be taken back. After posting it is in
+               the ledger and the only correction is a reversal, so the button goes away
+               rather than doing something different. *@
+            @if (_run.Status != DividendRunStatus.Posted)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" Class="ml-2"
+                           StartIcon="@Icons.Material.Filled.Undo"
+                           Disabled="_busy" OnClick="@(() => _withdrawing = true)">
+                    Withdraw
+                </MudButton>
+            }
+
             @if (_run.MayBePosted)
             {
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-2"
@@ -205,6 +217,23 @@ else
     }
 }
 
+<WorkPanel @bind-Open="_withdrawing"
+           Title="Withdraw this dividend run"
+           Subtitle="@(_run is null ? null : $"{_run.Year} dividend")"
+           Consequence="The run is taken out of consideration and the reason is kept with it. Nothing is deleted - a withdrawn run stays visible, because the fact that one was computed and then dropped is itself part of the record."
+           ConfirmText="Withdraw it"
+           ConfirmIcon="@Icons.Material.Filled.Undo"
+           ConfirmColour="Color.Error"
+           CanConfirm="@(!string.IsNullOrWhiteSpace(_withdrawReason))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="WithdrawAsync">
+
+    <MudTextField @bind-Value="_withdrawReason" Label="Why is it being withdrawn" Lines="3"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  HelperText="The committee will be asked this at the AGM. Write the real reason." />
+</WorkPanel>
+
 @code {
     [Parameter] public Guid Id { get; set; }
 
@@ -212,6 +241,25 @@ else
     private DividendBasisComparison? _comparison;
     private string? _error;
     private bool _busy;
+    private bool _withdrawing;
+    private string _withdrawReason = string.Empty;
+
+    private async Task WithdrawAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_withdrawReason))
+        {
+            return;
+        }
+
+        await RunAsync(async () =>
+        {
+            await Mediator.Send(new WithdrawDividendRunCommand(
+                new DividendRunId(Id), _withdrawReason.Trim()));
+
+            _withdrawing = false;
+            _withdrawReason = string.Empty;
+        });
+    }
 
     protected override async Task OnParametersSetAsync() => await LoadAsync();
 

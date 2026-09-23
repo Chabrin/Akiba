@@ -5,7 +5,17 @@
 <PageTitle>Akiba - Applications</PageTitle>
 
 <PageHeader Title="Loan applications"
-            Description="Entered from the signed paper form. Approval is by the zone and office representatives, so an application collects several decisions rather than one." />
+            Description="Entered from the signed paper form. Approval is by the zone and office representatives, so an application collects several decisions rather than one.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Inbox"
+                   OnClick="@(() => _step = LoanApplicationPanels.Step.Receive)">
+            Receive an application
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+<LoanApplicationPanels @bind-Current="_step" Application="_working" OnChanged="ReloadAsync" />
 
 <MudPaper Elevation="1" Class="pa-2">
     <MudToolBar Dense="true" Class="akiba-no-print">
@@ -36,7 +46,13 @@
                     Title="No applications here"
                     Description="Nothing matches that filter. An application arrives as a
                                  paper form and is entered by the accounts clerk, so an empty
-                                 list usually means the forms have not been keyed in yet." />
+                                 list usually means the forms have not been keyed in yet.">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Inbox"
+                       OnClick="@(() => _step = LoanApplicationPanels.Step.Receive)">
+                Receive an application
+            </MudButton>
+        </EmptyState>
     }
     else
     {
@@ -51,6 +67,7 @@
                 <MudTh>Considered</MudTh>
                 <MudTh>Guarantors</MudTh>
                 <MudTh>Status</MudTh>
+                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Applicant">@context.BorrowerName</MudTd>
@@ -105,6 +122,40 @@
                         </MudText>
                     }
                 </MudTd>
+                <MudTd Class="akiba-no-print">
+                    @* The one action this application is ready for, and only that one. An
+                       application waiting on representatives cannot be disbursed, and showing
+                       the button anyway would be offering something that will be refused. *@
+                    <div class="akiba-row-actions">
+                        @switch (context.Status)
+                        {
+                            case LoanApplicationStatus.Draft:
+                            case LoanApplicationStatus.Submitted:
+                                <MudTooltip Text="Record a representative's decision">
+                                    <MudIconButton Icon="@Icons.Material.Filled.HowToVote"
+                                                   Size="Size.Small" Color="Color.Info"
+                                                   aria-label="Record a decision"
+                                                   OnClick="@(() => Start(context, LoanApplicationPanels.Step.Decide))" />
+                                </MudTooltip>
+                                <MudTooltip Text="Approve the application">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Gavel"
+                                                   Size="Size.Small" Color="Color.Primary"
+                                                   aria-label="Approve"
+                                                   OnClick="@(() => Start(context, LoanApplicationPanels.Step.Approve))" />
+                                </MudTooltip>
+                                break;
+
+                            case LoanApplicationStatus.Approved:
+                                <MudTooltip Text="Record the cheque and start the loan">
+                                    <MudIconButton Icon="@Icons.Material.Filled.RequestQuote"
+                                                   Size="Size.Small" Color="Color.Warning"
+                                                   aria-label="Disburse"
+                                                   OnClick="@(() => Start(context, LoanApplicationPanels.Step.Disburse))" />
+                                </MudTooltip>
+                                break;
+                        }
+                    </div>
+                </MudTd>
             </RowTemplate>
             <PagerContent>
                 <MudTablePager Class="akiba-no-print" />
@@ -116,6 +167,22 @@
 @code {
     private LoanApplicationStatus? _status;
     private IReadOnlyList<ApplicationSummary>? _applications;
+
+    private LoanApplicationPanels.Step _step = LoanApplicationPanels.Step.None;
+    private ApplicationSummary? _working;
+
+    private void Start(ApplicationSummary application, LoanApplicationPanels.Step step)
+    {
+        _working = application;
+        _step = step;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _applications = null;
+
+        await LoadAsync();
+    }
 
     protected override Task OnInitializedAsync() => LoadAsync();
 

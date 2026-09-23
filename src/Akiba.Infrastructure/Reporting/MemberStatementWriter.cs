@@ -25,7 +25,6 @@ namespace Akiba.Infrastructure.Reporting;
 /// </remarks>
 internal sealed class MemberStatementWriter : IMemberStatementWriter
 {
-    private const string Green = "#1b5e20";
     private const string Grey = "#666666";
 
     public GeneratedReport Write(MemberStatement statement)
@@ -53,6 +52,25 @@ internal sealed class MemberStatementWriter : IMemberStatementWriter
             document.GeneratePdf());
     }
 
+    /// <summary>
+    /// The masthead, deliberately quiet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A statement is handed over at a counter and then carried through an office, and it
+    /// spends most of that time face-up on somebody's desk. What a passer-by can read from two
+    /// metres is a design decision, so this is designed: nothing on the page is set large
+    /// enough to be read at a distance, the society's name included.
+    /// </para>
+    /// <para>
+    /// It still <b>says</b> which society issued it, and the committee should keep it that way.
+    /// A statement a member cannot attribute is a statement they cannot query, rely on, or
+    /// bring to a meeting - and a document designed so the society could deny issuing it
+    /// protects the society against the member rather than the member against anything. The
+    /// threat worth designing for is a page glanced at across a room, and that is answered by
+    /// type size, not by anonymity.
+    /// </para>
+    /// </remarks>
     private static void Header(IContainer container, MemberStatement statement) =>
         container.Column(column =>
         {
@@ -60,27 +78,30 @@ internal sealed class MemberStatementWriter : IMemberStatementWriter
             {
                 row.RelativeItem().Column(left =>
                 {
-                    left.Item().Text("AKIBA WELFARE SOCIETY")
-                        .FontSize(15).Bold().FontColor(Green);
-                    left.Item().Text("P.O. Box 16659-00620, Nairobi").FontSize(8).FontColor(Grey);
+                    // 9pt, grey, not a coloured masthead. Legible in the hand, and nothing at
+                    // the top of the page announces what the document is from across a desk.
+                    left.Item().Text("Akiba Welfare Society").FontSize(9).FontColor(Grey);
+                    left.Item().Text("P.O. Box 16659-00620, Nairobi").FontSize(7).FontColor(Grey);
                 });
 
                 row.ConstantItem(180).AlignRight().Column(right =>
                 {
-                    right.Item().AlignRight().Text("MEMBER STATEMENT").FontSize(11).Bold();
+                    right.Item().AlignRight().Text("Member statement").FontSize(9).FontColor(Grey);
                     right.Item().AlignRight()
                         .Text($"As at {statement.AsAt.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}")
-                        .FontSize(9);
+                        .FontSize(8).FontColor(Grey);
                 });
             });
 
-            column.Item().PaddingTop(8).LineHorizontal(1).LineColor(Green);
+            column.Item().PaddingTop(6).LineHorizontal(0.5f).LineColor("#DDDDDD");
 
             column.Item().PaddingTop(10).Row(row =>
             {
                 row.RelativeItem().Column(left =>
                 {
-                    left.Item().Text(statement.MemberName).FontSize(12).Bold();
+                    // The member's own name is the one thing on the page that identifies a
+                    // person, so it is the last thing that should be set large.
+                    left.Item().Text(statement.MemberName).FontSize(10).SemiBold();
                     left.Item().Text($"Membership number {statement.MembershipNumber}")
                         .FontSize(8).FontColor(Grey);
                 });
@@ -136,13 +157,17 @@ internal sealed class MemberStatementWriter : IMemberStatementWriter
             .Column(column =>
             {
                 column.Item().Text(label.ToUpperInvariant()).FontSize(7).FontColor(Grey);
-                column.Item().PaddingTop(2).Text(value).FontSize(12).Bold();
+
+                // 10pt rather than 12. Still the largest thing on the page, because a member
+                // reading their own statement should find their position first - but no longer
+                // large enough to be read over a shoulder.
+                column.Item().PaddingTop(2).Text(value).FontSize(10).SemiBold();
             });
 
     private static void LoansTable(IContainer container, MemberStatement statement) =>
         container.Column(column =>
         {
-            column.Item().PaddingBottom(4).Text("Loans").FontSize(11).Bold().FontColor(Green);
+            column.Item().PaddingBottom(4).Text("Loans").FontSize(9).SemiBold().FontColor(Grey);
 
             column.Item().Table(table =>
             {
@@ -186,7 +211,7 @@ internal sealed class MemberStatementWriter : IMemberStatementWriter
     private static void SharesTable(IContainer container, MemberStatement statement) =>
         container.Column(column =>
         {
-            column.Item().PaddingBottom(4).Text("Share account").FontSize(11).Bold().FontColor(Green);
+            column.Item().PaddingBottom(4).Text("Share account").FontSize(9).SemiBold().FontColor(Grey);
 
             if (statement.ShareMovements.Count == 0)
             {
@@ -229,9 +254,11 @@ internal sealed class MemberStatementWriter : IMemberStatementWriter
 
     private static void HeaderCell(IContainer container, string text, bool right = false)
     {
+        // Grey rather than the society's green. A block of colour is what the eye finds on a
+        // page it is not reading, and a statement should not advertise itself across a desk.
         var cell = container
-            .Background("#E8F0E8")
-            .BorderBottom(1).BorderColor(Green)
+            .Background("#F2F2F2")
+            .BorderBottom(0.5f).BorderColor("#CCCCCC")
             .PaddingVertical(4).PaddingHorizontal(3);
 
         (right ? cell.AlignRight() : cell).Text(text).FontSize(8).Bold();

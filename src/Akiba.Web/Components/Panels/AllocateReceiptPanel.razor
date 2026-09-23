@@ -1,0 +1,249 @@
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Deciding what a receipt was for.
+
+    Akiba never guesses this. A deposit of 5,000 from somebody called Njeri could be a share
+    contribution, a loan instalment, or a top-up, and the difference changes what the member
+    owes and what they own. A clerk decides each one, and the decision is a ledger entry with
+    their name on it.
+
+    A receipt can be split. The panel takes one allocation at a time and shows what is left, so
+    a payment covering an instalment and a top-up is two decisions rather than one guess.
+*@
+
+<WorkPanel Open="Open"
+           OpenChanged="OpenChanged"
+           Title="Allocate a receipt"
+           Subtitle="@Subtitle"
+           Consequence="This posts to the ledger. The entry records you as the clerk who decided it, and a mistake is corrected by a reversal rather than by editing."
+           ConfirmText="Allocate"
+           ConfirmIcon="@Icons.Material.Filled.CallSplit"
+           CanConfirm="IsComplete"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SaveAsync"
+           OnCancel="Reset">
+
+    @if (Receipt is not null)
+    {
+        <MudPaper Elevation="0" Class="pa-3 mb-4"
+                  Style="border: 1px solid var(--mud-palette-lines-default);">
+            <div class="d-flex justify-space-between">
+                <MudText Typo="Typo.body2">On the slip</MudText>
+                <MudText Typo="Typo.body2">@(Receipt.PayerNameOnSlip ?? "—")</MudText>
+            </div>
+            <div class="d-flex justify-space-between">
+                <MudText Typo="Typo.body2">Receipt</MudText>
+                <MudText Typo="Typo.body2" Class="akiba-money">
+                    <MoneyText Amount="Receipt.Amount" />
+                </MudText>
+            </div>
+            <div class="d-flex justify-space-between">
+                <MudText Typo="Typo.body2"><b>Still to allocate</b></MudText>
+                <MudText Typo="Typo.body2" Class="akiba-money">
+                    <b><MoneyText Amount="Receipt.Unallocated" /></b>
+                </MudText>
+            </div>
+        </MudPaper>
+
+        <div class="akiba-field-group">
+            <span class="akiba-field-group-label">What it was for</span>
+
+            <MudSelect T="AllocationTarget" @bind-Value="_target" Label="Apply to"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Class="mb-3">
+                <MudSelectItem T="AllocationTarget" Value="AllocationTarget.Shares">
+                    Monthly share contribution
+                </MudSelectItem>
+                <MudSelectItem T="AllocationTarget" Value="AllocationTarget.LoanInstalment">
+                    A loan instalment
+                </MudSelectItem>
+                <MudSelectItem T="AllocationTarget" Value="AllocationTarget.ShareTopUp">
+                    A share top-up, over and above the monthly amount
+                </MudSelectItem>
+                <MudSelectItem T="AllocationTarget" Value="AllocationTarget.OverpaymentToShares">
+                    An overpayment, kept as shares
+                </MudSelectItem>
+                <MudSelectItem T="AllocationTarget" Value="AllocationTarget.OverpaymentRefund">
+                    An overpayment, refunded to the member
+                </MudSelectItem>
+            </MudSelect>
+
+            @if (_target == AllocationTarget.LoanInstalment)
+            {
+                <MudSelect T="Guid?" @bind-Value="_targetId" Label="Which loan"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                    @foreach (var loan in _loans)
+                    {
+                        <MudSelectItem T="Guid?" Value="@loan.LoanId.Value">
+                            @loan.LoanNumber — @loan.BorrowerName (@loan.OutstandingBalance outstanding)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_loans.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        No loans are running, so there is no instalment to apply this to.
+                    </MudText>
+                }
+            }
+            else
+            {
+                <MudSelect T="Guid?" @bind-Value="_targetId" Label="Which member"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                    @foreach (var member in _members)
+                    {
+                        <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
+                            @member.MembershipNumber — @member.Name
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </div>
+
+        <div class="akiba-field-group">
+            <span class="akiba-field-group-label">How much of it</span>
+
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal" @bind-Value="_amount" Label="Amount (KES)"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Min="0" Max="@Receipt.Unallocated.Amount"
+                                     Format="N2" HideSpinButtons="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_entryDate" Label="Entry date"
+                                   DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   HelperText="The date this belongs to in the books" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_amount > 0 && _amount < Receipt.Unallocated.Amount)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @((Receipt.Unallocated.Amount - _amount).ToString("N2", CultureInfo.InvariantCulture))
+                    will still be unallocated after this, and the receipt stays on the list.
+                </MudText>
+            }
+        </div>
+    }
+</WorkPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>The receipt being split up.</summary>
+    [Parameter] public ReceiptSummary? Receipt { get; set; }
+
+    [Parameter] public EventCallback OnAllocated { get; set; }
+
+    private IReadOnlyList<MemberSummary> _members = [];
+    private IReadOnlyList<LoanSummary> _loans = [];
+
+    private AllocationTarget _target = AllocationTarget.Shares;
+    private Guid? _targetId;
+    private decimal _amount;
+    private DateTime? _entryDate;
+
+    private bool _busy;
+    private bool _loaded;
+    private string? _error;
+
+    private string? Subtitle => Receipt is null
+        ? null
+        : $"{Receipt.Reference}, received {Receipt.ReceivedOn:d MMM yyyy}";
+
+    private bool IsComplete =>
+        Receipt is not null
+        && _targetId is { } id
+        && id != Guid.Empty
+        && _amount > 0
+        && _amount <= Receipt.Unallocated.Amount
+        && _entryDate is not null;
+
+    /// <summary>
+    /// Loads the lists the form needs, the first time the panel is opened.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not in OnInitializedAsync. A panel is part of the page it sits on, so its
+    /// initialisation runs alongside the page's own - and both would be querying the same
+    /// scoped DbContext at the same moment, which EF refuses outright. Waiting until the panel
+    /// is actually opened also means a clerk who never opens it never pays for the query.
+    /// </remarks>
+    protected override async Task OnParametersSetAsync()
+    {
+        var today = Clock.TodayInNairobi;
+
+        _entryDate ??= today.ToDateTime(TimeOnly.MinValue);
+
+        if (!Open)
+        {
+            return;
+        }
+
+        // The whole of what is left is the commonest answer by a wide margin, so it is offered
+        // rather than typed. A split is the exception and the clerk overtypes it.
+        if (_amount == 0 && Receipt is not null)
+        {
+            _amount = Receipt.Unallocated.Amount;
+        }
+
+        if (_loaded)
+        {
+            return;
+        }
+
+        _loaded = true;
+        _members = await Mediator.Send(new ListMembersQuery(today, false));
+        _loans = await Mediator.Send(new GetLoanPortfolioQuery(today));
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy || !IsComplete || Receipt is null || _entryDate is not { } entryDate)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new AllocateReceiptCommand(
+                Receipt.ReceiptId,
+                _target,
+                _targetId!.Value,
+                Money.Kes(_amount),
+                DateOnly.FromDateTime(entryDate)));
+
+            Reset();
+
+            await OpenChanged.InvokeAsync(false);
+            await OnAllocated.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _target = AllocationTarget.Shares;
+        _targetId = null;
+        _amount = 0;
+        _error = null;
+        _entryDate = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+    }
+}

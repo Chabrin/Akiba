@@ -1,0 +1,136 @@
+@*
+    Where work gets done.
+
+    Every form in Akiba opens in a panel down the right-hand edge rather than a box in the
+    middle of the screen, and that is not a style choice.
+
+    An official filling one of these has a paper form on the desk and a list on the screen, and
+    is copying between the two. A centred dialog covers the list - so the register they were
+    checking against, the member they were looking at, the receipt they were matching, all
+    disappear behind the thing that needs them. A panel down the side leaves the list where it
+    was. They can read a row and type it, without closing anything.
+
+    It also means every form in the application is in the same place, opens the same way and
+    closes the same way, so the second one an official meets needs no learning at all.
+*@
+
+<MudOverlay Visible="Open" DarkBackground="true" ZIndex="1400"
+            AutoClose="false" OnClick="CancelAsync" />
+
+<div class="akiba-panel @(Open ? "akiba-panel-open" : null)"
+     role="dialog" aria-modal="true" aria-label="@Title">
+    @if (Open)
+    {
+        <header class="akiba-panel-head">
+            <div class="min-width-0">
+                <MudText Typo="Typo.h4">@Title</MudText>
+
+                @if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@Subtitle</MudText>
+                }
+            </div>
+
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                           aria-label="Close" Disabled="Busy" OnClick="CancelAsync" />
+        </header>
+
+        <div class="akiba-panel-body">
+            @* The explanation of what this action will actually do, where there is one worth
+               making. Most of these write to the ledger and cannot be undone by clicking
+               again, so the screen says so before the button is pressed rather than after. *@
+            @if (!string.IsNullOrWhiteSpace(Consequence))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">@Consequence</MudAlert>
+            }
+
+            @ChildContent
+
+            @if (!string.IsNullOrWhiteSpace(Error))
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-4">@Error</MudAlert>
+            }
+        </div>
+
+        <footer class="akiba-panel-foot">
+            <MudButton Variant="Variant.Text" Disabled="Busy" OnClick="CancelAsync">
+                Cancel
+            </MudButton>
+
+            <MudSpacer />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="@ConfirmColour"
+                       StartIcon="@ConfirmIcon"
+                       Disabled="@(Busy || !CanConfirm)"
+                       OnClick="ConfirmAsync">
+                @if (Busy)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                @ConfirmText
+            </MudButton>
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>What pressing the button will do, where that is worth saying in advance.</summary>
+    [Parameter] public string? Consequence { get; set; }
+
+    [Parameter] public string ConfirmText { get; set; } = "Save";
+
+    [Parameter] public string? ConfirmIcon { get; set; } = Icons.Material.Filled.Check;
+
+    [Parameter] public Color ConfirmColour { get; set; } = Color.Primary;
+
+    /// <summary>False while the form is incomplete, so the button says so before it is pressed.</summary>
+    [Parameter] public bool CanConfirm { get; set; } = true;
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string? Error { get; set; }
+
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task ConfirmAsync()
+    {
+        if (Busy || !CanConfirm)
+        {
+            return;
+        }
+
+        await OnConfirm.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Closing is refused while the command is in flight.
+    /// </summary>
+    /// <remarks>
+    /// Half of these write to the ledger. Letting somebody close the panel mid-save would leave
+    /// them with no idea whether it went through, which is the one thing an accounts system
+    /// must never do to the person using it.
+    /// </remarks>
+    private async Task CancelAsync()
+    {
+        if (Busy)
+        {
+            return;
+        }
+
+        await OnCancel.InvokeAsync();
+        await OpenChanged.InvokeAsync(false);
+    }
+}

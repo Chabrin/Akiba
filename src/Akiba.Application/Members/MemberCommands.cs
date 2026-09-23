@@ -247,6 +247,6 @@ internal sealed class RecordMemberExitHandler
             member.Name.Full,
             review.FundsMayBeReleased,
             [.. review.LoansNeedingReplacement.Select(loan => loan.LoanNumber)],
-            review.ClerkTask);
+            $"{review.Departure} {review.ClerkTask}");
     }
 }

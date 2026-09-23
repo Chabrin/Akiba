@@ -1,0 +1,405 @@
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    The four things that happen to a loan application, in the order they happen.
+
+    Received - a form arrives at the counter and is keyed in.
+    Decided  - each zone representative records approve or reject, with a comment.
+    Approved - the committee's decision is made, and the terms fall out of the product.
+    Disbursed - a cheque is written, and the loan starts.
+
+    One component holds all four because they are one workflow and an official moving through
+    it should not be learning a new screen at each step. Which panel is open is decided by the
+    row action they pressed, and every one of them is the same shape.
+*@
+
+@* ---------------------------------------------------------------- Received *@
+<WorkPanel Open="@(_step == Step.Receive)"
+           OpenChanged="@(open => Close(open))"
+           Title="Receive an application"
+           Subtitle="From the form handed in at the counter"
+           Consequence="@CutoffWarning"
+           ConfirmText="Record it"
+           ConfirmIcon="@Icons.Material.Filled.Inbox"
+           CanConfirm="@(_borrowerId is not null && _principal > 0)"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ReceiveAsync">
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Who is asking</span>
+
+        <MudSelect T="Guid?" @bind-Value="_borrowerId" Label="Member"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+            @foreach (var member in _members)
+            {
+                <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
+                    @member.MembershipNumber — @member.Name
+                    (limit <MoneyText Amount="member.BorrowingLimit" />)
+                </MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">What they are asking for</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudSelect T="LoanProduct" @bind-Value="_product" Label="Product"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                    <MudSelectItem T="LoanProduct" Value="LoanProduct.Normal">
+                        Normal — flat 10%, term from the graduated scale
+                    </MudSelectItem>
+                    <MudSelectItem T="LoanProduct" Value="LoanProduct.Emergency">
+                        Emergency — up to KES 25,000 over 5 months
+                    </MudSelectItem>
+                    <MudSelectItem T="LoanProduct" Value="LoanProduct.Client">
+                        Client — non-member, 3% a month, up to 5 months
+                    </MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal" @bind-Value="_principal" Label="Amount requested (KES)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Format="N2" HideSpinButtons="true" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_receivedOn" Label="Form received on"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                @* The scale gives a maximum, not the term. The form asks the applicant what
+                   they want and a shorter request is theirs to make. *@
+                <MudNumericField T="int?" @bind-Value="_termMonths" Label="Term asked for (months)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="1" Max="24" HideSpinButtons="true"
+                                 HelperText="Leave blank for the scale maximum" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal?" @bind-Value="_grossSalary" Label="Gross salary declared"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Format="N2" HideSpinButtons="true"
+                                 HelperText="For the two-thirds rule" />
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@* ---------------------------------------------------------------- Decision *@
+<WorkPanel Open="@(_step == Step.Decide)"
+           OpenChanged="@(open => Close(open))"
+           Title="Record a representative's decision"
+           Subtitle="@Application?.BorrowerName"
+           Consequence="One representative's view, not the committee's. The application moves when enough of them have recorded one."
+           ConfirmText="Record the decision"
+           ConfirmIcon="@Icons.Material.Filled.HowToVote"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="DecideAsync">
+
+    <MudRadioGroup T="ApprovalDecisionKind" @bind-Value="_decision" Class="mb-4">
+        <MudRadio T="ApprovalDecisionKind" Value="ApprovalDecisionKind.Approve"
+                  Color="Color.Primary" Dense="true">
+            Approve
+        </MudRadio>
+        <MudRadio T="ApprovalDecisionKind" Value="ApprovalDecisionKind.Reject"
+                  Color="Color.Error" Dense="true">
+            Reject
+        </MudRadio>
+    </MudRadioGroup>
+
+    @* Optional on an approval, and worth pressing for on a rejection - a member who is refused
+       will ask why, and "the committee decided" is not an answer anybody can act on. *@
+    <MudTextField @bind-Value="_comment" Label="Comment" Lines="3"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  HelperText="@(_decision == ApprovalDecisionKind.Reject
+                      ? "The member will be told this. Say what would change the answer."
+                      : "Optional")" />
+</WorkPanel>
+
+@* ---------------------------------------------------------------- Approved *@
+<WorkPanel Open="@(_step == Step.Approve)"
+           OpenChanged="@(open => Close(open))"
+           Title="Approve the application"
+           Subtitle="@Application?.BorrowerName"
+           Consequence="The terms are worked out from the product and the amount. Nothing is paid out by this - the cheque is a separate step."
+           ConfirmText="Approve"
+           ConfirmIcon="@Icons.Material.Filled.Gavel"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ApproveAsync">
+
+    @if (Application is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            Asked for <MoneyText Amount="Application.RequestedPrincipal" />.
+        </MudText>
+
+        @* The committee routinely approves less than was asked for, so this is a field rather
+           than a confirmation. Blank means "the full amount", which is the commoner case. *@
+        <MudNumericField T="decimal?" @bind-Value="_approvedPrincipal"
+                         Label="Approved amount (KES)"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Min="0" Format="N2" HideSpinButtons="true"
+                         HelperText="Leave blank to approve the full amount asked for" />
+    }
+</WorkPanel>
+
+@* -------------------------------------------------------------- Disbursed *@
+<WorkPanel Open="@(_step == Step.Disburse)"
+           OpenChanged="@(open => Close(open))"
+           Title="Record the cheque"
+           Subtitle="@Application?.BorrowerName"
+           Consequence="This starts the loan. It posts to the ledger, the repayment schedule begins, and it cannot be undone by clicking again - a mistake is corrected by a reversal."
+           ConfirmText="Disburse"
+           ConfirmIcon="@Icons.Material.Filled.RequestQuote"
+           CanConfirm="@(!string.IsNullOrWhiteSpace(_loanNumber)
+                         && !string.IsNullOrWhiteSpace(_chequeNumber)
+                         && !string.IsNullOrWhiteSpace(_voucher))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="DisburseAsync">
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_loanNumber" Label="Loan number" Required="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudDatePicker @bind-Date="_disbursedOn" Label="Cheque written on"
+                           DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_chequeNumber" Label="Cheque number" Required="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_voucher" Label="Voucher reference" Required="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12">
+            @* Who signed the cheque. Recorded because a payment out of the society's account
+               is the one thing an auditor will always ask to see two names against. *@
+            <MudTextField @bind-Value="_signatories" Label="Signatories"
+                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                          HelperText="Who signed the cheque, separated by commas" />
+        </MudItem>
+    </MudGrid>
+</WorkPanel>
+
+@code {
+    /// <summary>Which of the four panels is showing, if any.</summary>
+    public enum Step
+    {
+        None,
+        Receive,
+        Decide,
+        Approve,
+        Disburse,
+    }
+
+    [Parameter] public Step Current { get; set; }
+
+    [Parameter] public EventCallback<Step> CurrentChanged { get; set; }
+
+    /// <summary>The application being acted on. Null when receiving a new one.</summary>
+    [Parameter] public ApplicationSummary? Application { get; set; }
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private Step _step => Current;
+
+    private IReadOnlyList<MemberSummary> _members = [];
+
+    private Guid? _borrowerId;
+    private LoanProduct _product = LoanProduct.Normal;
+    private decimal _principal;
+    private DateTime? _receivedOn;
+    private int? _termMonths;
+    private decimal? _grossSalary;
+
+    private ApprovalDecisionKind _decision = ApprovalDecisionKind.Approve;
+    private string? _comment;
+
+    private decimal? _approvedPrincipal;
+
+    private string _loanNumber = string.Empty;
+    private string _chequeNumber = string.Empty;
+    private string _voucher = string.Empty;
+    private string? _signatories;
+    private DateTime? _disbursedOn;
+
+    private bool _busy;
+    private bool _loaded;
+    private string? _error;
+
+    /// <summary>
+    /// The 15th-of-the-month rule, said before the form is filled rather than after.
+    /// </summary>
+    /// <remarks>
+    /// A form received after the 15th waits for the next cycle. An official keying one in on
+    /// the 20th should know that the member will not be considered this month, because the
+    /// member is going to ask them.
+    /// </remarks>
+    private string CutoffWarning
+    {
+        get
+        {
+            var on = _receivedOn is { } date
+                ? DateOnly.FromDateTime(date)
+                : Clock.TodayInNairobi;
+
+            return on.Day > 15
+                ? $"Received on the {on.Day}th, so this waits for the next cycle rather than "
+                  + "this month's - forms after the 15th are considered the following month."
+                : "Nothing is committed by this. The application is recorded and waits for the "
+                  + "representatives to consider it.";
+        }
+    }
+
+    /// <summary>
+    /// Loads the lists the form needs, the first time the panel is opened.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not in OnInitializedAsync. A panel is part of the page it sits on, so its
+    /// initialisation runs alongside the page's own - and both would be querying the same
+    /// scoped DbContext at the same moment, which EF refuses outright. Waiting until the panel
+    /// is actually opened also means a clerk who never opens it never pays for the query.
+    /// </remarks>
+    protected override async Task OnParametersSetAsync()
+    {
+        var today = Clock.TodayInNairobi;
+
+        _receivedOn ??= today.ToDateTime(TimeOnly.MinValue);
+        _disbursedOn ??= today.ToDateTime(TimeOnly.MinValue);
+
+        // Only the receiving form needs the member list; the other three act on an
+        // application that already names its borrower.
+        if (Current != Step.Receive || _loaded)
+        {
+            return;
+        }
+
+        _loaded = true;
+        _members = await Mediator.Send(new ListMembersQuery(today, false));
+    }
+
+    private async Task ReceiveAsync() => await RunAsync(async () =>
+    {
+        await Mediator.Send(new ReceiveLoanApplicationCommand(
+            new BorrowerId(_borrowerId!.Value),
+            _product,
+            Money.Kes(_principal),
+            DateOnly.FromDateTime(_receivedOn!.Value),
+            _grossSalary is { } salary ? Money.Kes(salary) : null,
+            _termMonths));
+    });
+
+    private async Task DecideAsync() => await RunAsync(async () =>
+    {
+        await Mediator.Send(new RecordApprovalDecisionCommand(
+            Application!.ApplicationId,
+            _decision,
+            string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim()));
+    });
+
+    private async Task ApproveAsync() => await RunAsync(async () =>
+    {
+        await Mediator.Send(new ApproveLoanApplicationCommand(
+            Application!.ApplicationId,
+            _approvedPrincipal is { } approved ? Money.Kes(approved) : null));
+    });
+
+    private async Task DisburseAsync() => await RunAsync(async () =>
+    {
+        var signatories = (_signatories ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        await Mediator.Send(new DisburseLoanCommand(
+            Application!.ApplicationId,
+            _loanNumber.Trim(),
+            DateOnly.FromDateTime(_disbursedOn!.Value),
+            _chequeNumber.Trim(),
+            _voucher.Trim(),
+            signatories));
+    });
+
+    /// <summary>
+    /// Runs one of the four, and handles the three things they all need.
+    /// </summary>
+    /// <remarks>
+    /// Guarded against re-entry, because every one of these is a state transition and the
+    /// second attempt would be refused with an error the official did not earn.
+    /// </remarks>
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await action();
+
+            Reset();
+
+            await CurrentChanged.InvokeAsync(Step.None);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task Close(bool open)
+    {
+        if (open)
+        {
+            return;
+        }
+
+        Reset();
+
+        await CurrentChanged.InvokeAsync(Step.None);
+    }
+
+    private void Reset()
+    {
+        _borrowerId = null;
+        _product = LoanProduct.Normal;
+        _principal = 0;
+        _termMonths = null;
+        _grossSalary = null;
+        _decision = ApprovalDecisionKind.Approve;
+        _comment = null;
+        _approvedPrincipal = null;
+        _loanNumber = string.Empty;
+        _chequeNumber = string.Empty;
+        _voucher = string.Empty;
+        _signatories = null;
+        _error = null;
+
+        var today = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+
+        _receivedOn = today;
+        _disbursedOn = today;
+    }
+}

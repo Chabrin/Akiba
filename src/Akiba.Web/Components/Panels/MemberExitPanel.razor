@@ -1,0 +1,162 @@
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Recording that a member has left CAL.
+
+    This is not a delete and it is not a tick box. A member who leaves is still in the register,
+    still has a shareholding, and may still be guaranteeing somebody else's loan - and that last
+    one is why this screen exists rather than a switch on the members list.
+
+    The outcome is shown afterwards rather than assumed, because what an exit means depends
+    entirely on what the member was carrying when they left. Sometimes their money can be paid
+    out the same day. Sometimes three other members have to find a new guarantor first, and
+    nobody finds that out unless something tells them.
+*@
+
+<WorkPanel Open="Open"
+           OpenChanged="OpenChanged"
+           Title="@(_outcome is null ? "Record that a member has left" : "What this exit means")"
+           Subtitle="@Member?.Name"
+           Consequence="@(_outcome is null
+                ? "The member stays in the register with their shareholding intact. Nothing is deleted and nothing is paid out by this."
+                : null)"
+           ConfirmText="@(_outcome is null ? "Record the exit" : "Done")"
+           ConfirmIcon="@(_outcome is null ? Icons.Material.Filled.Logout : Icons.Material.Filled.Check)"
+           ConfirmColour="@(_outcome is null ? Color.Warning : Color.Primary)"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ConfirmAsync"
+           OnCancel="Reset">
+
+    @if (_outcome is null)
+    {
+        <MudDatePicker @bind-Date="_exitedOn" Label="Last day at CAL"
+                       DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Class="mb-4"
+                       HelperText="As HR has it, not the day the office was told" />
+
+        @if (Member is not null)
+        {
+            <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-lines-default);">
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">What they hold today</MudText>
+
+                <div class="d-flex justify-space-between mt-2">
+                    <MudText Typo="Typo.body2">Shareholding</MudText>
+                    <MudText Typo="Typo.body2" Class="akiba-money">
+                        <MoneyText Amount="Member.Shareholding" />
+                    </MudText>
+                </div>
+
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">Loans running</MudText>
+                    <MudText Typo="Typo.body2" Class="akiba-money">@Member.RunningLoans</MudText>
+                </div>
+            </MudPaper>
+        }
+    }
+    else
+    {
+        @* The answer, in the order it matters: can their money go, and who else is affected. *@
+        <MudAlert Severity="@(_outcome.FundsMayBeReleased ? Severity.Success : Severity.Warning)"
+                  Class="mb-4">
+            @* The clerk task is one self-contained sentence, written so it can be copied
+               straight into the book. Repeating half of it as a heading above would be the
+               screen talking to itself. *@
+            <MudText Typo="Typo.body2">@_outcome.ClerkTask</MudText>
+        </MudAlert>
+
+        @if (_outcome.LoansNeedingReplacementGuarantor.Count > 0)
+        {
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                Loans that now need another guarantor
+            </MudText>
+
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                This member was covering these, and the balance on each is more than the
+                borrower's own shares. Those borrowers have to find a replacement.
+            </MudText>
+
+            <MudList T="string" Dense="true">
+                @foreach (var loan in _outcome.LoansNeedingReplacementGuarantor)
+                {
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.PriorityHigh"
+                                 IconColor="Color.Warning">
+                        @loan
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    }
+</WorkPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Who is leaving.</summary>
+    [Parameter] public MemberSummary? Member { get; set; }
+
+    /// <summary>Raised once the exit is recorded, so the list behind can reload.</summary>
+    [Parameter] public EventCallback OnRecorded { get; set; }
+
+    private DateTime? _exitedOn;
+    private MemberExitOutcome? _outcome;
+    private bool _busy;
+    private string? _error;
+
+    protected override void OnParametersSet() =>
+        _exitedOn ??= Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+
+    /// <summary>
+    /// Records the exit, or closes the panel once its consequences have been read.
+    /// </summary>
+    /// <remarks>
+    /// Two steps on one button on purpose. The outcome is the point of the whole action, and
+    /// closing the panel automatically would put it on screen for as long as it took the list
+    /// to reload - which is to say, not long enough to read.
+    /// </remarks>
+    private async Task ConfirmAsync()
+    {
+        if (_outcome is not null)
+        {
+            Reset();
+
+            await OpenChanged.InvokeAsync(false);
+            await OnRecorded.InvokeAsync();
+
+            return;
+        }
+
+        if (_busy || Member is null || _exitedOn is not { } exitedOn)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _outcome = await Mediator.Send(new RecordMemberExitCommand(
+                Member.MemberId, DateOnly.FromDateTime(exitedOn)));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _outcome = null;
+        _error = null;
+        _exitedOn = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+    }
+}

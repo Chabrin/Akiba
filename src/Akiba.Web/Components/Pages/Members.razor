@@ -10,8 +10,17 @@
             Description="Shareholding and borrowing limit, derived from each member's share account.">
     <Actions>
         <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="ml-3"
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="@(() => _enrolling = true)">
+            Enrol a member
+        </MudButton>
     </Actions>
 </PageHeader>
+
+<EnrolMemberPanel @bind-Open="_enrolling" OnEnrolled="ReloadAsync" />
+<MemberExitPanel @bind-Open="_exiting" Member="_exitingMember" OnRecorded="ReloadAsync" />
 
 <MudPaper Elevation="1" Class="pa-2">
     <MudToolBar Dense="true" Class="akiba-no-print">
@@ -42,20 +51,20 @@
     }
     else if (Filtered.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
+        <EmptyState Icon="@Icons.Material.Outlined.Groups"
+                    Title="@(_members.Count == 0 ? "No members yet" : "No member matches that")"
+                    Description="@(_members.Count == 0
+                        ? "A member is enrolled by the accounts clerk from their letter to the chairman, and becomes a member proper at their first share contribution."
+                        : "Nothing in the register matches that search. Try a membership number, or part of a surname.")">
             @if (_members.Count == 0)
             {
-                <text>
-                    No members yet. A member is enrolled by the accounts clerk from their letter
-                    to the chairman, and becomes a member proper at their first share
-                    contribution.
-                </text>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                           OnClick="@(() => _enrolling = true)">
+                    Enrol the first member
+                </MudButton>
             }
-            else
-            {
-                <text>No member matches that search.</text>
-            }
-        </MudAlert>
+        </EmptyState>
     }
     else
     {
@@ -117,10 +126,32 @@
                     }
                 </MudTd>
                 <MudTd Class="akiba-no-print">
-                    <MudIconButton Icon="@Icons.Material.Filled.Description"
-                                   Size="Size.Small"
-                                   aria-label="@($"Statement for {context.Name}")"
-                                   OnClick="@(() => OpenStatement(context))" />
+                    @* Hidden until the pointer is on the row, so a register of two hundred
+                       members reads as figures rather than as four hundred buttons - but
+                       always present for the keyboard, which is how the office works. *@
+                    @* The row itself opens the member's statement, so a click that lands on
+                       one of these must not also do that. Reading a statement and recording
+                       that somebody has left are not the same intention, and getting the
+                       second when you asked for the first is alarming. *@
+                    <div class="akiba-row-actions" @onclick:stopPropagation="true">
+                        <MudTooltip Text="Statement">
+                            <MudIconButton Icon="@Icons.Material.Filled.Description"
+                                           Size="Size.Small"
+                                           aria-label="@($"Statement for {context.Name}")"
+                                           OnClick="@(() => OpenStatement(context))" />
+                        </MudTooltip>
+
+                        @if (context.IsActive)
+                        {
+                            <MudTooltip Text="Record that they have left CAL">
+                                <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                                               Size="Size.Small"
+                                               Color="Color.Warning"
+                                               aria-label="@($"Record that {context.Name} has left")"
+                                               OnClick="@(() => StartExit(context))" />
+                            </MudTooltip>
+                        }
+                    </div>
                 </MudTd>
             </RowTemplate>
             <PagerContent>
@@ -142,6 +173,10 @@
     private string _search = string.Empty;
     private bool _includeExited;
     private IReadOnlyList<MemberSummary>? _members;
+
+    private bool _enrolling;
+    private bool _exiting;
+    private MemberSummary? _exitingMember;
 
     private IReadOnlyList<MemberSummary> Filtered =>
         _members is null
@@ -179,6 +214,27 @@
 
     private async Task LoadAsync() =>
         _members = await Mediator.Send(new ListMembersQuery(_asAt, _includeExited));
+
+    private async Task ReloadAsync()
+    {
+        _members = null;
+
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Opens the exit panel for one member.
+    /// </summary>
+    /// <remarks>
+    /// The row click opens a statement, so this stops the click reaching it. Recording an exit
+    /// and reading a statement are not the same intention and the wrong one is annoying in one
+    /// direction and alarming in the other.
+    /// </remarks>
+    private void StartExit(MemberSummary member)
+    {
+        _exitingMember = member;
+        _exiting = true;
+    }
 
     private void OpenStatement(MemberSummary? member)
     {

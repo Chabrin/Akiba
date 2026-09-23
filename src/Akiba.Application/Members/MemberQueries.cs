@@ -272,3 +272,41 @@ internal sealed class GetMemberStatementHandler
         return loans;
     }
 }
+
+/// <summary>A zone, as the enrolment form lists them.</summary>
+/// <param name="Id">The zone.</param>
+/// <param name="Code">Its short code, which is what the office says out loud.</param>
+/// <param name="Name">Its name.</param>
+/// <param name="IsOffice">Whether this is the office rather than a field zone.</param>
+public sealed record ZoneOption(ZoneId Id, string Code, string Name, bool IsOffice)
+{
+    /// <summary>Code and name together, because neither alone identifies one to a clerk.</summary>
+    public string Label => $"{Code} — {Name}";
+}
+
+/// <summary>The zones a member can be enrolled into.</summary>
+/// <remarks>
+/// Active zones only. A member cannot be enrolled into a zone the society has closed, and
+/// offering one in a list is how somebody ends up doing it.
+/// </remarks>
+public sealed record ListZonesQuery : IRequest<IReadOnlyList<ZoneOption>>;
+
+internal sealed class ListZonesHandler : IRequestHandler<ListZonesQuery, IReadOnlyList<ZoneOption>>
+{
+    private readonly IZoneRepository _zones;
+
+    public ListZonesHandler(IZoneRepository zones) => _zones = zones;
+
+    public async Task<IReadOnlyList<ZoneOption>> Handle(
+        ListZonesQuery query, CancellationToken cancellationToken)
+    {
+        var zones = await _zones.AllAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. zones
+                .Where(zone => zone.IsActive)
+                .Select(zone => new ZoneOption(zone.Id, zone.Code, zone.Name, zone.IsOffice)),
+        ];
+    }
+}

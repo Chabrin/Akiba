@@ -1,0 +1,238 @@
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Recording money in.
+
+    Three channels, one panel, because the clerk's question is always "money has arrived, where
+    from" and answering it should not mean choosing between three screens first.
+
+    The channels are genuinely different things and are not merged. The payroll cheque and the
+    landlord cheque are drawn on different accounts and reconcile against different bank
+    statements; a direct deposit is one member paying in and needs the name on the slip, which
+    the other two do not have. Picking the channel changes the form, so an official only ever
+    sees the fields that channel actually has.
+*@
+
+<WorkPanel Open="Open"
+           OpenChanged="OpenChanged"
+           Title="Record money in"
+           Subtitle="@ChannelHint"
+           Consequence="Recording it does not bring it into the ledger. A receipt reaches the books when it clears, and a cheque that has not matured has brought nothing in yet."
+           ConfirmText="Record the receipt"
+           ConfirmIcon="@Icons.Material.Filled.SaveAlt"
+           CanConfirm="IsComplete"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SaveAsync"
+           OnCancel="Reset">
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Where it came from</span>
+
+        <MudRadioGroup T="ReceiptChannel" @bind-Value="_channel">
+            <MudRadio T="ReceiptChannel" Value="ReceiptChannel.Payroll" Color="Color.Primary" Dense="true">
+                Payroll cheque
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    One cheque from CAL covering every employee deduction that month
+                </MudText>
+            </MudRadio>
+
+            <MudRadio T="ReceiptChannel" Value="ReceiptChannel.Landlord" Color="Color.Primary" Dense="true">
+                Landlord cheque
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    Drawn on a different account from the payroll one, and reconciled separately
+                </MudText>
+            </MudRadio>
+
+            <MudRadio T="ReceiptChannel" Value="ReceiptChannel.Direct" Color="Color.Primary" Dense="true">
+                Paid in directly
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    Cash, M-Pesa, a bank deposit or a personal cheque from one member
+                </MudText>
+            </MudRadio>
+        </MudRadioGroup>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">What arrived</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal" @bind-Value="_amount" Label="Amount (KES)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Format="N2" HideSpinButtons="true" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_receivedOn" Label="Received on"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               HelperText="When the office learned of it" />
+            </MudItem>
+
+            @if (_channel == ReceiptChannel.Direct)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="ReceiptMethod" @bind-Value="_method" Label="How"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                        <MudSelectItem T="ReceiptMethod" Value="ReceiptMethod.Cash">Cash</MudSelectItem>
+                        <MudSelectItem T="ReceiptMethod" Value="ReceiptMethod.Mpesa">M-Pesa</MudSelectItem>
+                        <MudSelectItem T="ReceiptMethod" Value="ReceiptMethod.BankDeposit">Bank deposit</MudSelectItem>
+                        <MudSelectItem T="ReceiptMethod" Value="ReceiptMethod.Cheque">Cheque</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_reference" Label="@ReferenceLabel" Required="true"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    @* As written, not as the clerk thinks it should read. Allocation is decided
+                       by a person later, and they need what the slip actually says - a deposit
+                       made by a member's brother is the commonest reason a name does not match
+                       anybody in the register. *@
+                    <MudTextField @bind-Value="_payerName" Label="Name on the slip" Required="true"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="Exactly as written, even if it is not a member's name" />
+                </MudItem>
+
+                @if (_method == ReceiptMethod.Cheque)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_expectedClearance" Label="Expected to mature"
+                                       DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" />
+                    </MudItem>
+                }
+            }
+            else
+            {
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_reference" Label="Cheque number" Required="true"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+            }
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@code {
+    /// <summary>Which of the three ways money reaches Akiba.</summary>
+    public enum ReceiptChannel
+    {
+        Payroll,
+        Landlord,
+        Direct,
+    }
+
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public EventCallback OnRecorded { get; set; }
+
+    private ReceiptChannel _channel = ReceiptChannel.Payroll;
+    private ReceiptMethod _method = ReceiptMethod.Mpesa;
+    private decimal _amount;
+    private DateTime? _receivedOn;
+    private string _reference = string.Empty;
+    private string _payerName = string.Empty;
+    private DateTime? _expectedClearance;
+
+    private bool _busy;
+    private string? _error;
+
+    private string ChannelHint => _channel switch
+    {
+        ReceiptChannel.Payroll => "The monthly cheque from CAL",
+        ReceiptChannel.Landlord => "The rent-offset cheque",
+        _ => "One member paying in",
+    };
+
+    private string ReferenceLabel => _method switch
+    {
+        ReceiptMethod.Mpesa => "M-Pesa code",
+        ReceiptMethod.BankDeposit => "Deposit slip number",
+        ReceiptMethod.Cheque => "Cheque number",
+        _ => "Receipt number",
+    };
+
+    private bool IsComplete =>
+        _amount > 0
+        && _receivedOn is not null
+        && !string.IsNullOrWhiteSpace(_reference)
+        && (_channel != ReceiptChannel.Direct || !string.IsNullOrWhiteSpace(_payerName))
+        && (_channel != ReceiptChannel.Direct
+            || _method != ReceiptMethod.Cheque
+            || _expectedClearance is not null);
+
+    protected override void OnParametersSet() =>
+        _receivedOn ??= Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+
+    private async Task SaveAsync()
+    {
+        if (_busy || !IsComplete || _receivedOn is not { } receivedOn)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        var amount = Money.Kes(_amount);
+        var on = DateOnly.FromDateTime(receivedOn);
+        var reference = _reference.Trim();
+
+        try
+        {
+            switch (_channel)
+            {
+                case ReceiptChannel.Payroll:
+                    await Mediator.Send(new RecordPayrollReceiptCommand(amount, on, reference));
+                    break;
+
+                case ReceiptChannel.Landlord:
+                    await Mediator.Send(new RecordLandlordReceiptCommand(amount, on, reference));
+                    break;
+
+                default:
+                    await Mediator.Send(new RecordDirectDepositCommand(
+                        amount,
+                        _method,
+                        on,
+                        reference,
+                        _payerName.Trim(),
+                        _expectedClearance is { } clearance
+                            ? DateOnly.FromDateTime(clearance)
+                            : null));
+                    break;
+            }
+
+            Reset();
+
+            await OpenChanged.InvokeAsync(false);
+            await OnRecorded.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _amount = 0;
+        _reference = string.Empty;
+        _payerName = string.Empty;
+        _expectedClearance = null;
+        _error = null;
+        _receivedOn = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+    }
+}

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Membership;
 
@@ -150,13 +151,27 @@ public sealed record GuarantorExitReview(
     /// </summary>
     public bool FundsMayBeReleased => LoansNeedingReplacement.Count == 0;
 
-    /// <summary>The task raised for the accounts clerk, in the words they would use.</summary>
+    /// <summary>
+    /// The task raised for the accounts clerk, in the words they would use.
+    /// </summary>
+    /// <remarks>
+    /// The date is written out rather than printed as yyyy-MM-dd. This string is read by a
+    /// person and appears on screen beside the member's name; an ISO date in a sentence is a
+    /// machine's idea of a date, and it is the sort of thing that makes an office decide the
+    /// system was not built for them.
+    ///
+    /// The invariant culture is used deliberately, so the wording is identical on every
+    /// machine in the office regardless of what Windows is set to.
+    /// </remarks>
     public string ClerkTask => FundsMayBeReleased
-        ? $"{GuarantorName} left CAL on {ExitedOn:yyyy-MM-dd}. They guarantee " +
-          $"{AllGuaranteedLoans.Count} loan(s), all covered by the borrowers' own shares. " +
-          "Their funds may be released."
-        : $"{GuarantorName} left CAL on {ExitedOn:yyyy-MM-dd}. " +
-          $"{LoansNeedingReplacement.Count} of the {AllGuaranteedLoans.Count} loan(s) they " +
+        ? $"They guarantee {AllGuaranteedLoans.Count} loan(s), all of them covered by the " +
+          "borrowers' own shares. Their funds may be released."
+        : $"{LoansNeedingReplacement.Count} of the {AllGuaranteedLoans.Count} loan(s) they " +
           "guarantee exceed the borrower's own shares. Ask those borrowers for replacement " +
           "guarantors. Do not release this member's funds until replacements are found.";
+
+    /// <summary>Who left and when, written out for a person to read.</summary>
+    public string Departure =>
+        $"{GuarantorName} left CAL on " +
+        $"{ExitedOn.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)}.";
 }

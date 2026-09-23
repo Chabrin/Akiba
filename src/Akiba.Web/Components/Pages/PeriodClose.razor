@@ -49,10 +49,16 @@
 
         @if (_preflight.AlreadyClosed)
         {
-            <MudAlert Severity="Severity.Info">
+            <MudAlert Severity="Severity.Info" Class="mb-4">
                 This month is already closed. Nothing can post into it. Only the chairman may
                 reopen it, and the reason is recorded permanently.
             </MudAlert>
+
+            <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.LockOpen"
+                       Disabled="_busy" OnClick="@(() => _reopening = true)">
+                Reopen it
+            </MudButton>
         }
         else if (_preflight.MayClose)
         {
@@ -104,11 +110,69 @@
     <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
 }
 
+@* Reopening a closed period.
+
+   The chairman's decision and nobody else's, and the reason is permanent - it goes into the
+   record beside the period and stays there. A closed period that can be quietly reopened is
+   not a closed period, so this asks for the why in writing before it will do anything. *@
+<WorkPanel @bind-Open="_reopening"
+           Title="Reopen a closed period"
+           Subtitle="@($"{CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(_month)} {_year}")"
+           Consequence="This unlocks entries before the closing date. The reason is recorded permanently against the period and cannot be edited afterwards."
+           ConfirmText="Reopen it"
+           ConfirmIcon="@Icons.Material.Filled.LockOpen"
+           ConfirmColour="Color.Warning"
+           CanConfirm="@(!string.IsNullOrWhiteSpace(_reopenReason))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ReopenAsync">
+
+    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+        Only the chairman may do this. If you are not the chairman, close this panel.
+    </MudAlert>
+
+    <MudTextField @bind-Value="_reopenReason" Label="Why is it being reopened" Lines="3"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  HelperText="Permanent. Write what an auditor reading this in two years would need." />
+</WorkPanel>
+
 @code {
     private int _year = DateTime.Today.Year;
     private int _month = DateTime.Today.Month;
     private PeriodClosePreflight? _preflight;
     private bool _busy;
+    private bool _reopening;
+    private string _reopenReason = string.Empty;
+
+    private async Task ReopenAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_reopenReason))
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new ReopenPeriodCommand(_year, _month, _reopenReason.Trim()));
+
+            _reopening = false;
+            _reopenReason = string.Empty;
+
+            await CheckAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
     private string? _error;
 
     private static IEnumerable<int> Years =>

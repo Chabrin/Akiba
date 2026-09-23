@@ -1,0 +1,245 @@
+@inject IMediator Mediator
+
+@*
+    Enrolling a member.
+
+    The form follows the paper one the clerk is copying from - who they are, then how HR finds
+    them, then how the society reaches them - because a form whose order differs from the paper
+    in front of somebody is a form they make mistakes on.
+
+    Enrolment does not make somebody a member of the society in the sense that matters. It
+    records the letter to the chairman. They become a member proper at their first share
+    contribution, and the screen says so rather than letting an official believe otherwise.
+*@
+
+<WorkPanel Open="Open"
+           OpenChanged="OpenChanged"
+           Title="Enrol a member"
+           Subtitle="From the applicant's letter to the chairman"
+           Consequence="This records the enrolment only. No shares, no opening balance and no ledger entry - the member's account starts at their first contribution."
+           ConfirmText="Enrol"
+           ConfirmIcon="@Icons.Material.Filled.PersonAdd"
+           CanConfirm="IsComplete"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SaveAsync"
+           OnCancel="Reset">
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Who they are</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_givenName" Label="Given name" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_familyName" Label="Family name" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_otherNames" Label="Other names"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="As written on the national ID, if any" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_nationalId" Label="National ID" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">How the society files them</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_membershipNumber" Label="Membership number"
+                              Required="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="The next free number in the register" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                @* Not required, and deliberately so. The register carries shareholders who are
+                   not on the CAL payroll, written as staff number 0. *@
+                <MudTextField @bind-Value="_payrollNumber" Label="Payroll number"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="0 for a shareholder not on the CAL payroll" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSelect T="ZoneId?" @bind-Value="_zoneId" Label="Zone" Required="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                    @foreach (var zone in _zones)
+                    {
+                        <MudSelectItem T="ZoneId?" Value="@zone.Id">@zone.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                @* This decides which schedule they appear on, and the two schedules are drawn
+                   on different accounts and reconcile separately - so it is a real decision,
+                   not a tick box, and it is explained rather than labelled. *@
+                <MudSwitch T="bool" @bind-Value="_isLandlord" Color="Color.Primary"
+                           Label="Deducted on the landlord schedule" />
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                    @(_isLandlord
+                        ? "Their deduction is claimed against rent and appears on the landlord schedule, drawn on the main account."
+                        : "Their deduction is taken from a CAL payslip and appears on the employee schedule.")
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">How to reach them</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_phone" Label="Phone" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="07xx xxx xxx or +2547xx xxx xxx" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_email" Label="Email"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Optional" />
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    /// <summary>Raised once the member exists, so the list behind can reload.</summary>
+    [Parameter] public EventCallback OnEnrolled { get; set; }
+
+    private IReadOnlyList<ZoneOption> _zones = [];
+
+    private string _membershipNumber = string.Empty;
+    private string _payrollNumber = string.Empty;
+    private string _givenName = string.Empty;
+    private string _familyName = string.Empty;
+    private string? _otherNames;
+    private string _nationalId = string.Empty;
+    private string _phone = string.Empty;
+    private string? _email;
+    private ZoneId? _zoneId;
+    private bool _isLandlord;
+
+    private bool _busy;
+    private bool _loaded;
+    private string? _error;
+
+    /// <summary>
+    /// What the form needs before the button will do anything.
+    /// </summary>
+    /// <remarks>
+    /// Only the fields the domain refuses without. Anything stricter belongs in the validator,
+    /// where it is tested - a rule enforced only by a disabled button is a rule that is not
+    /// enforced at all.
+    /// </remarks>
+    private bool IsComplete =>
+        !string.IsNullOrWhiteSpace(_membershipNumber)
+        && !string.IsNullOrWhiteSpace(_givenName)
+        && !string.IsNullOrWhiteSpace(_familyName)
+        && !string.IsNullOrWhiteSpace(_nationalId)
+        && !string.IsNullOrWhiteSpace(_phone)
+        && _zoneId is { } zone
+        && zone.IsSpecified;
+
+    /// <summary>
+    /// Loads the lists the form needs, the first time the panel is opened.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not in OnInitializedAsync. A panel is part of the page it sits on, so its
+    /// initialisation runs alongside the page's own - and both would be querying the same
+    /// scoped DbContext at the same moment, which EF refuses outright. Waiting until the panel
+    /// is actually opened also means a clerk who never opens it never pays for the query.
+    /// </remarks>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Open || _loaded)
+        {
+            return;
+        }
+
+        _loaded = true;
+        _zones = await Mediator.Send(new ListZonesQuery());
+
+        // The office zone is where most members sit, so it is offered rather than left blank.
+        // Offered, not forced: it is still a select and the clerk can change it.
+        if (_zoneId is null && _zones.Count > 0)
+        {
+            _zoneId = (_zones.FirstOrDefault(zone => zone.IsOffice) ?? _zones[0]).Id;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new EnrolMemberCommand(
+                _membershipNumber.Trim(),
+                string.IsNullOrWhiteSpace(_payrollNumber) ? "0" : _payrollNumber.Trim(),
+                _givenName.Trim(),
+                _familyName.Trim(),
+                string.IsNullOrWhiteSpace(_otherNames) ? null : _otherNames.Trim(),
+                _nationalId.Trim(),
+                _phone.Trim(),
+                string.IsNullOrWhiteSpace(_email) ? null : _email.Trim(),
+                _zoneId!.Value,
+                _isLandlord));
+
+            Reset();
+
+            await OpenChanged.InvokeAsync(false);
+            await OnEnrolled.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>
+    /// Clears the form.
+    /// </summary>
+    /// <remarks>
+    /// Called on cancel as well as on save. A half-typed member left in the fields would be
+    /// the first thing the next enrolment started from, and mixing two members' details is the
+    /// worst mistake this form could help somebody make.
+    /// </remarks>
+    private void Reset()
+    {
+        _membershipNumber = string.Empty;
+        _payrollNumber = string.Empty;
+        _givenName = string.Empty;
+        _familyName = string.Empty;
+        _otherNames = null;
+        _nationalId = string.Empty;
+        _phone = string.Empty;
+        _email = null;
+        _isLandlord = false;
+        _error = null;
+
+        _zoneId = _zones.Count > 0
+            ? (_zones.FirstOrDefault(zone => zone.IsOffice) ?? _zones[0]).Id
+            : null;
+    }
+}

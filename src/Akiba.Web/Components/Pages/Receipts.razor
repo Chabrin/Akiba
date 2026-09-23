@@ -6,7 +6,43 @@
 <PageTitle>Akiba - Receipts</PageTitle>
 
 <PageHeader Title="Receipts"
-            Description="Money in, on all three channels. A receipt reaches the ledger when it clears - a cheque that has not matured has not brought anything in." />
+            Description="Money in, on all three channels. A receipt reaches the ledger when it clears - a cheque that has not matured has not brought anything in.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@(() => _recording = true)">
+            Record money in
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+<RecordReceiptPanel @bind-Open="_recording" OnRecorded="ReloadAsync" />
+<AllocateReceiptPanel @bind-Open="_allocating" Receipt="_working" OnAllocated="ReloadAsync" />
+
+<WorkPanel @bind-Open="_clearing"
+           Title="Mark a receipt as cleared"
+           Subtitle="@_working?.Reference"
+           Consequence="This is the entry that brings the money into the books. Until now the receipt was a note that something was coming."
+           ConfirmText="It has cleared"
+           ConfirmIcon="@Icons.Material.Filled.TaskAlt"
+           CanConfirm="@(_clearedOn is not null)"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ClearAsync">
+    @if (_working is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            <MoneyText Amount="_working.Amount" /> received on
+            @_working.ReceivedOn.ToString("d MMMM yyyy", CultureInfo.InvariantCulture).
+        </MudText>
+
+        @* The date the bank cleared it, which is frequently not today - a clerk working
+           through a statement is recording things that happened last week. *@
+        <MudDatePicker @bind-Date="_clearedOn" Label="Cleared on"
+                       DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense"
+                       HelperText="As the bank statement has it, not the day you are keying it" />
+    }
+</WorkPanel>
 
 <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true"
          ActivePanelIndexChanged="OnTabChanged">
@@ -22,14 +58,28 @@
     }
     else if (_receipts.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            @(_workList switch
+        <EmptyState Icon="@Icons.Material.Outlined.Paid"
+                    Title="@(_workList switch
+                    {
+                        ReceiptWorkList.AwaitingClearance => "Nothing is waiting to clear",
+                        ReceiptWorkList.AwaitingAllocation => "Everything cleared has been allocated",
+                        _ => "No receipts yet",
+                    })"
+                    Description="@(_workList switch
+                    {
+                        ReceiptWorkList.AwaitingClearance => "Every receipt the office knows about has reached the bank. On this queue that is the good answer.",
+                        ReceiptWorkList.AwaitingAllocation => "Nobody is owed a decision. Every cleared shilling has been applied to a member, a loan or a refund.",
+                        _ => "Money reaches Akiba as the payroll cheque, the landlord cheque, or a member paying in directly.",
+                    })">
+            @if (_workList == ReceiptWorkList.All)
             {
-                ReceiptWorkList.AwaitingClearance => "Nothing is waiting to clear.",
-                ReceiptWorkList.AwaitingAllocation => "Every cleared receipt has been allocated.",
-                _ => "No receipts recorded.",
-            })
-        </MudAlert>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="@(() => _recording = true)">
+                    Record the first one
+                </MudButton>
+            }
+        </EmptyState>
     }
     else
     {
@@ -43,6 +93,7 @@
                 <MudTh Style="text-align: right">Amount</MudTh>
                 <MudTh Style="text-align: right">Unallocated</MudTh>
                 <MudTh>Status</MudTh>
+                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Received">
@@ -93,6 +144,31 @@
                         </MudTooltip>
                     }
                 </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <div class="akiba-row-actions">
+                        @* Only the action this receipt is actually ready for. A receipt that
+                           has not cleared cannot be allocated, and offering the button anyway
+                           teaches an official that half the buttons here do nothing. *@
+                        @if (!context.IsConfirmed)
+                        {
+                            <MudTooltip Text="Mark as cleared">
+                                <MudIconButton Icon="@Icons.Material.Filled.TaskAlt"
+                                               Size="Size.Small" Color="Color.Primary"
+                                               aria-label="Mark as cleared"
+                                               OnClick="@(() => StartClear(context))" />
+                            </MudTooltip>
+                        }
+                        else if (!context.IsFullyAllocated)
+                        {
+                            <MudTooltip Text="Decide what it was for">
+                                <MudIconButton Icon="@Icons.Material.Filled.CallSplit"
+                                               Size="Size.Small" Color="Color.Warning"
+                                               aria-label="Allocate"
+                                               OnClick="@(() => StartAllocate(context))" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudTd>
             </RowTemplate>
             <PagerContent>
                 <MudTablePager Class="akiba-no-print" />
@@ -114,6 +190,66 @@
     private ReceiptWorkList _workList = ReceiptWorkList.AwaitingClearance;
     private IReadOnlyList<ReceiptSummary>? _receipts;
     private DateOnly _today;
+
+    private bool _recording;
+    private bool _allocating;
+    private bool _clearing;
+    private ReceiptSummary? _working;
+    private DateTime? _clearedOn;
+    private bool _busy;
+    private string? _error;
+
+    private void StartClear(ReceiptSummary receipt)
+    {
+        _working = receipt;
+        _clearedOn = _today.ToDateTime(TimeOnly.MinValue);
+        _error = null;
+        _clearing = true;
+    }
+
+    private void StartAllocate(ReceiptSummary receipt)
+    {
+        _working = receipt;
+        _error = null;
+        _allocating = true;
+    }
+
+    private async Task ClearAsync()
+    {
+        if (_busy || _working is null || _clearedOn is not { } clearedOn)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new ClearReceiptCommand(
+                _working.ReceiptId, DateOnly.FromDateTime(clearedOn)));
+
+            _clearing = false;
+
+            await ReloadAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _receipts = null;
+
+        await LoadAsync();
+    }
 
     protected override async Task OnInitializedAsync()
     {
