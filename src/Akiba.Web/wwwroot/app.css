@@ -24,11 +24,21 @@
     --akiba-radius: 8px;
     --akiba-radius-sm: 6px;
 
-    /* Money and anything else that must line up column-wise. The feature
-       settings matter more than the family: tnum forces equal-width digits, so
-       a figure out by a factor of ten is visibly wrong before it is read. */
-    --akiba-font-numeric: "Inter", "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
-    --akiba-numeric-features: "tnum" 1, "lnum" 1, "zero" 1, "ss01" 1;
+    /* Money and anything else that must line up column-wise.
+
+       Century Gothic, to match the rest of the application. Its digits are
+       drawn to a single width already, which is what a money column needs -
+       but it carries no `tnum` feature to ask for, so the request below is a
+       no-op on it and the alignment rests on the drawing rather than on a
+       font feature. It holds. The fallbacks are asked anyway, for the machine
+       that does not have it.
+
+       If a column of figures ever stops lining up - most likely because
+       somebody changed the family and not this - point this one variable at a
+       font with real tabular numerals and nothing else has to move. That is
+       the whole reason it is a variable. */
+    --akiba-font-numeric: "Century Gothic", "URW Gothic", "Questrial", "Segoe UI", Roboto, sans-serif;
+    --akiba-numeric-features: "tnum" 1, "lnum" 1;
 
     --akiba-row-height: 38px;
     --akiba-transition: 120ms cubic-bezier(.4, 0, .2, 1);
@@ -47,7 +57,14 @@ html {
 
 body {
     margin: 0;
-    font-feature-settings: "cv05" 1, "cv11" 1;
+}
+
+/* Century Gothic is wide, so a heading at the same size takes noticeably more
+   room. Tightening the tracking on the large sizes only - the small ones need
+   every bit of their spacing at this x-height - keeps a page title on one line
+   at the widths the drawer leaves. */
+h1, h2, .mud-typography-h1, .mud-typography-h2 {
+    letter-spacing: -0.025em;
 }
 
 /* Clears the dense app bar. Tied to the same 56px the theme sets, so the two cannot drift. */
@@ -209,6 +226,100 @@ body {
     margin: var(--akiba-space-2) 0 var(--akiba-space-1);
     background-color: currentColor;
     opacity: .5;
+}
+
+/* ---------------------------------------------------------------------------
+   Reports
+
+   Cards that produce a document rather than show a figure. The accent runs down
+   the left edge instead of under a number, because what distinguishes these
+   from one another is what they are for, not how big they are.
+   --------------------------------------------------------------------------- */
+
+.akiba-report {
+    display: flex;
+    flex-direction: column;
+    gap: var(--akiba-space-2);
+    height: 100%;
+    padding: var(--akiba-space-4);
+    padding-left: calc(var(--akiba-space-4) - 2px);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-left: 3px solid var(--akiba-report-accent, var(--mud-palette-primary));
+    border-radius: var(--akiba-radius);
+    background-color: var(--mud-palette-surface);
+    transition: border-color var(--akiba-transition), transform var(--akiba-transition);
+}
+
+.akiba-report:hover {
+    border-color: var(--akiba-report-accent, var(--mud-palette-primary));
+    border-left-color: var(--akiba-report-accent, var(--mud-palette-primary));
+}
+
+.akiba-report-head {
+    display: flex;
+    align-items: center;
+    gap: var(--akiba-space-3);
+}
+
+/* The description takes the slack, so every button in a row sits on one line
+   however long the explanations above them are. */
+.akiba-report-body {
+    flex-grow: 1;
+}
+
+.akiba-report-foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--akiba-space-2);
+    padding-top: var(--akiba-space-2);
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+/* What the controls at the top of the screen are currently set to. Quiet, but
+   not so quiet that somebody runs June's schedule in December without seeing. */
+.akiba-report-parameter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+}
+
+.akiba-format {
+    flex-shrink: 0;
+    padding: 2px var(--akiba-space-2);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--akiba-radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* The heading above each group of reports. */
+.akiba-section {
+    display: flex;
+    align-items: baseline;
+    gap: var(--akiba-space-3);
+    margin: var(--akiba-space-6) 0 var(--akiba-space-3);
+}
+
+.akiba-section:first-of-type {
+    margin-top: var(--akiba-space-4);
+}
+
+.akiba-section::after {
+    content: "";
+    flex-grow: 1;
+    height: 1px;
+    background-color: var(--mud-palette-divider);
+}
+
+.min-width-0 {
+    min-width: 0;
 }
 
 /* ---------------------------------------------------------------------------

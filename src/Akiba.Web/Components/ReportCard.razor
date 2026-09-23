@@ -1,32 +1,63 @@
 @*
-    One report on the reports screen: what it is, what comes out, and a button that fetches it.
+    One report on the reports screen: what it is, what comes out, what it will be run for, and
+    the button that fetches it.
 
-    The format is shown because it decides what an official can do with the thing. A schedule
-    the office will sort and check against the register has to be a workbook; a statement a
-    member receives has to be a PDF. Knowing which before clicking saves a download.
+    Three things are on the card because each one saves a wasted download.
+
+    The format decides what an official can do with the result. A schedule the office will sort
+    and check against the register has to be a workbook; a statement a member receives has to be
+    a PDF. Knowing which before clicking is the difference between opening a file and finding
+    out it was the wrong shape.
+
+    The parameter is the one the controls above are currently set to, written out in words. The
+    commonest mistake on a screen like this is running the right report for the wrong month, and
+    a date picker three inches away is not where somebody looks to check.
+
+    The deadline, where there is one, is the reason the report exists at all.
 *@
 
-<MudPaper Elevation="1" Class="pa-4" Style="height: 100%">
-    <div class="d-flex align-start mb-2">
-        <MudIcon Icon="@Icon" Color="Color.Primary" Class="mr-3 mt-1" />
+<div class="akiba-report" style="@AccentStyle">
+    <div class="akiba-report-head">
+        <MudIcon Icon="@Icon" Color="@Colour" Size="Size.Medium" />
 
-        <div class="flex-grow-1">
+        <div class="flex-grow-1 min-width-0">
             <MudText Typo="Typo.subtitle1">@Title</MudText>
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Format</MudText>
         </div>
+
+        <span class="akiba-format">@Format</span>
     </div>
 
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@Description</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary akiba-report-body">@Description</MudText>
 
-    <MudButton Variant="Variant.Outlined"
-               Color="Color.Primary"
-               Size="Size.Small"
-               StartIcon="@(IsDownload ? Icons.Material.Filled.Download : Icons.Material.Filled.ArrowForward)"
-               Href="@Href"
-               Target="@(IsDownload ? "_blank" : null)">
-        @(LinkText ?? "Download")
-    </MudButton>
-</MudPaper>
+    <div class="akiba-report-foot">
+        @if (!string.IsNullOrWhiteSpace(Parameter))
+        {
+            <div class="akiba-report-parameter">
+                <MudIcon Icon="@Icons.Material.Filled.FilterAlt" Size="Size.Small" />
+                <span>@Parameter</span>
+            </div>
+        }
+
+        @if (Deadline is not null)
+        {
+            <MudChip T="string" Size="Size.Small" Color="@DeadlineColour"
+                     Icon="@Icons.Material.Filled.Schedule" Class="ma-0">
+                @Deadline
+            </MudChip>
+        }
+
+        <MudSpacer />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="@Colour"
+                   Size="Size.Small"
+                   StartIcon="@(IsDownload ? Icons.Material.Filled.Download : Icons.Material.Filled.ArrowForward)"
+                   Href="@Href"
+                   Target="@(IsDownload ? "_blank" : null)">
+            @(LinkText ?? "Download")
+        </MudButton>
+    </div>
+</div>
 
 @code {
     [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
@@ -38,10 +69,25 @@
     /// <summary>Excel, PDF or CSV. What actually comes out.</summary>
     [Parameter, EditorRequired] public string Format { get; set; } = string.Empty;
 
+    /// <summary>What the controls above are currently set to, for this report.</summary>
+    [Parameter] public string? Parameter { get; set; }
+
+    /// <summary>When this is due, where it is due at all.</summary>
+    [Parameter] public string? Deadline { get; set; }
+
+    /// <summary>Whether the deadline has passed or is close.</summary>
+    [Parameter] public Color DeadlineColour { get; set; } = Color.Default;
+
     [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Description;
+
+    /// <summary>The card's semantic colour, matching its section.</summary>
+    [Parameter] public Color Colour { get; set; } = Color.Primary;
 
     /// <summary>Overrides the button's wording where it goes to a screen rather than a file.</summary>
     [Parameter] public string? LinkText { get; set; }
+
+    private string AccentStyle =>
+        $"--akiba-report-accent: var(--mud-palette-{Colour.ToString().ToLowerInvariant()});";
 
     /// <summary>
     /// Whether this fetches a file.

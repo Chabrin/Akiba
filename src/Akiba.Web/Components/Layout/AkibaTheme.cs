@@ -172,7 +172,7 @@ public static class AkibaTheme
             Default = new DefaultTypography
             {
                 FontFamily = Sans,
-                FontSize = "0.8125rem",
+                FontSize = "0.875rem",
                 FontWeight = "400",
                 LineHeight = "1.5",
                 LetterSpacing = "0",
@@ -216,9 +216,30 @@ public static class AkibaTheme
         },
     };
 
+    /// <summary>
+    /// Century Gothic, with the nearest thing available where it is not installed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Century Gothic ships with Microsoft Office, so it is on the office machines and is very
+    /// likely absent anywhere else. The fallbacks are the same geometric shape rather than the
+    /// nearest system font, so a machine without it gets something that still looks deliberate:
+    /// URW Gothic on Linux, then Questrial, then Futura, before giving up.
+    /// </para>
+    /// <para>
+    /// Worth knowing what it costs. Century Gothic is a geometric face with a very low x-height
+    /// and unusually wide letterforms - it was drawn for display, not for a dense table of
+    /// figures. Text sits about 6% wider than Inter at the same size, so a long member name is
+    /// likelier to be cut off, and the small print reads smaller than its size suggests. That is
+    /// paid for here by nudging the base size up a little rather than by shrinking the layout.
+    /// </para>
+    /// <para>
+    /// The money figures are the part to watch. See <c>--akiba-font-numeric</c> in app.css.
+    /// </para>
+    /// </remarks>
     private static readonly string[] Sans =
     [
-        "Inter", "Segoe UI Variable Text", "Segoe UI", "Roboto", "Helvetica Neue", "Arial",
+        "Century Gothic", "URW Gothic", "Questrial", "Futura", "Segoe UI", "Roboto",
         "sans-serif",
     ];
 

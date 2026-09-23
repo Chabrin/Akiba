@@ -7,18 +7,30 @@
 <PageHeader Title="Reports"
             Description="Every figure in these is summed from the ledger as at the date you choose. Ask for last June in December and you get what June said." />
 
-<MudPaper Elevation="1" Class="pa-4 mb-4">
-    <MudGrid>
-        <MudItem xs="12" sm="6" md="3">
+@* The deduction schedules are the only thing on this screen with a date somebody else is
+   waiting on, so the screen says so before it says anything else. Payroll cannot deduct what
+   they were not sent, and a month missed is a month of contributions that never arrive. *@
+@if (DeductionsDue is { } due)
+{
+    <MudAlert Severity="@due.Severity" Class="mb-4" Icon="@Icons.Material.Filled.Schedule">
+        <MudText Typo="Typo.subtitle2">@due.Headline</MudText>
+        <MudText Typo="Typo.body2">@due.Detail</MudText>
+    </MudAlert>
+}
+
+<MudPaper Elevation="1" Class="pa-4">
+    <MudText Typo="Typo.overline" Class="mud-text-secondary">What to run it for</MudText>
+
+    <MudGrid Class="mt-1">
+        <MudItem xs="12" sm="6" md="4">
             <MudDatePicker Label="As at" @bind-Date="_asAt" DateFormat="dd MMM yyyy"
                            Variant="Variant.Outlined" Margin="Margin.Dense"
-                           HelperText="For the statement and the shareholding summary" />
+                           HelperText="A position on a date" />
         </MudItem>
 
-        <MudItem xs="12" sm="6" md="3">
+        <MudItem xs="6" sm="3" md="2">
             <MudSelect T="int" @bind-Value="_year" Label="Year" Dense="true"
-                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                       HelperText="For the schedules and the AGM pack">
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
                 @foreach (var year in Years)
                 {
                     <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
@@ -26,10 +38,9 @@
             </MudSelect>
         </MudItem>
 
-        <MudItem xs="12" sm="6" md="3">
+        <MudItem xs="6" sm="3" md="3">
             <MudSelect T="int" @bind-Value="_month" Label="Month" Dense="true"
-                       Variant="Variant.Outlined" Margin="Margin.Dense"
-                       HelperText="For the deduction schedules">
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
                 @for (var month = 1; month <= 12; month++)
                 {
                     var value = month;
@@ -39,38 +50,98 @@
                 }
             </MudSelect>
         </MudItem>
+
+        @* A way back to today, because the commonest reason a figure looks wrong on this screen
+           is a date left behind from the last thing somebody ran. *@
+        <MudItem xs="12" md="3" Class="d-flex align-center">
+            @if (!IsToday)
+            {
+                <MudButton Variant="Variant.Text" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Restore" OnClick="ResetToToday">
+                    Back to today
+                </MudButton>
+            }
+        </MudItem>
     </MudGrid>
 </MudPaper>
 
-<MudGrid>
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Every month</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Sent out of the office. Two schedules, two accounts, reconciled separately.
+    </MudText>
+</div>
+
+<MudGrid Spacing="3">
     <MudItem xs="12" md="6">
         <ReportCard Title="Employee deductions"
                     Icon="@Icons.Material.Filled.TableChart"
                     Format="Excel"
+                    Colour="Color.Primary"
+                    Parameter="@MonthName"
+                    Deadline="@DeductionsDue?.Chip"
+                    DeadlineColour="@(DeductionsDue?.ChipColour ?? Color.Default)"
                     Href="@($"/reports/deductions/employees/{_year}/{_month}")"
-                    Description="@($"What HR should deduct from each payslip in {MonthName}. It must be with them by the 25th.")" />
+                    Description="@($"What HR should deduct from each payslip in {MonthName}, member by member. It must be with them by the 25th.")" />
     </MudItem>
 
     <MudItem xs="12" md="6">
         <ReportCard Title="Landlord deductions"
-                    Icon="@Icons.Material.Filled.TableChart"
+                    Icon="@Icons.Material.Filled.Apartment"
                     Format="Excel"
+                    Colour="Color.Primary"
+                    Parameter="@MonthName"
+                    Deadline="@DeductionsDue?.Chip"
+                    DeadlineColour="@(DeductionsDue?.ChipColour ?? Color.Default)"
                     Href="@($"/reports/deductions/landlords/{_year}/{_month}")"
-                    Description="A separate schedule from the employee one. The cheque is drawn on a different account, so the two reconcile separately." />
+                    Description="A separate schedule from the employee one. The cheque is drawn on a different account, so the two reconcile separately and must not be combined." />
     </MudItem>
+</MudGrid>
 
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">A position on a date</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Summed from the ledger as at @AsAtLabel. Nothing here is stored.
+    </MudText>
+</div>
+
+<MudGrid Spacing="3">
     <MudItem xs="12" md="6">
         <ReportCard Title="Shareholding summary"
                     Icon="@Icons.Material.Filled.Groups"
                     Format="Excel"
+                    Colour="Color.Tertiary"
+                    Parameter="@($"As at {AsAtLabel}")"
                     Href="@($"/reports/shareholding?asAt={AsAtParameter}")"
-                    Description="@($"Every member's shareholding, borrowing limit and loans outstanding as at {AsAtLabel}. Excel, because the office sorts and checks it against the register.")" />
+                    Description="Every member's shareholding, borrowing limit and loans outstanding. Excel, because the office sorts it and checks it against the register." />
     </MudItem>
 
+    <MudItem xs="12" md="6">
+        <ReportCard Title="A member's statement"
+                    Icon="@Icons.Material.Filled.Person"
+                    Format="PDF"
+                    Colour="Color.Tertiary"
+                    Parameter="@($"As at {AsAtLabel}")"
+                    Href="/members"
+                    LinkText="Choose a member"
+                    Description="The one document a member actually receives. Taken from the member's own screen, so you are certain whose it is before it prints." />
+    </MudItem>
+</MudGrid>
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Once a year, and for the auditor</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        The two that leave the society entirely.
+    </MudText>
+</div>
+
+<MudGrid Spacing="3">
     <MudItem xs="12" md="6">
         <ReportCard Title="AGM pack"
                     Icon="@Icons.Material.Filled.MenuBook"
                     Format="PDF"
+                    Colour="Color.Secondary"
+                    Parameter="@_year.ToString(CultureInfo.InvariantCulture)"
                     Href="@($"/reports/agm/{_year}")"
                     Description="@($"What the members are shown at the {_year} meeting: income and expenditure, the position at the year end, and the trial balance. The chairman's and treasurer's reports are added by hand.")" />
     </MudItem>
@@ -79,23 +150,17 @@
         <ReportCard Title="Audit trail"
                     Icon="@Icons.Material.Filled.History"
                     Format="CSV"
+                    Colour="Color.Secondary"
+                    Parameter="The last month"
                     Href="/reports/audit"
-                    Description="Every change to every table with the before and after values. CSV, because that is what an auditor asks for and it opens in anything." />
-    </MudItem>
-
-    <MudItem xs="12" md="6">
-        <ReportCard Title="A member's statement"
-                    Icon="@Icons.Material.Filled.Person"
-                    Format="PDF"
-                    Href="/members"
-                    LinkText="Choose a member"
-                    Description="The one document a member actually receives. Open a member and take it from their statement, so you are sure whose it is." />
+                    Description="Every change to every table with the before and after values. CSV, because that is what an auditor asks for and it opens in anything. To narrow it first, use the audit trail screen - its filters carry through to the export."
+                    LinkText="Download" />
     </MudItem>
 </MudGrid>
 
-<MudText Typo="Typo.caption" Class="mud-text-secondary mt-4 d-block">
-    Reports are generated rather than stored - an AGM pack is a whole PDF and the shareholding
-    summary sums every member's ledger - so they are rate limited. If one refuses, wait a minute.
+<MudText Typo="Typo.caption" Class="mud-text-secondary mt-6 d-block">
+    Reports are generated rather than stored — an AGM pack is a whole PDF and the shareholding
+    summary sums every member's ledger — so they are rate limited. If one refuses, wait a minute.
 </MudText>
 
 @code {
@@ -108,15 +173,79 @@
     private string MonthName =>
         $"{CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(_month)} {_year}";
 
-    private string AsAtParameter => _asAt is { } date
-        ? date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
-        : Clock.TodayInNairobi.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    private string AsAtParameter => (_asAt is { } date
+            ? DateOnly.FromDateTime(date)
+            : Clock.TodayInNairobi)
+        .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private string AsAtLabel => _asAt is { } date
         ? date.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)
         : "today";
 
-    protected override void OnInitialized()
+    private bool IsToday
+    {
+        get
+        {
+            var today = Clock.TodayInNairobi;
+
+            return _year == today.Year
+                && _month == today.Month
+                && _asAt is { } date
+                && DateOnly.FromDateTime(date) == today;
+        }
+    }
+
+    /// <summary>
+    /// How the deduction schedules stand against the 25th.
+    /// </summary>
+    /// <remarks>
+    /// Only shown for the month actually in progress. Looking at a past month is a deliberate
+    /// act - somebody checking last June - and telling them last June's schedule is overdue
+    /// would be noise, and would teach them to ignore the one month it matters for.
+    /// </remarks>
+    private DeductionDeadline? DeductionsDue
+    {
+        get
+        {
+            var today = Clock.TodayInNairobi;
+
+            if (_year != today.Year || _month != today.Month)
+            {
+                return null;
+            }
+
+            var days = 25 - today.Day;
+
+            return days switch
+            {
+                > 7 => null,
+
+                > 0 => new DeductionDeadline(
+                    Severity.Info,
+                    $"The {MonthName} schedules are due in {days} day{(days == 1 ? string.Empty : "s")}.",
+                    "HR needs both of them by the 25th to deduct on this month's payroll.",
+                    $"Due in {days}d",
+                    Color.Warning),
+
+                0 => new DeductionDeadline(
+                    Severity.Warning,
+                    $"The {MonthName} schedules are due today.",
+                    "HR needs both of them by the end of the day to deduct on this month's payroll.",
+                    "Due today",
+                    Color.Warning),
+
+                _ => new DeductionDeadline(
+                    Severity.Error,
+                    $"The {MonthName} schedules are {-days} day{(days == -1 ? string.Empty : "s")} past the 25th.",
+                    "If HR has not had them, this month's deduction will not be taken and the "
+                        + "contributions do not arrive. Check with payroll before sending them late.",
+                    $"{-days}d late",
+                    Color.Error),
+            };
+        }
+    }
+
+    private void ResetToToday()
     {
         var today = Clock.TodayInNairobi;
 
@@ -124,4 +253,10 @@
         _year = today.Year;
         _month = today.Month;
     }
+
+    protected override void OnInitialized() => ResetToToday();
+
+    /// <summary>Where the deduction schedules stand against the date payroll needs them.</summary>
+    private sealed record DeductionDeadline(
+        Severity Severity, string Headline, string Detail, string Chip, Color ChipColour);
 }
