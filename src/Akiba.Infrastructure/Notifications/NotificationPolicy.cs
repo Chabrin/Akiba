@@ -23,6 +23,10 @@ public sealed class NotificationPolicy : INotificationPolicy
 {
     private readonly HashSet<string> _disabled;
 
+    /// <param name="internalOnly">
+    /// True - the default - to write every message for the counter and register no outward
+    /// sender at all.
+    /// </param>
     /// <param name="sendingIsAllowed">True only in Production.</param>
     /// <param name="suppressionReason">Why not, when not.</param>
     /// <param name="disabled">
@@ -31,10 +35,14 @@ public sealed class NotificationPolicy : INotificationPolicy
     /// email in place.
     /// </param>
     public NotificationPolicy(
-        bool sendingIsAllowed, string suppressionReason, IEnumerable<string>? disabled = null)
+        bool sendingIsAllowed,
+        string suppressionReason,
+        IEnumerable<string>? disabled = null,
+        bool internalOnly = true)
     {
         SendingIsAllowed = sendingIsAllowed;
         SuppressionReason = suppressionReason;
+        InternalOnly = internalOnly;
 
         _disabled = new HashSet<string>(
             disabled ?? DefaultDisabled, StringComparer.OrdinalIgnoreCase);
@@ -56,9 +64,20 @@ public sealed class NotificationPolicy : INotificationPolicy
 
     public bool SendingIsAllowed { get; }
 
+    public bool InternalOnly { get; }
+
     public string SuppressionReason { get; }
 
-    public bool IsEnabled(NotificationKind kind, NotificationChannel channel) =>
-        !_disabled.Contains(kind.ToString())
-        && !_disabled.Contains($"{kind}:{channel}");
+    public bool IsEnabled(NotificationKind kind, NotificationChannel channel)
+    {
+        // Internal-only overrides everything the office has configured. A kind turned on for
+        // email by somebody who did not know about this setting does not get to send.
+        if (InternalOnly && channel != NotificationChannel.Counter)
+        {
+            return false;
+        }
+
+        return !_disabled.Contains(kind.ToString())
+            && !_disabled.Contains($"{kind}:{channel}");
+    }
 }

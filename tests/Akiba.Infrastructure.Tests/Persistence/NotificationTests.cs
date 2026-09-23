@@ -206,8 +206,11 @@ public sealed class NotificationOutboxTests : IAsyncLifetime
         services.AddAkibaInfrastructure(_postgres.ConnectionString);
         services.AddAkibaTestUser(Clerk);
 
+        // These exercise the outward path - a mail server accepting or refusing a message -
+        // which is still a supported configuration but is no longer the default. The counter
+        // path has tests of its own.
         services.AddSingleton<INotificationPolicy>(
-            new NotificationPolicy(sendingIsAllowed, "Not Production."));
+            new NotificationPolicy(sendingIsAllowed, "Not Production.", internalOnly: false));
 
         services.AddSingleton<INotificationSender>(_email);
         services.AddSingleton<INotificationSender>(

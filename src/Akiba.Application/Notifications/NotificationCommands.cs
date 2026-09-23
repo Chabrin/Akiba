@@ -165,7 +165,15 @@ internal sealed class QueueNotificationHandler : IRequestHandler<QueueNotificati
 
         var queued = 0;
 
-        foreach (var channel in command.Channels.Distinct())
+        // With internal-only on, whatever the caller asked for becomes one counter message.
+        // Callers name the channels that suit the content - a disbursement is short enough for
+        // SMS, a statement is not - and none of them knows or should know what the society has
+        // decided about its members' figures leaving the building.
+        var channels = _policy.InternalOnly
+            ? [NotificationChannel.Counter]
+            : command.Channels.Distinct().ToArray();
+
+        foreach (var channel in channels)
         {
             if (!_policy.IsEnabled(command.Kind, channel))
             {
@@ -208,6 +216,16 @@ internal sealed class QueueNotificationHandler : IRequestHandler<QueueNotificati
         {
             NotificationChannel.Email => borrower.Email,
             NotificationChannel.Sms => borrower.Phone.IsSpecified ? borrower.Phone.Value : null,
+
+            // A counter message goes to a person standing in the office, so the "address" is
+            // how an official identifies them at the desk. A landlord is a borrower without a
+            // membership number, hence the fallback - but neither branch can come back empty,
+            // which is what makes internal-only unable to drop a message silently the way a
+            // missing email address can.
+            NotificationChannel.Counter => borrower is Member member
+                ? $"Membership no. {member.MembershipNumber}"
+                : "In person, at the office",
+
             _ => null,
         };
 }
@@ -266,6 +284,14 @@ internal sealed class DispatchNotificationsHandler
 
         foreach (var notification in waiting)
         {
+            // A counter message is not the dispatcher's to deliver. It waits for an official
+            // to hand it over, and nothing on a timer can do that - so it is skipped rather
+            // than attempted, failed and eventually given up on.
+            if (notification.Channel == NotificationChannel.Counter)
+            {
+                continue;
+            }
+
             // Checked here rather than only at the door, so that a message queued while the
             // office had a kind switched on is still suppressed if they switch it off before
             // the dispatcher gets to it.
@@ -342,5 +368,56 @@ internal sealed class ListNotificationsHandler
         ArgumentNullException.ThrowIfNull(query);
 
         return _outbox.RecentAsync(query.Take, query.Status, cancellationToken);
+    }
+}
+
+/// <summary>
+/// Records that an official gave a counter message to the member in person.
+/// </summary>
+/// <param name="Id">Which message.</param>
+/// <remarks>
+/// The counter equivalent of the dispatcher marking a message sent, and the only way a counter
+/// message is ever delivered. Deliberately a separate command rather than a flag on the
+/// dispatcher: nothing on a timer can hand somebody a piece of paper, and a system that
+/// pretended otherwise would show every member as told when none of them had been.
+/// </remarks>
+public sealed record MarkNotificationGivenCommand(NotificationId Id) : IRequest;
+
+internal sealed class MarkNotificationGivenHandler
+    : IRequestHandler<MarkNotificationGivenCommand>
+{
+    private readonly INotificationOutbox _outbox;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public MarkNotificationGivenHandler(
+        INotificationOutbox outbox,
+        ICurrentUser currentUser,
+        IClock clock,
+        IUnitOfWork unitOfWork)
+    {
+        _outbox = outbox;
+        _currentUser = currentUser;
+        _clock = clock;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(
+        MarkNotificationGivenCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var notification = await _outbox.FindByIdAsync(command.Id, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No message with id {command.Id}.");
+
+        // Throws if nobody is signed in, and that is correct. A record saying a member was
+        // told something, with nobody's name against it, is worse than no record.
+        notification.MarkGivenAtCounter(_currentUser.Actor.DisplayName, _clock.UtcNow);
+
+        _outbox.Update(notification);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -6,16 +6,36 @@
 <PageTitle>Akiba - Messages</PageTitle>
 
 <PageHeader Title="Messages"
-            Description="Everything Akiba has written to a member, and what became of it. A message is written down before any attempt is made to send it, so a mail server that is down loses nothing.">
+            Description="@(Policy.InternalOnly
+                ? "Everything Akiba has written to a member. Nothing here is sent anywhere - each one waits for an official to give it to the member in person, and records who did."
+                : "Everything Akiba has written to a member, and what became of it. A message is written down before any attempt is made to send it, so a mail server that is down loses nothing.")">
     <Actions>
-        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Send" Disabled="_busy" OnClick="DispatchAsync">
-            Try the waiting ones now
-        </MudButton>
+        @if (!Policy.InternalOnly)
+        {
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Send" Disabled="_busy" OnClick="DispatchAsync">
+                Try the waiting ones now
+            </MudButton>
+        }
     </Actions>
 </PageHeader>
 
-@if (!Policy.SendingIsAllowed)
+@* The state the society has chosen, said plainly. An official needs to know that writing a
+   member a message does not reach them - that the message is a note telling somebody in this
+   office to speak to them. *@
+@if (Policy.InternalOnly)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.Storefront">
+        <MudText Typo="Typo.subtitle2">Nothing leaves this building.</MudText>
+        <MudText Typo="Typo.body2">
+            No mail server and no SMS gateway is configured at all, so there is no way out to
+            switch off. Every message below is for the counter: give it to the member when they
+            come in, then mark it given, and Akiba records that you were the one who did.
+        </MudText>
+    </MudAlert>
+}
+
+@if (!Policy.InternalOnly && !Policy.SendingIsAllowed)
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4">
         <b>Nothing is being sent from this machine.</b> @Policy.SuppressionReason
@@ -50,9 +70,9 @@
     {
         <EmptyState Icon="@Icons.Material.Outlined.MarkEmailRead"
                     Title="Nothing waiting"
-                    Description="Messages are queued when something happens that a member
-                                 should be told about, and leave on the next pass. An empty
-                                 queue means everything that was raised has gone." />
+                    Description="@(Policy.InternalOnly
+                        ? "Messages are written when something happens a member should be told about. An empty list means there is nobody the office owes a word to."
+                        : "Messages are queued when something happens that a member should be told about, and leave on the next pass. An empty queue means everything that was raised has gone.")" />
     }
     else
     {
@@ -79,13 +99,19 @@
                 </MudTd>
                 <MudTd DataLabel="By">
                     <MudChip T="string" Size="Size.Small"
-                             Color="@(context.Channel == NotificationChannel.Email ? Color.Info : Color.Secondary)">
-                        @context.Channel
+                             Icon="@ChannelIcon(context.Channel)"
+                             Color="@ChannelColour(context.Channel)">
+                        @(context.Channel == NotificationChannel.Counter
+                            ? "At the counter"
+                            : context.Channel.ToString())
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="What became of it">
                     <MudChip T="string" Size="Size.Small" Color="@Colour(context.Status)">
-                        @context.Status
+                        @(context.Channel == NotificationChannel.Counter
+                            && context.Status == NotificationStatus.Sent
+                            ? "Given"
+                            : context.Status.ToString())
                     </MudChip>
 
                     <MudTooltip>
@@ -107,6 +133,18 @@
                     <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
                         @context.Verdict
                     </MudText>
+
+                    @if (context.Channel == NotificationChannel.Counter
+                        && context.Status != NotificationStatus.Sent)
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                   Color="Color.Primary" Class="mt-1"
+                                   StartIcon="@Icons.Material.Filled.HowToReg"
+                                   Disabled="_busy"
+                                   OnClick="@(() => MarkGivenAsync(context))">
+                            I gave this to them
+                        </MudButton>
+                    }
                 </MudTd>
             </RowTemplate>
             <PagerContent>
@@ -142,6 +180,54 @@
         NotificationKind.DividendDeclared => "Dividend declared",
         _ => kind.ToString(),
     };
+
+    private static string ChannelIcon(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.Email => Icons.Material.Filled.Email,
+        NotificationChannel.Sms => Icons.Material.Filled.Sms,
+        _ => Icons.Material.Filled.Storefront,
+    };
+
+    /// <summary>
+    /// A counter message is coloured as something to do, not as a channel.
+    /// </summary>
+    /// <remarks>
+    /// It is the only one on this screen that waits on a person in this office rather than on
+    /// a machine somewhere, so it is the only one an official can clear by acting.
+    /// </remarks>
+    private static Color ChannelColour(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.Email => Color.Info,
+        NotificationChannel.Sms => Color.Secondary,
+        _ => Color.Primary,
+    };
+
+    /// <summary>Records that this official handed the message over.</summary>
+    private async Task MarkGivenAsync(Notification message)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new MarkNotificationGivenCommand(message.Id));
+            await LoadAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     private static Color Colour(NotificationStatus status) => status switch
     {

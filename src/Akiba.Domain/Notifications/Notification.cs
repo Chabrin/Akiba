@@ -59,6 +59,23 @@ public enum NotificationChannel
     /// statement.
     /// </summary>
     Sms = 2,
+
+    /// <summary>
+    /// Not sent anywhere. Written down for an official to give the member in person.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The only channel on which nothing leaves the building. There is no mail server, no
+    /// gateway and no network involved: the message waits on the messages screen until an
+    /// official says they have handed it over, and that is what marks it delivered.
+    /// </para>
+    /// <para>
+    /// It is also the only channel that records a person rather than a machine. An email is
+    /// delivered when a mail server accepts it, which is not the same as a member having read
+    /// it; a counter message is delivered when a named official says they gave it to them.
+    /// </para>
+    /// </remarks>
+    Counter = 3,
 }
 
 /// <summary>How far a queued message has got.</summary>
@@ -127,7 +144,9 @@ public sealed class Notification : AggregateRoot<NotificationId>
         ArgumentException.ThrowIfNullOrWhiteSpace(recipientAddress);
         ArgumentException.ThrowIfNullOrWhiteSpace(body);
 
-        if (channel == NotificationChannel.Email && string.IsNullOrWhiteSpace(subject))
+        // SMS has no subject line. Everything else is a written notice and needs one, because
+        // a message with no heading is one an official has to read in full to route.
+        if (channel != NotificationChannel.Sms && string.IsNullOrWhiteSpace(subject))
         {
             throw new ArgumentException("An email needs a subject line.", nameof(subject));
         }
@@ -252,6 +271,40 @@ public sealed class Notification : AggregateRoot<NotificationId>
     }
 
     /// <summary>
+    /// An official gave this to the member in person.
+    /// </summary>
+    /// <param name="officialName">Who handed it over. Recorded, and not optional.</param>
+    /// <param name="atUtc">When.</param>
+    /// <remarks>
+    /// The counter equivalent of a mail server accepting a message, except that it is better
+    /// evidence: this records a named person saying they gave a named member a document, where
+    /// an accepted email records only that a machine took it.
+    /// </remarks>
+    public void MarkGivenAtCounter(string officialName, DateTimeOffset atUtc)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(officialName);
+
+        if (Channel != NotificationChannel.Counter)
+        {
+            throw new InvalidOperationException(
+                $"This message is to be sent by {Channel}, not handed over at the counter. "
+                + "Only a counter message is delivered by an official.");
+        }
+
+        if (Status is NotificationStatus.Sent)
+        {
+            throw new InvalidOperationException(
+                "This message has already been given to the member.");
+        }
+
+        Attempts++;
+        Status = NotificationStatus.Sent;
+        SentAtUtc = atUtc;
+        LastAttemptedAtUtc = atUtc;
+        Note = $"Given to the member by {officialName.Trim()}.";
+    }
+
+    /// <summary>
     /// Deliberately not sent, with the reason.
     /// </summary>
     /// <remarks>
@@ -272,6 +325,15 @@ public sealed class Notification : AggregateRoot<NotificationId>
     /// <summary>What happened to it, in words for the screen.</summary>
     public string Verdict => Status switch
     {
+        // A counter message is never sent and never will be, so saying it is waiting to be
+        // sent would describe a thing that is not going to happen and hide the thing that is:
+        // somebody in the office has to speak to this member.
+        NotificationStatus.Pending when Channel == NotificationChannel.Counter =>
+            "Waiting to be given to the member.",
+
+        NotificationStatus.Sent when Channel == NotificationChannel.Counter =>
+            $"{Note} {SentAtUtc:d MMM yyyy HH:mm} UTC.",
+
         NotificationStatus.Pending => "Waiting to be sent.",
         NotificationStatus.Sent => $"Sent {SentAtUtc:d MMM yyyy HH:mm} UTC.",
         NotificationStatus.Failed =>

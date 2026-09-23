@@ -224,33 +224,44 @@ figures placed so that a page face-up on a counter shows nothing useful. It stil
 society issued it and when. That covers the "misplaced or intercepted" case as well as an
 unbranded page does, without costing the member the ability to use their own statement.
 
-### Stripping SMS and email contradicts the build brief
+### Internal-only notifications — built, and now the default
 
-The brief now asks for notifications to be internal-only, with no SMS or email. **BUILD_BRIEF
-§9 says "Email is the confirmed channel for member statements", and that is what was built,
-on the earlier instruction.**
+**Decided and built on the instruction to do everything.** Akiba no longer sends anything
+outward unless a deployment explicitly says to.
 
-Both are defensible. Internal-only means a member's position never leaves the building, and
-a member is told things at the counter. Email means a member who has moved away still gets a
-statement. **The committee has to pick one**, because they are opposites and the code
-currently implements §9.
+A message is now written for the **counter**: it appears on the messages screen, an official
+gives it to the member in person, and marks it given. What is recorded is better evidence
+than an email — *"given to the member by Mary Wanjiru, 23 Sept 2026 19:33"* is a named person
+saying they handed a named member a document, where a sent email records only that a machine
+accepted one.
 
-Note that the outbox already holds messages without sending them wherever no channel is
-configured, so "internal-only" today is a configuration, not a rewrite. Making it permanent —
-deleting the email path — is a rewrite, and it is the part that needs a decision before it is
-done.
+With `Akiba:Notifications:InternalOnly` on, which is the default, **no mail server and no SMS
+gateway is registered at all.** That is deliberate: the policy alone would stop anything
+being sent, but leaving the senders configured and merely unused means the way out still
+exists and is one setting away. There is no sender for an outward channel, so a message that
+somehow got queued as Email would find nothing to carry it.
+
+**This contradicts BUILD_BRIEF §9**, which names email as the confirmed channel for member
+statements. The email and SMS paths still exist and still have their tests; they are off.
+Setting `Akiba:Notifications:InternalOnly` to `false` brings them back, and that should be a
+committee decision recorded in minutes rather than an administrator's.
+
+The trade the committee is accepting: **a member who has moved away no longer receives a
+statement.** They have to come to the office, or send somebody. For a staff welfare society
+whose members all work at CAL that is close to free; if membership ever extends beyond the
+payroll, it stops being free and this should be revisited.
 
 ### Selling Akiba changes its licensing position
 
-The brief mentions selling the application. Three dependencies are free only below a revenue
+The brief mentions selling the application. Two dependencies are free only below a revenue
 threshold, and this is recorded in `Directory.Packages.props`:
 
 - **MediatR** — commercial licence required above a revenue threshold.
 - **QuestPDF** — Community licence is free below a revenue threshold; above it, Professional
   or Enterprise.
-- **FluentAssertions** — version 8 and later require a paid licence for commercial use. This
-  one is test-only, and the cheapest fix is to move to a different assertion library rather
-  than to pay.
+- **FluentAssertions** — **no action needed.** Version 8 and later require a paid licence,
+  but Akiba is pinned to 7.0.0, the last Apache-2.0 release, and `Directory.Packages.props`
+  says not to upgrade past it without a decision. Leave it there.
 
 Built and given to one welfare society, none of this applies. Sold, it does. **Check the
 current thresholds before quoting anybody a price** — they have been revised more than once,

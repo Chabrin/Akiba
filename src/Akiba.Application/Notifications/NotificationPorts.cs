@@ -68,4 +68,24 @@ public interface INotificationPolicy
 
     /// <summary>Whether the office wants this kind of message on this channel.</summary>
     bool IsEnabled(NotificationKind kind, NotificationChannel channel);
+
+    /// <summary>
+    /// Whether a member's position is forbidden from leaving the building.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>On by default.</b> With it on, every message is written for the counter: it is
+    /// queued, it appears on the messages screen, and an official gives it to the member in
+    /// person. No mail server and no SMS gateway is registered at all, so there is no path out
+    /// to disable - the absence is the control, not a setting that could be flipped.
+    /// </para>
+    /// <para>
+    /// Turning it off is a committee decision, not an administrator's. BUILD_BRIEF section 9
+    /// names email as the confirmed channel for member statements, and both positions are
+    /// defensible: email reaches a member who has moved away, the counter means a member's
+    /// figures never cross a network the society does not own. They are opposites, so one is
+    /// the default and the other is explicit.
+    /// </para>
+    /// </remarks>
+    bool InternalOnly { get; }
 }

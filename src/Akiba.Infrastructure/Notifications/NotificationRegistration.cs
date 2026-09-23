@@ -39,6 +39,10 @@ public static class NotificationRegistration
             .GetSection("Akiba:Notifications:Disabled")
             .Get<string[]>();
 
+        // Defaults to true, so a deployment that says nothing sends nothing outward. Turning
+        // it off is a committee decision - see INotificationPolicy.InternalOnly.
+        var internalOnly = configuration.GetValue("Akiba:Notifications:InternalOnly", true);
+
         // Replaces the send-nothing default that AddAkibaInfrastructure registers.
         services.RemoveAll<INotificationPolicy>();
 
@@ -46,7 +50,22 @@ public static class NotificationRegistration
             new NotificationPolicy(
                 sendingIsAllowed,
                 suppressionReason,
-                disabled is { Length: > 0 } ? disabled : null));
+                disabled is { Length: > 0 } ? disabled : null,
+                internalOnly));
+
+        services.AddHostedService<NotificationDispatcher>();
+
+        // Nothing below this line is registered when messages stay in the building.
+        //
+        // The policy alone would be enough to stop anything being sent, but leaving an SMTP
+        // client and an SMS gateway configured and merely unused means the way out still
+        // exists and is one setting away. Not registering them means there is no sender for
+        // an outward channel at all: a message that somehow got queued as Email would find
+        // nothing to carry it. The absence is the control.
+        if (internalOnly)
+        {
+            return services;
+        }
 
         // The credentials belong in the environment, never in appsettings.json. Configuration
         // reads both, so this works either way - and the deployment guide says which.
@@ -84,8 +103,6 @@ public static class NotificationRegistration
 
         services.AddSingleton<INotificationSender>(provider =>
             provider.GetRequiredService<AfricasTalkingSmsSender>());
-
-        services.AddHostedService<NotificationDispatcher>();
 
         return services;
     }
