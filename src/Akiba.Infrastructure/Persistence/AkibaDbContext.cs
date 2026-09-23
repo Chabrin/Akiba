@@ -74,6 +74,15 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
     internal DbSet<DividendLineRow> DividendLines => Set<DividendLineRow>();
 
     /// <summary>
+    /// The outbox: every message Akiba has queued, and what became of it.
+    /// </summary>
+    /// <remarks>
+    /// A message is written down before any attempt is made to send it, so a mail server that
+    /// is down loses nothing and an official can see what went out and what did not.
+    /// </remarks>
+    internal DbSet<NotificationRow> Notifications => Set<NotificationRow>();
+
+    /// <summary>
     /// The audit trail, mapped so it can be read and exported.
     /// </summary>
     /// <remarks>

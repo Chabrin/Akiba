@@ -424,6 +424,8 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
     private readonly ILoanRepository _loans;
     private readonly IJournalRepository _journal;
     private readonly IAkibaAccounts _accounts;
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
@@ -433,6 +435,8 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         ILoanRepository loans,
         IJournalRepository journal,
         IAkibaAccounts accounts,
+        IBorrowerRepository borrowers,
+        IMediator mediator,
         ICurrentUser currentUser,
         IClock clock,
         IUnitOfWork unitOfWork)
@@ -441,6 +445,8 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         _loans = loans;
         _journal = journal;
         _accounts = accounts;
+        _borrowers = borrowers;
+        _mediator = mediator;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
@@ -502,6 +508,44 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Queued, not sent. If the mail server is down the message waits in the outbox; a loan
+        // is never held up by a notification, and a notification is never lost because a loan
+        // went through.
+        await TellTheBorrowerAsync(loan, terms, cancellationToken).ConfigureAwait(false);
+
         return loan.Id;
+    }
+
+    private async Task TellTheBorrowerAsync(
+        Loan loan, LoanTerms terms, CancellationToken cancellationToken)
+    {
+        var borrower = await _borrowers.FindByIdAsync(loan.BorrowerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (borrower is null)
+        {
+            return;
+        }
+
+        var firstDue = loan.Schedule.Instalments.Count > 0
+            ? loan.Schedule.Instalments[0].DueDate
+            : loan.DisbursedOn.AddMonths(1);
+
+        var instalment = loan.Schedule.Instalments.Count > 0
+            ? loan.Schedule.Instalments[0].Amount
+            : Domain.Financial.Money.ZeroKes;
+
+        await _mediator.Send(
+            new Notifications.QueueNotificationCommand(
+                Domain.Notifications.NotificationKind.LoanDisbursed,
+                loan.BorrowerId,
+                Notifications.NotificationComposer.LoanDisbursed(
+                    borrower.Name.Full, loan.LoanNumber, terms.Principal, instalment, firstDue),
+                [
+                    Domain.Notifications.NotificationChannel.Email,
+                    Domain.Notifications.NotificationChannel.Sms,
+                ]),
+            cancellationToken)
+            .ConfigureAwait(false);
     }
 }

@@ -107,6 +107,25 @@ Akiba reads standard .NET configuration. The two settings that matter:
 | `ASPNETCORE_URLS` | The address Akiba listens on |
 | `AllowedHosts` | The address officials type, e.g. `akiba.local;192.168.1.40`. Akiba refuses a request for any other host |
 | `Akiba__RequireHttps` | Leave unset. It defaults to `true` and should stay that way — see below |
+| `Akiba__Smtp__Host`, `__FromAddress` | The mail server messages go through, and who they come from |
+| `Akiba__Smtp__UserName`, `__Password` | Its credentials, **from the environment, never from a file** |
+| `Akiba__Sms__UserName`, `__ApiKey` | Africa's Talking, if the society wants SMS. Same rule |
+
+### Messages
+
+Akiba sends email and SMS only when `ASPNETCORE_ENVIRONMENT` is `Production`. Everywhere else
+every message is composed, written to the outbox, shown on the **Messages** screen, and never
+sent. That is not a setting; it is decided by the environment, because a development database
+full of invented members with plausible phone numbers is exactly what must never be texted.
+
+If the SMTP settings are absent, nothing breaks: messages queue, the attempt fails with "no
+mail server is configured", and the Messages screen says so. The society can run without
+notifications and turn them on later.
+
+**Every SMS costs money.** Turn individual kinds off with `Akiba__Notifications__Disabled__0`,
+`__1` and so on, using `Kind` or `Kind:Channel` — so `ArrearsReminder:Sms` stops the texts and
+leaves the emails. Statements and shortfall notices are already SMS-disabled by default,
+because either one arrives as three chargeable fragments and is unreadable.
 
 ### `Akiba__RequireHttps`
 
@@ -206,42 +225,51 @@ From an official's machine on the LAN, the same but with the machine's address.
 **This is the most important section in this document.** Akiba is the only record of who is
 owed what. A machine can be replaced; the ledger cannot.
 
-A nightly `pg_dump`, encrypted, with a copy off the machine:
+Use the script. It dumps, refuses a dump too small to be the society's ledger, encrypts it,
+copies it off the machine, checks the copy arrived intact, and prunes what is too old:
 
 ```powershell
-$date  = Get-Date -Format 'yyyy-MM-dd'
-$dump  = "C:\Akiba\backups\akiba-$date.dump"
+$env:PGPASSWORD = '...'              # the akiba_owner password
+$env:AKIBA_BACKUP_PASSWORD = '...'   # the archive password - keep it somewhere else
 
-& 'C:\Program Files\PostgreSQL\17\bin\pg_dump.exe' `
-    --host=localhost --username=akiba_owner --format=custom --file=$dump akiba
-
-# Encrypt it. The backup contains every member's financial position.
-& 'C:\Program Files\7-Zip\7z.exe' a -tzip -p"$env:AKIBA_BACKUP_PASSWORD" "$dump.zip" $dump
-Remove-Item $dump
-
-# Then copy the .zip somewhere that is not this machine.
+pwsh C:\Akiba	oolsackup.ps1 -OffMachinePath '\fileserverkiba-backups'
 ```
 
-Schedule it with Task Scheduler (or `cron`) to run nightly.
+Schedule it nightly with Task Scheduler, running as a user that can reach the off-machine path.
+Both passwords go in the task's own environment, never in the script.
 
 **Off the machine** means off the machine: another computer in the office, an external drive
 kept elsewhere, or cloud storage the treasurer controls. A backup sitting on the same disk as
-the database protects you from exactly nothing.
+the database protects you from exactly nothing, and the script refuses to pretend otherwise -
+if the destination is unreachable it fails rather than reporting success.
+
+**Keep the archive password somewhere other than the Akiba machine.** An encrypted backup whose
+password is on the machine that died is not a backup.
 
 ### Test the restore
 
-An untested backup is a rumour. Once a quarter, restore the newest dump into a scratch
-database and check it opens:
+An untested backup is a rumour. **Once a quarter**, run:
 
 ```powershell
-& 'C:\Program Files\PostgreSQL\17\bin\createdb.exe' --username=postgres akiba_restore_test
-& 'C:\Program Files\PostgreSQL\17\bin\pg_restore.exe' --username=postgres --dbname=akiba_restore_test $dump
+$env:PGPASSWORD = '...'
+$env:AKIBA_BACKUP_PASSWORD = '...'
+
+pwsh C:\Akiba	oolserify-restore.ps1
 ```
 
-Then point a spare copy of Akiba at `akiba_restore_test` and confirm the trial balance still
-reads zero and a member's shareholding looks right. Drop the scratch database afterwards.
+It takes the newest backup, restores it into a scratch database, and checks four things:
 
----
+1. it decrypts and restores at all;
+2. the tables that must have rows have rows;
+3. **the restored ledger still balances** — every journal line sums to zero;
+4. the audit trail is still refusing to be edited, so the immutability trigger survived the
+   dump.
+
+The third is the one worth having. A backup that restores but whose ledger no longer balances
+would otherwise be discovered to be useless on the worst day of the society's year.
+
+It prints a green line when it passes and exits non-zero when it does not. **Tell the treasurer
+either way** — the quarterly check is only worth running if somebody hears the answer.
 
 ## 7. Upgrading
 

@@ -31,11 +31,11 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 11 | Restructuring | 🟡 Domain done; no screen yet |
 | 12 | Arrears and ageing | ✅ Done |
 | 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
-| 14 | Notifications | ⬜ Not started |
+| 14 | Notifications | ✅ Done — an outbox, email and SMS, nothing sent outside Production |
 | 15 | Identity, roles, MFA, audit trail | ✅ Done — auth, roles, mandatory TOTP, and an append-only audit trail |
 | 16 | Dividend run | ✅ Done — compute, review, approve, post, and a schedule |
 | 17 | Migration tooling | ✅ Done — loads the real deduction register |
-| 18 | Deployment, backups, treasurer's handbook | 🟡 Deployment guide written; backups and restore verification outstanding |
+| 18 | Deployment, backups, treasurer's handbook | ✅ Done — guide, backup script, and a restore verification that checks the ledger still balances |
 
 ---
 

@@ -1,6 +1,7 @@
 using Akiba.Application.Abstractions;
 using Akiba.Application.Auditing;
 using Akiba.Application.Dividends;
+using Akiba.Application.Notifications;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Infrastructure.Auditing;
@@ -9,9 +10,11 @@ using Akiba.Infrastructure.Persistence.Repositories;
 using Akiba.Infrastructure.Reconciliation;
 using Akiba.Infrastructure.Reporting;
 using Akiba.Infrastructure.Identity;
+using Akiba.Infrastructure.Notifications;
 using Akiba.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Akiba.Infrastructure;
 
@@ -55,6 +58,20 @@ public static class DependencyInjection
         services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
         services.AddScoped<IDividendRunRepository, DividendRunRepository>();
         services.AddScoped<IAuditTrailQueries, AuditTrailQueries>();
+        services.AddScoped<INotificationOutbox, NotificationOutbox>();
+
+        // A policy that sends nothing, registered here so that anything queuing a message works
+        // without the host having opted into sending. TryAdd, so AddAkibaNotifications can
+        // replace it with the real one.
+        //
+        // The same reasoning as the audit trail's default, pointing the other way. A host that
+        // forgets to wire the trail should still have a trail; a host that has not asked to
+        // send should not send. Both defaults are the safe answer to "what if somebody forgets".
+        services.TryAddSingleton<INotificationPolicy>(new NotificationPolicy(
+            sendingIsAllowed: false,
+            suppressionReason:
+                "This host has not been configured to send anything. " +
+                "See AddAkibaNotifications in Akiba.Web."));
 
         // The trail is on from the moment the infrastructure is registered, recording changes
         // with no actor against them. A host that knows who is signed in refines that by

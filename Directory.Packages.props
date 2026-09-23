@@ -42,6 +42,14 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <!--
+      Milestone 14: notifications. Hosting for the outbox dispatcher, Http for the SMS gateway,
+      Configuration.Binder to read the settings. All first-party, all in the shared framework
+      the web host already carries.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.12" />
+    <!--
       MediatR is commercially licensed above a revenue threshold Akiba is far below, so the
       free tier applies. Its types stay inside Akiba.Application: IRequest never reaches the
       domain, so replacing the dispatcher would be a change to this layer alone.

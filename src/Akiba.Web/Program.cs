@@ -12,6 +12,7 @@ using Akiba.Domain.Common;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Membership;
 using Akiba.Infrastructure;
+using Akiba.Infrastructure.Notifications;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Web;
 using Akiba.Web.Components;
@@ -62,6 +63,17 @@ builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
 builder.Services.AddAkibaApplication();
 builder.Services.AddAkibaInfrastructure(connectionString);
 builder.Services.AddAkibaRateLimiting();
+
+// Notifications. Sending is allowed in Production and nowhere else - everywhere else every
+// message is written to the outbox, shown on the notifications screen, and never sent. A
+// development database full of invented members with plausible phone numbers is exactly the
+// thing that must never be texted.
+builder.Services.AddAkibaNotifications(
+    builder.Configuration,
+    sendingIsAllowed: builder.Environment.IsProduction(),
+    suppressionReason:
+        $"Nothing is sent from the {builder.Environment.EnvironmentName} environment. " +
+        "This is what would have gone out.");
 
 // Blazor Server. Four officials on a LAN: rendering on the server keeps one language across
 // the whole system and means no figure is ever computed twice, once here and once in a

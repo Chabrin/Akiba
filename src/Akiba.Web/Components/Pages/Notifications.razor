@@ -1,0 +1,193 @@
+@page "/notifications"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject INotificationPolicy Policy
+
+<PageTitle>Akiba - Messages</PageTitle>
+
+<PageHeader Title="Messages"
+            Description="Everything Akiba has written to a member, and what became of it. A message is written down before any attempt is made to send it, so a mail server that is down loses nothing.">
+    <Actions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Send" Disabled="_busy" OnClick="DispatchAsync">
+            Try the waiting ones now
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@if (!Policy.SendingIsAllowed)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        <b>Nothing is being sent from this machine.</b> @Policy.SuppressionReason
+        Every message below was composed exactly as it would have been, and then suppressed.
+    </MudAlert>
+}
+
+@if (_outcome is not null)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        Tried @_outcome.Attempted: @_outcome.Sent sent, @_outcome.Failed to be retried,
+        @_outcome.Suppressed suppressed.
+    </MudAlert>
+}
+
+<MudPaper Elevation="1" Class="pa-2 mb-4 akiba-no-print">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true"
+             ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="All" Icon="@Icons.Material.Filled.List" />
+        <MudTabPanel Text="Waiting" Icon="@Icons.Material.Filled.HourglassEmpty" />
+        <MudTabPanel Text="Sent" Icon="@Icons.Material.Filled.MarkEmailRead" />
+        <MudTabPanel Text="Needs attention" Icon="@Icons.Material.Filled.ErrorOutline" />
+    </MudTabs>
+</MudPaper>
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_messages is null)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_messages.Count == 0)
+    {
+        <MudAlert Severity="Severity.Normal" Class="ma-4">
+            Nothing here.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_messages" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Queued</MudTh>
+                <MudTh>About</MudTh>
+                <MudTh>To</MudTh>
+                <MudTh>By</MudTh>
+                <MudTh>What became of it</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Queued">
+                    @context.QueuedAtUtc.UtcDateTime.ToString(
+                        "d MMM yyyy HH:mm", CultureInfo.InvariantCulture)
+                </MudTd>
+                <MudTd DataLabel="About">@Describe(context.Kind)</MudTd>
+                <MudTd DataLabel="To">
+                    @context.RecipientName
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                        @context.RecipientAddress
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="By">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.Channel == NotificationChannel.Email ? Color.Info : Color.Secondary)">
+                        @context.Channel
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="What became of it">
+                    <MudChip T="string" Size="Size.Small" Color="@Colour(context.Status)">
+                        @context.Status
+                    </MudChip>
+
+                    <MudTooltip>
+                        <ChildContent>
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small"
+                                     Class="ml-1 mud-text-secondary" />
+                        </ChildContent>
+                        <TooltipContent>
+                            <div class="akiba-message-preview">
+                                @if (!string.IsNullOrWhiteSpace(context.Subject))
+                                {
+                                    <div><b>@context.Subject</b></div>
+                                }
+                                <div>@context.Body</div>
+                            </div>
+                        </TooltipContent>
+                    </MudTooltip>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                        @context.Verdict
+                    </MudText>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private IReadOnlyList<Notification>? _messages;
+    private NotificationStatus? _filter;
+    private DispatchOutcome? _outcome;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private static string Describe(NotificationKind kind) => kind switch
+    {
+        NotificationKind.LoanApproved => "Loan approved",
+        NotificationKind.LoanDisbursed => "Loan paid out",
+        NotificationKind.MonthlyStatement => "Monthly statement",
+        NotificationKind.ArrearsReminder => "Arrears reminder",
+        NotificationKind.ShortfallNotice => "Deduction was short",
+        NotificationKind.GuarantorArrearsAlert => "A guaranteed loan is in arrears",
+        NotificationKind.GuarantorExitAlert => "A co-guarantor has left CAL",
+        NotificationKind.DividendDeclared => "Dividend declared",
+        _ => kind.ToString(),
+    };
+
+    private static Color Colour(NotificationStatus status) => status switch
+    {
+        NotificationStatus.Pending => Color.Default,
+        NotificationStatus.Sent => Color.Success,
+        NotificationStatus.Failed => Color.Warning,
+        NotificationStatus.GaveUp => Color.Error,
+        NotificationStatus.Suppressed => Color.Dark,
+        _ => Color.Default,
+    };
+
+    private async Task OnTabChanged(int index)
+    {
+        _filter = index switch
+        {
+            1 => NotificationStatus.Pending,
+            2 => NotificationStatus.Sent,
+            3 => NotificationStatus.GaveUp,
+            _ => null,
+        };
+
+        await LoadAsync();
+    }
+
+    private async Task DispatchAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _outcome = await Mediator.Send(new DispatchNotificationsCommand());
+        }
+        catch (InvalidOperationException exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _messages = null;
+        _messages = await Mediator.Send(new ListNotificationsQuery(200, _filter));
+    }
+}

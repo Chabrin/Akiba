@@ -131,6 +131,30 @@ out does not.
 of it, and leaving is not obviously the same as forfeiting a year's dividend. This overlaps
 open question 14, which nobody has answered.
 
+## Raised by building notifications (23 September 2026)
+
+**G. Nobody has agreed that members may be written to, or how they opt out.** Akiba now has
+everything needed to email and text every member, and it sends nothing: outside Production it
+cannot, and in Production the SMTP and SMS settings are absent until somebody supplies them.
+Before they are, the committee should settle three things.
+
+1. **Consent.** The register holds phone numbers collected to run a welfare society, not to
+   market to anybody. Sending a member a statement they asked for is uncontroversial; sending
+   an arrears reminder to somebody who would rather be telephoned is not.
+2. **Opting out.** There is no unsubscribe link, because there is nowhere for it to go - no
+   member portal. The realistic answer is that the accounts clerk turns a member off on
+   request, and that needs a per-member setting Akiba does not yet have. **Say if it is
+   wanted.**
+3. **Who pays for SMS, and what the ceiling is.** Every text costs money. Akiba gives up on a
+   message after five attempts rather than retrying forever, precisely so a gateway that
+   accepts and charges for messages it fails to deliver cannot quietly spend the society's
+   money - but nobody has said what the monthly budget should be.
+
+**H. The arrears reminder is the one to read aloud before turning it on.** It goes to a
+colleague about their own money, in an office where everybody knows everybody. The wording is
+in one file - `NotificationComposer` - so the committee can change what it says rather than
+turn the whole thing off.
+
 ## Found while building, not yet raised
 
 **The graduated scale is a maximum, not a fixed term.** The application form's duration
