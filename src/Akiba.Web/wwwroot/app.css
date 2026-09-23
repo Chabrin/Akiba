@@ -89,6 +89,17 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     margin: 0;
 }
 
+/* The tools that belong to the page, on one line, ending flush with the table
+   below. The primary action sits last so it lands nearest the content it acts
+   on, which is where the eye finishes reading the heading. */
+.akiba-page-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: var(--akiba-space-3);
+}
+
 .akiba-page-header .akiba-page-description {
     max-width: 68ch;
     margin-top: 2px;
@@ -323,6 +334,100 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 /* ---------------------------------------------------------------------------
+   Sign in
+
+   Two panels: the society on the left, the form on the right. Below 900px the
+   brand panel goes, because on a phone the form is the only thing that matters
+   and a screenful of prose before it is an obstacle.
+   --------------------------------------------------------------------------- */
+
+.akiba-signin {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.akiba-signin-brand {
+    display: flex;
+    flex-direction: column;
+    gap: var(--akiba-space-6);
+    padding: var(--akiba-space-6) clamp(2rem, 6vw, 5rem);
+    justify-content: center;
+
+    /* The society's colour, and the only place in the application it covers a
+       whole surface. Everywhere else green is reserved for meaning. */
+    background-color: #14401A;
+    color: #E8EDE9;
+}
+
+.akiba-signin-mark {
+    display: flex;
+    align-items: center;
+    gap: var(--akiba-space-3);
+}
+
+.akiba-signin-name {
+    font-size: 2rem;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+}
+
+.akiba-signin-sub {
+    font-size: 0.8125rem;
+    opacity: .75;
+}
+
+.akiba-signin-statement {
+    max-width: 44ch;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    opacity: .85;
+}
+
+.akiba-signin-statement p {
+    margin: 0 0 var(--akiba-space-4);
+}
+
+.akiba-signin-environment {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--akiba-space-2);
+    max-width: 44ch;
+    padding: var(--akiba-space-3);
+    border-radius: var(--akiba-radius);
+    border: 1px solid rgba(224, 164, 88, .5);
+    background-color: rgba(224, 164, 88, .12);
+    color: #E0A458;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.akiba-signin-form {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--akiba-space-6) var(--akiba-space-4);
+    background-color: var(--mud-palette-background);
+}
+
+.akiba-signin-form-inner {
+    width: 100%;
+    max-width: 22rem;
+}
+
+@media (max-width: 900px) {
+    .akiba-signin {
+        grid-template-columns: 1fr;
+    }
+
+    .akiba-signin-brand {
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
    The work panel
 
    Every form in Akiba. Down the right-hand edge, so the list an official is
@@ -399,6 +504,16 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     letter-spacing: 0.075em;
     text-transform: uppercase;
     color: var(--mud-palette-text-secondary);
+}
+
+/* Pasted register data. Monospaced and tabular, so a column that has not lined
+   up is visible in the box rather than after it has been read. */
+.akiba-paste textarea {
+    font-family: "Cascadia Mono", Consolas, "SF Mono", monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
 }
 
 /* ---------------------------------------------------------------------------

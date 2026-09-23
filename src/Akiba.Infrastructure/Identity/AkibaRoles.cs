@@ -67,6 +67,22 @@ public static class AkibaPolicies
     public const string DownloadsSchedules = "DownloadsSchedules";
 
     /// <summary>
+    /// Loading the society's existing register. The treasurer or the chairman.
+    /// </summary>
+    /// <remarks>
+    /// Its own policy rather than borrowing the treasurer's, for a practical reason. This runs
+    /// once, on a system where the only account that exists is the one the installer created -
+    /// and that account is the chairman's. Gating the migration on the treasurer alone means
+    /// the society cannot load its own register until it has finished creating accounts it
+    /// cannot yet create the members for.
+    ///
+    /// The accountability is not weakened by this. The form records the treasurer's name as
+    /// the sign-off on the totals whoever is typing, because the claim that matters is that
+    /// the figures match the paper register, not that a particular person pressed a button.
+    /// </remarks>
+    public const string LoadsOpeningBalances = "LoadsOpeningBalances";
+
+    /// <summary>
     /// Setting up an authenticator.
     /// </summary>
     /// <remarks>

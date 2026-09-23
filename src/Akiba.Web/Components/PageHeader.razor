@@ -17,7 +17,10 @@
 
     @if (Actions is not null)
     {
-        <div class="akiba-no-print">@Actions</div>
+        @* A row, not a block. Several pages put a date picker and a primary action side by
+           side, and left to itself the picker's helper text pushes the button onto its own
+           line - which reads as two unrelated controls rather than one set of page tools. *@
+        <div class="akiba-page-actions akiba-no-print">@Actions</div>
     }
 </div>
 

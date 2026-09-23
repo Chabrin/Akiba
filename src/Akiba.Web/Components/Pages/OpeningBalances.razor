@@ -1,0 +1,462 @@
+@page "/setup/opening-balances"
+@attribute [Authorize(Policy = AkibaPolicies.LoadsOpeningBalances)]
+@using System.Text.RegularExpressions
+@using Akiba.Application.Migration
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Getting the society's existing register into Akiba, once.
+
+    This is the only screen in the application that runs a handful of times and then never
+    again, and it is the most dangerous one here: it is the moment a paper register of real
+    people's savings becomes the opening position every future figure is derived from. A
+    mistake made here is not a wrong screen, it is a wrong balance that compounds for years.
+
+    So it is staged. Paste, check, then commit - and the commit is refused outright unless the
+    check came back clean. The check is not a formality and cannot be skipped by an impatient
+    treasurer, because the whole migration posts as one journal entry: it either happened or it
+    did not, and there is no half-migrated state to unpick.
+
+    Paste rather than upload, deliberately. The register is an Excel file containing every
+    member's savings, and the office should not be putting a copy of it on a server to get it
+    in here - nor should this application be storing one. Copying the three columns out of
+    Excel and pasting them leaves the file where it is.
+*@
+
+<PageTitle>Akiba - Opening balances</PageTitle>
+
+<PageHeader Title="Opening balances"
+            Description="The one-time load of the society's existing register. Everything Akiba reports afterwards is derived from what is entered here." />
+
+@if (_result is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4">
+        <MudText Typo="Typo.subtitle2">The register is loaded.</MudText>
+        <MudText Typo="Typo.body2">
+            @_result.MembersCreated member(s) created carrying
+            <MoneyText Amount="_result.TotalShareholding" /> of shareholding, with an opening
+            bank balance of <MoneyText Amount="_result.OpeningBankBalance" />. It posted as one
+            journal entry against Opening Balance Equity.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            <b>Do not run this again.</b> A second load would create every member twice.
+        </MudText>
+    </MudAlert>
+}
+else
+{
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Step one — the register</MudText>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" Style="max-width: 70ch;">
+            Copy three columns out of the register — staff number, name, shareholding — and
+            paste them here. One member per line, separated by tabs or commas. A heading row is
+            ignored. The spreadsheet itself stays where it is; nothing is uploaded.
+        </MudText>
+
+        <MudTextField @bind-Value="_pasted" Label="Pasted from the register"
+                      Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Placeholder="0001&#9;Grace Njeri&#9;102000&#10;0002&#9;Peter Mwangi&#9;93500"
+                      Class="akiba-paste" />
+
+        <MudGrid Spacing="2" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
+                <MudDatePicker @bind-Date="_goLive" Label="Go-live date"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               HelperText="The date every opening balance is dated" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudNumericField T="decimal" @bind-Value="_bankBalance"
+                                 Label="Bank balance on that date (KES)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Format="N2" HideSpinButtons="true"
+                                 HelperText="From the bank statement, not the cash book" />
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-start">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.FactCheck"
+                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_pasted))"
+                           OnClick="CheckAsync">
+                    Check it
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_parseProblems.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-3">
+                <MudText Typo="Typo.subtitle2">
+                    @_parseProblems.Count line(s) could not be read
+                </MudText>
+                @foreach (var problem in _parseProblems.Take(8))
+                {
+                    <MudText Typo="Typo.body2">@problem</MudText>
+                }
+                @if (_parseProblems.Count > 8)
+                {
+                    <MudText Typo="Typo.body2">
+                        …and @(_parseProblems.Count - 8) more.
+                    </MudText>
+                }
+            </MudAlert>
+        }
+    </MudPaper>
+
+    @if (_dryRun is not null)
+    {
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                Step two — what would happen
+            </MudText>
+
+            <MudGrid Spacing="3" Class="mt-1 mb-4">
+                <MudItem xs="12" sm="4">
+                    @* A count, not an amount, so it does not borrow the money card and leave
+                       a meaningless KES 0.00 sitting beside two real figures. *@
+                    <div class="akiba-stat" style="color: var(--mud-palette-primary);">
+                        <div class="akiba-stat-header">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary akiba-stat-title">
+                                Members
+                            </MudText>
+                        </div>
+                        <MudText Typo="Typo.h3" Class="akiba-figure">@_dryRun.Rows.Count</MudText>
+                        <div class="akiba-stat-accent"></div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            would be created
+                        </MudText>
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <StatCard Title="Shareholding" Value="_dryRun.TotalShareholding"
+                              Icon="@Icons.Material.Filled.Savings"
+                              Caption="Total carried in"
+                              Colour="Color.Tertiary" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <StatCard Title="Opening bank" Value="_dryRun.OpeningBankBalance"
+                              Icon="@Icons.Material.Filled.AccountBalance"
+                              Caption="As at the go-live date" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_dryRun.FatalProblems.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">
+                    <MudText Typo="Typo.subtitle2">
+                        This cannot be loaded until @_dryRun.FatalProblems.Count problem(s) are fixed.
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var problem in _dryRun.FatalProblems)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.Error"
+                                         IconColor="Color.Error">
+                                @(problem.RowNumber is { } row ? $"Line {row}: " : string.Empty)@problem.Problem
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudAlert>
+            }
+
+            @if (_dryRun.Warnings.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">
+                    <MudText Typo="Typo.subtitle2">
+                        @_dryRun.Warnings.Count thing(s) worth looking at first
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        None of these stops the load. They are the rows somebody should check
+                        against the paper register before committing to them for good.
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var problem in _dryRun.Warnings)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.Warning"
+                                         IconColor="Color.Warning">
+                                @(problem.RowNumber is { } row ? $"Line {row}: " : string.Empty)@problem.Problem
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudAlert>
+            }
+
+            <MudExpansionPanels Elevation="0" Class="mb-4">
+                <MudExpansionPanel Text="@($"Read back all {_dryRun.Rows.Count} rows")">
+                    <MudTable Items="_dryRun.Rows" Dense="true" Striped="true" Elevation="0"
+                              Height="22rem" FixedHeader="true">
+                        <HeaderContent>
+                            <MudTh>Line</MudTh>
+                            <MudTh>Staff no.</MudTh>
+                            <MudTh>Name</MudTh>
+                            <MudTh Style="text-align: right">Shareholding</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.RowNumber</MudTd>
+                            <MudTd>@(context.StaffNumber ?? "—")</MudTd>
+                            <MudTd>@context.Name</MudTd>
+                            <MudTd Class="akiba-money-cell">
+                                <MoneyText Amount="context.OpeningShareholding" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            @if (_dryRun.FatalProblems.Count == 0)
+            {
+                <MudDivider Class="mb-4" />
+
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                    Step three — commit it
+                </MudText>
+
+                <MudAlert Severity="Severity.Warning" Class="my-3">
+                    This runs once and cannot be undone. Every figure Akiba reports from now on
+                    is derived from these balances. Check the totals against the paper register
+                    before you sign.
+                </MudAlert>
+
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="6">
+                        <MudSelect T="ZoneId?" @bind-Value="_zoneId" Label="Zone for every member"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true"
+                                   HelperText="Members are moved to their real zone afterwards">
+                            @foreach (var zone in _zones)
+                            {
+                                <MudSelectItem T="ZoneId?" Value="@zone.Id">@zone.Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        @* A name, not a tick. Whoever signs this is saying the totals match
+                           the paper register, and that claim should have somebody's name on
+                           it for as long as the society keeps its books. *@
+                        <MudTextField @bind-Value="_treasurer" Label="Signed off by"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      HelperText="The treasurer's name. Recorded permanently." />
+                    </MudItem>
+                </MudGrid>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Error" Class="mt-3"
+                           StartIcon="@Icons.Material.Filled.Publish"
+                           Disabled="@(_busy || !CanCommit)"
+                           OnClick="CommitAsync">
+                    Load @_dryRun.Rows.Count member(s) permanently
+                </MudButton>
+            }
+        </MudPaper>
+    }
+}
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private string? _pasted;
+    private DateTime? _goLive;
+    private decimal _bankBalance;
+    private ZoneId? _zoneId;
+    private string _treasurer = string.Empty;
+
+    private IReadOnlyList<ZoneOption> _zones = [];
+    private List<string> _parseProblems = [];
+    private ImportDryRun? _dryRun;
+    private ImportResult? _result;
+
+    private bool _busy;
+    private string? _error;
+
+    /// <summary>
+    /// A comma between a digit and exactly three more: a thousands separator, never a field.
+    /// </summary>
+    /// <remarks>
+    /// A plain compiled Regex rather than a [GeneratedRegex] partial, because the source
+    /// generator cannot add a method to a class Razor itself generates.
+    /// </remarks>
+    private static readonly Regex ThousandsSeparatorPattern =
+        new(@"(?<=\d),(?=\d{3}(\D|$))", RegexOptions.Compiled);
+
+    private static Regex ThousandsSeparator() => ThousandsSeparatorPattern;
+
+    private bool CanCommit =>
+        _dryRun is { FatalProblems.Count: 0 }
+        && _zoneId is { } zone
+        && zone.IsSpecified
+        && !string.IsNullOrWhiteSpace(_treasurer);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _goLive = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+        _zones = await Mediator.Send(new ListZonesQuery());
+        _zoneId = (_zones.FirstOrDefault(zone => zone.IsOffice) ?? _zones.FirstOrDefault())?.Id;
+    }
+
+    /// <summary>
+    /// Turns the pasted text into rows.
+    /// </summary>
+    /// <remarks>
+    /// Tolerant about the separator and about how the amount is written, because what arrives
+    /// from Excel is tab-separated and what arrives from a text file is usually commas, and an
+    /// amount copied from a formatted cell carries thousands separators and sometimes "KES".
+    /// Being strict about any of that would send the treasurer back to reformat a spreadsheet,
+    /// which is how a migration ends up being done by hand.
+    ///
+    /// It is not tolerant about the amount being a number. A line whose third column cannot be
+    /// read as one is reported rather than guessed at.
+    /// </remarks>
+    private List<RegisterRow> Parse(string text)
+    {
+        var rows = new List<RegisterRow>();
+
+        _parseProblems = [];
+
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index].Trim('\r', ' ');
+
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            // Thousands separators are stripped before the line is split, or they split it.
+            //
+            // This was a real bug and a dangerous one: 45,000 pasted as comma-separated text
+            // became the fields "45" and "000", the amount read as 45, and the import
+            // cheerfully reported a total three orders of magnitude out. On an opening balance
+            // that is not a wrong screen - it is a wrong balance every later figure derives
+            // from, and nothing downstream would ever contradict it.
+            //
+            // The pattern only strips a comma sitting between a digit and exactly three more
+            // digits, which is a thousands separator and is never a field separator.
+            var normalised = ThousandsSeparator().Replace(line, string.Empty);
+
+            // Tab wins where there is one. That is what a paste out of Excel gives, and it is
+            // the path the instructions on this screen describe.
+            var separators = normalised.Contains('\t', StringComparison.Ordinal)
+                ? new[] { '\t' }
+                : [','];
+
+            var parts = normalised.Split(separators, StringSplitOptions.TrimEntries);
+
+            if (parts.Length < 3)
+            {
+                _parseProblems.Add($"Line {index + 1}: expected three columns, found {parts.Length}.");
+                continue;
+            }
+
+            var raw = parts[2]
+                .Replace("KES", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace(",", string.Empty, StringComparison.Ordinal)
+                .Trim();
+
+            if (raw.Length == 0)
+            {
+                _parseProblems.Add($"Line {index + 1}: no shareholding.");
+                continue;
+            }
+
+            if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
+            {
+                // A heading row lands here, and that is the expected way for it to be skipped.
+                if (index == 0)
+                {
+                    continue;
+                }
+
+                _parseProblems.Add($"Line {index + 1}: \"{parts[2]}\" is not an amount.");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(parts[1]))
+            {
+                _parseProblems.Add($"Line {index + 1}: no name.");
+                continue;
+            }
+
+            rows.Add(new RegisterRow(
+                index + 1,
+                string.IsNullOrWhiteSpace(parts[0]) ? null : parts[0],
+                parts[1],
+                Money.Kes(amount)));
+        }
+
+        return rows;
+    }
+
+    private async Task CheckAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_pasted) || _goLive is not { } goLive)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        _dryRun = null;
+
+        try
+        {
+            var rows = Parse(_pasted);
+
+            if (rows.Count == 0)
+            {
+                _error = "Nothing could be read from that. Check the columns are staff number, "
+                    + "name, then shareholding.";
+
+                return;
+            }
+
+            _dryRun = await Mediator.Send(new DryRunOpeningBalancesCommand(
+                rows, DateOnly.FromDateTime(goLive), Money.Kes(_bankBalance)));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        if (_busy || !CanCommit || _dryRun is null || _goLive is not { } goLive)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _result = await Mediator.Send(new CommitOpeningBalancesCommand(
+                _dryRun.Rows,
+                DateOnly.FromDateTime(goLive),
+                Money.Kes(_bankBalance),
+                _zoneId!.Value,
+                _treasurer.Trim()));
+
+            _dryRun = null;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

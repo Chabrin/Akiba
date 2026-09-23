@@ -1,17 +1,61 @@
 @inherits LayoutComponentBase
+@inject IWebHostEnvironment Environment
 
 @* Sign-in has no navigation, no user chip and no theme toggle - there is nobody signed in to
-   have a preference, and nothing to navigate to. *@
+   have a preference, and nothing to navigate to.
+
+   It is a two-panel screen rather than a card floating in the middle of an empty page. The
+   left panel is the society: its name, and the one sentence that says what this system is for.
+   The right is the form and nothing else.
+
+   That is not decoration. This screen is the first thing anybody sees of Akiba - a committee
+   member being shown it, an auditor being handed a laptop - and a lone box in a grey field
+   says nothing about whose books these are. The panel also gives the environment warning
+   somewhere to live that is impossible to miss, which on a machine holding a restored copy of
+   the real register matters more than it looks. *@
 
 <MudThemeProvider Theme="AkibaTheme.Instance" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Small">
+<div class="akiba-signin">
+    <aside class="akiba-signin-brand">
+        <div class="akiba-signin-mark">
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Large" />
+
+            <div>
+                <div class="akiba-signin-name">Akiba</div>
+                <div class="akiba-signin-sub">CAL Staff Welfare Society</div>
+            </div>
+        </div>
+
+        <div class="akiba-signin-statement">
+            <p>
+                Every figure in this system is summed from the society's journal entries.
+                None of them is stored, so none of them can quietly disagree with the books.
+            </p>
+            <p>
+                Every entry records who made it and when, and nothing written can be edited
+                or deleted afterwards — a correction is a new entry that reverses the old one.
+            </p>
+        </div>
+
+        @if (!Environment.IsProduction())
+        {
+            <div class="akiba-signin-environment">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                <span>
+                    <b>@Environment.EnvironmentName.</b>
+                    This is not the society's live system. Nothing typed here is sent anywhere.
+                </span>
+            </div>
+        }
+    </aside>
+
+    <main class="akiba-signin-form">
+        <div class="akiba-signin-form-inner">
             @Body
-        </MudContainer>
-    </MudMainContent>
-</MudLayout>
+        </div>
+    </main>
+</div>
