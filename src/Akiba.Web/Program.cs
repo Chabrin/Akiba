@@ -376,10 +376,13 @@ reports.MapGet("/members/{id:guid}/statement", async (
 // The audit trail as CSV. The brief requires it exportable, and CSV is what an auditor asks
 // for - it opens in anything and nothing about it depends on Akiba still running.
 reports.MapGet("/audit", async (
-    IMediator mediator, DateOnly? from, DateOnly? to, string? table, int? take) =>
+    IMediator mediator, DateOnly? from, DateOnly? to, string? table, Guid? actor, int? take) =>
 {
+    // Same filters as the screen. An export that quietly widened what was on screen would be
+    // worse than no export, because the committee would be reading a different set of changes
+    // from the one the treasurer showed them.
     var entries = await mediator.Send(
-        new ListAuditEntriesQuery(from, to, table, null, take ?? 5_000));
+        new ListAuditEntriesQuery(from, to, table, actor, take ?? 5_000));
 
     var csv = Akiba.Infrastructure.Auditing.AuditTrailQueries.ToCsv(entries);
 

@@ -25,7 +25,7 @@
             <MudDatePicker Label="To" @bind-Date="_to" DateFormat="dd MMM yyyy"
                            Variant="Variant.Outlined" Margin="Margin.Dense" />
         </MudItem>
-        <MudItem xs="12" sm="8" md="4">
+        <MudItem xs="12" sm="6" md="3">
             <MudSelect T="string" @bind-Value="_table" Label="Table" Dense="true" Clearable="true"
                        Variant="Variant.Outlined" Margin="Margin.Dense">
                 <MudSelectItem T="string" Value="@(null!)">Every table</MudSelectItem>
@@ -35,10 +35,44 @@
                 }
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" sm="4" md="2" Class="d-flex align-center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadAsync">
+
+        @* The usual question a committee asks is "who changed this", so the official is a
+           filter in its own right rather than something to be found by reading down the
+           column. The list comes from the trail, not from the accounts, so an official who
+           has since left is still here - which is generally who is being asked about. *@
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="Guid?" @bind-Value="_actor" Label="Official" Dense="true"
+                       Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem T="Guid?" Value="@(null)">Every official</MudSelectItem>
+                @foreach (var actor in _actors.Where(actor => actor.Id is not null))
+                {
+                    <MudSelectItem T="Guid?" Value="@actor.Id">
+                        @actor.Name (@actor.Changes)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Search"
+                       Disabled="_loading" OnClick="LoadAsync">
                 Show
             </MudButton>
+
+            @if (IsFiltered)
+            {
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Clear"
+                           Disabled="_loading" OnClick="ClearAsync">
+                    Clear filters
+                </MudButton>
+            }
+
+            <MudSpacer />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Click any row to see everything that has happened to it.
+            </MudText>
         </MudItem>
     </MudGrid>
 </MudPaper>
@@ -46,18 +80,22 @@
 <MudPaper Elevation="1" Class="pa-2">
     @if (_entries is null)
     {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        <div class="pa-2"><TableSkeleton Rows="8" Columns="5" /></div>
     }
     else if (_entries.Count == 0)
     {
-        <MudAlert Severity="Severity.Normal" Class="ma-4">
-            Nothing was changed in that period.
-        </MudAlert>
+        <EmptyState Icon="@Icons.Material.Filled.ManageSearch"
+                    Title="Nothing matches that"
+                    Body="@(IsFiltered
+                        ? "Nothing in the trail matches those filters. Widen the dates, or clear them."
+                        : "Nothing was changed in that period. On a quiet month that is the expected answer.")" />
     }
     else
     {
         <MudTable Items="_entries" Dense="true" Hover="true" Striped="true" Elevation="0"
-                  Breakpoint="Breakpoint.Sm">
+                  Breakpoint="Breakpoint.Sm" FixedHeader="true" Height="60vh"
+                  OnRowClick="@((TableRowClickEventArgs<AuditEntry> row) => ShowHistoryAsync(row.Item))"
+                  RowClass="akiba-row-actionable">
             <HeaderContent>
                 <MudTh>When (UTC)</MudTh>
                 <MudTh>Official</MudTh>
@@ -139,13 +177,83 @@
     }
 </MudPaper>
 
+@* Everything that has ever happened to one row.
+
+   The list answers "what changed last week". This answers "what has been done to this loan,
+   ever, and by whom" - which is the question that actually gets asked when a figure is
+   disputed, and the one a flat list of changes is worst at. *@
+<MudDialog @bind-Visible="_historyOpen" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h4">
+            @(_historyOf?.TableName ?? "Row") history
+        </MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            @_historyOf?.PrimaryKey
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_history is null)
+        {
+            <TableSkeleton Rows="4" Columns="2" />
+        }
+        else
+        {
+            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                @foreach (var entry in _history)
+                {
+                    <MudTimelineItem Color="@(entry.Succeeded ? Color.Primary : Color.Error)"
+                                     Size="Size.Small">
+                        <MudText Typo="Typo.subtitle2">@entry.Summary</MudText>
+
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mb-1">
+                            @entry.Actor,
+                            @entry.OccurredAtUtc.UtcDateTime.ToString(
+                                "d MMM yyyy HH:mm:ss", CultureInfo.InvariantCulture) UTC
+                            @if (entry.IpAddress is not null)
+                            {
+                                @($" from {entry.IpAddress}")
+                            }
+                        </MudText>
+
+                        @foreach (var change in entry.Changes)
+                        {
+                            <MudText Typo="Typo.body2">
+                                <b>@change.ColumnName</b>:
+                                @(change.Before ?? "(empty)") &rarr; @(change.After ?? "(empty)")
+                            </MudText>
+                        }
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Oldest first. This is the whole history of the row, not a page of it, and
+                nothing in Akiba can remove an entry from it.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _historyOpen = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private IReadOnlyList<AuditEntry>? _entries;
     private IReadOnlyList<string> _tables = [];
+    private IReadOnlyList<AuditActor> _actors = [];
 
     private DateTime? _from;
     private DateTime? _to;
     private string? _table;
+    private Guid? _actor;
+    private bool _loading;
+
+    private bool _historyOpen;
+    private AuditEntry? _historyOf;
+    private IReadOnlyList<AuditEntry>? _history;
+
+    /// <summary>Whether anything narrower than the default month is being asked for.</summary>
+    private bool IsFiltered => _table is not null || _actor is not null;
 
     private string ExportUrl
     {
@@ -168,6 +276,11 @@
                 query.Add($"table={Uri.EscapeDataString(_table)}");
             }
 
+            if (_actor is { } actor)
+            {
+                query.Add($"actor={actor:D}");
+            }
+
             return query.Count == 0 ? "/reports/audit" : $"/reports/audit?{string.Join('&', query)}";
         }
     }
@@ -180,19 +293,59 @@
         _to = today.ToDateTime(TimeOnly.MinValue);
 
         _tables = await Mediator.Send(new ListAuditedTablesQuery());
+        _actors = await Mediator.Send(new ListAuditActorsQuery());
 
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
+        // Guarded rather than merely disabled on the button. A second click that arrives
+        // before the first query returns would leave two results racing to land in _entries,
+        // and the one that wins is whichever the database happened to finish second.
+        if (_loading)
+        {
+            return;
+        }
+
+        _loading = true;
         _entries = null;
 
-        _entries = await Mediator.Send(new ListAuditEntriesQuery(
-            _from is { } from ? DateOnly.FromDateTime(from) : null,
-            _to is { } to ? DateOnly.FromDateTime(to) : null,
-            _table,
-            null,
-            500));
+        try
+        {
+            _entries = await Mediator.Send(new ListAuditEntriesQuery(
+                _from is { } from ? DateOnly.FromDateTime(from) : null,
+                _to is { } to ? DateOnly.FromDateTime(to) : null,
+                _table,
+                _actor,
+                500));
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        _table = null;
+        _actor = null;
+
+        await LoadAsync();
+    }
+
+    private async Task ShowHistoryAsync(AuditEntry? entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+
+        _historyOf = entry;
+        _history = null;
+        _historyOpen = true;
+
+        _history = await Mediator.Send(
+            new GetAuditHistoryQuery(entry.TableName, entry.PrimaryKey));
     }
 }

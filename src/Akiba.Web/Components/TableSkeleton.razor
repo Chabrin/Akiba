@@ -9,10 +9,14 @@
 <div aria-busy="true" aria-live="polite">
     @for (var row = 0; row < Rows; row++)
     {
-        var width = Widths[row % Widths.Length];
-
         <div class="d-flex align-center gap-4 px-3" style="height: var(--akiba-row-height);">
-            <div class="akiba-skeleton" style="height: .75rem; width: @(width)%;"></div>
+            @for (var column = 0; column < Columns; column++)
+            {
+                var cell = Widths[(row + column) % Widths.Length];
+
+                <div class="akiba-skeleton flex-grow-1"
+                     style="height: .75rem; max-width: @(cell / (Columns == 1 ? 1 : 2))%;"></div>
+            }
         </div>
     }
 </div>
@@ -20,6 +24,9 @@
 @code {
     /// <summary>How many rows to suggest. Roughly what the table usually holds.</summary>
     [Parameter] public int Rows { get; set; } = 6;
+
+    /// <summary>How many columns the table has, so the placeholder is its shape and not a bar.</summary>
+    [Parameter] public int Columns { get; set; } = 1;
 
     /// <summary>
     /// Varying widths, so it reads as text rather than as a loading bar repeated.

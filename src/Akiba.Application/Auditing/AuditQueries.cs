@@ -74,6 +74,22 @@ public sealed record GetAuditHistoryQuery(string TableName, string PrimaryKey)
 public sealed record ListAuditedTablesQuery : IRequest<IReadOnlyList<string>>;
 
 /// <summary>
+/// An official who has changed something, as the filter lists them.
+/// </summary>
+/// <param name="Id">The account. Null where the change was made with nobody signed in.</param>
+/// <param name="Name">Their name as it was recorded at the time.</param>
+/// <param name="Changes">How many entries they account for in the trail.</param>
+/// <remarks>
+/// Taken from the trail rather than from the list of accounts, deliberately. An official who
+/// has left still appears here, because what they did is still in the trail and a committee
+/// asking who did something is usually asking about somebody who is no longer doing it.
+/// </remarks>
+public sealed record AuditActor(Guid? Id, string Name, int Changes);
+
+/// <summary>The officials who appear in the trail, for the filter.</summary>
+public sealed record ListAuditActorsQuery : IRequest<IReadOnlyList<AuditActor>>;
+
+/// <summary>
 /// Reads the audit trail.
 /// </summary>
 /// <remarks>
@@ -90,6 +106,8 @@ public interface IAuditTrailQueries
         string tableName, string primaryKey, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<string>> TablesAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AuditActor>> ActorsAsync(CancellationToken cancellationToken = default);
 }
 
 internal sealed class ListAuditEntriesHandler
@@ -130,4 +148,16 @@ internal sealed class ListAuditedTablesHandler
     public Task<IReadOnlyList<string>> Handle(
         ListAuditedTablesQuery query, CancellationToken cancellationToken) =>
         _trail.TablesAsync(cancellationToken);
+}
+
+internal sealed class ListAuditActorsHandler
+    : IRequestHandler<ListAuditActorsQuery, IReadOnlyList<AuditActor>>
+{
+    private readonly IAuditTrailQueries _trail;
+
+    public ListAuditActorsHandler(IAuditTrailQueries trail) => _trail = trail;
+
+    public Task<IReadOnlyList<AuditActor>> Handle(
+        ListAuditActorsQuery query, CancellationToken cancellationToken) =>
+        _trail.ActorsAsync(cancellationToken);
 }

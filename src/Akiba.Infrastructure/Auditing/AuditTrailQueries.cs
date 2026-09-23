@@ -80,6 +80,37 @@ public sealed class AuditTrailQueries : IAuditTrailQueries
         return tables;
     }
 
+    public async Task<IReadOnlyList<AuditActor>> ActorsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        // Grouped on the name as well as the id. An official whose name was corrected appears
+        // under both, which is honest - the trail recorded what it recorded, and quietly
+        // showing only the current name would misrepresent an entry made under the old one.
+        var actors = await _context.AuditEntries
+            .AsNoTracking()
+            .GroupBy(entry => new { entry.ActorUserId, entry.ActorName })
+            .Select(group => new
+            {
+                group.Key.ActorUserId,
+                group.Key.ActorName,
+                Changes = group.Count(),
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. actors
+                .Select(actor => new AuditActor(
+                    actor.ActorUserId,
+                    string.IsNullOrWhiteSpace(actor.ActorName)
+                        ? "(no signed-in official)"
+                        : actor.ActorName,
+                    actor.Changes))
+                .OrderBy(actor => actor.Name, StringComparer.CurrentCulture),
+        ];
+    }
+
     private static AuditEntry ToEntry(AuditEntryRow row) => new(
         row.Id,
         row.OccurredAtUtc,
