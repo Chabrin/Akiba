@@ -172,3 +172,86 @@ emergency-type entry **above** 25,000, but the scan is not legible enough to be 
 **Check the original book before milestone 5 is signed off** — if the cap has ever been
 exceeded in practice, the rule as stated is wrong, or there is a product nobody has
 described.
+
+## Raised by the hardening brief (23 September 2026)
+
+Four items in that brief cannot be closed by writing code, for four different reasons.
+
+### Encryption at rest is not "turn on TDE"
+
+The brief asks for Transparent Data Encryption. **TDE is a SQL Server feature and Akiba
+runs on PostgreSQL, which has no equivalent.** There is no setting to turn on, and there
+are no `.bak` files to protect — the brief's phrasing appears to have come from a SQL
+Server checklist.
+
+What actually exists today: the backups **are** encrypted, with 7-Zip AES-256 and encrypted
+filenames, so the copy that leaves the building is covered. The live database files on the
+server are not.
+
+If the committee wants the live files covered too, that is a decision about the **machine**,
+not the application, and the honest options are:
+
+- **BitLocker on the data volume.** Covers a stolen or discarded disk, which is the realistic
+  threat for a machine in an office. Costs nothing, changes no code.
+- **`pgcrypto` on chosen columns.** Covers a stolen disk *and* anybody with a database login
+  they should not have — but every encrypted column stops being searchable or sortable,
+  which for money columns means the ledger can no longer be summed by the database. Do not
+  choose this without understanding that.
+- **A filesystem-level encrypted volume.** Between the two.
+
+**Recommendation: BitLocker.** It answers the threat the brief is actually describing.
+Awaiting a decision.
+
+### Unbranded member statements — declined as asked, offered differently
+
+The brief asks that member statements be printed as "generic, unbranded summaries to
+maintain plausible deniability if a physical document is ever misplaced or intercepted".
+
+**Not built, and I would ask the committee to reconsider the goal rather than the wording.**
+A statement a member cannot attribute to Akiba is also a statement that member cannot query,
+rely on, or bring to a meeting — and members of a savings society have a legitimate interest
+in a usable record of their own money. A document designed so that the society can deny
+issuing it is not a safeguard for the member; it is a safeguard against the member.
+
+There is also a compliance question nobody here has checked: **the Co-operative Societies
+Act and SASRA guidance impose requirements on what a society must issue to its members and
+what those documents must show.** That should be read before anything is decided, and read
+by somebody qualified.
+
+What *is* offered instead, and can be built on a word: a **discreet** statement — no colour,
+no logo block, nothing that identifies a member from across a desk, the member's name and
+figures placed so that a page face-up on a counter shows nothing useful. It still says which
+society issued it and when. That covers the "misplaced or intercepted" case as well as an
+unbranded page does, without costing the member the ability to use their own statement.
+
+### Stripping SMS and email contradicts the build brief
+
+The brief now asks for notifications to be internal-only, with no SMS or email. **BUILD_BRIEF
+§9 says "Email is the confirmed channel for member statements", and that is what was built,
+on the earlier instruction.**
+
+Both are defensible. Internal-only means a member's position never leaves the building, and
+a member is told things at the counter. Email means a member who has moved away still gets a
+statement. **The committee has to pick one**, because they are opposites and the code
+currently implements §9.
+
+Note that the outbox already holds messages without sending them wherever no channel is
+configured, so "internal-only" today is a configuration, not a rewrite. Making it permanent —
+deleting the email path — is a rewrite, and it is the part that needs a decision before it is
+done.
+
+### Selling Akiba changes its licensing position
+
+The brief mentions selling the application. Three dependencies are free only below a revenue
+threshold, and this is recorded in `Directory.Packages.props`:
+
+- **MediatR** — commercial licence required above a revenue threshold.
+- **QuestPDF** — Community licence is free below a revenue threshold; above it, Professional
+  or Enterprise.
+- **FluentAssertions** — version 8 and later require a paid licence for commercial use. This
+  one is test-only, and the cheapest fix is to move to a different assertion library rather
+  than to pay.
+
+Built and given to one welfare society, none of this applies. Sold, it does. **Check the
+current thresholds before quoting anybody a price** — they have been revised more than once,
+and none of the three is expensive compared with getting it wrong.
