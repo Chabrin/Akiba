@@ -161,16 +161,19 @@ internal sealed class LoanRow
     public DateOnly? SettledOn { get; set; }
 
     // --- The cheque ---------------------------------------------------
-    public string ChequeNumber { get; set; } = string.Empty;
+    /// <summary>
+    /// Null for a loan that came out of a restructure - no money moved, so there was no cheque.
+    /// </summary>
+    public string? ChequeNumber { get; set; }
 
-    public string VoucherReference { get; set; } = string.Empty;
+    public string? VoucherReference { get; set; }
 
-    public decimal ChequeAmount { get; set; }
+    public decimal? ChequeAmount { get; set; }
 
-    public DateOnly ChequeDrawnOn { get; set; }
+    public DateOnly? ChequeDrawnOn { get; set; }
 
     /// <summary>The two signatories, stored newline-separated.</summary>
-    public string ChequeSignatories { get; set; } = string.Empty;
+    public string? ChequeSignatories { get; set; }
 
     public List<GuaranteeRow> Guarantees { get; set; } = [];
 }

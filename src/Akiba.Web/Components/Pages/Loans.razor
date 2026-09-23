@@ -75,6 +75,7 @@ else
                     <MudTh Style="text-align: right">Instalment</MudTh>
                     <MudTh>Progress</MudTh>
                     <MudTh>Arrears</MudTh>
+                    <MudTh Class="akiba-no-print"></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Loan">@context.LoanNumber</MudTd>
@@ -110,6 +111,15 @@ else
                         {
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Current</MudText>
                         }
+                    </MudTd>
+                    <MudTd Class="akiba-no-print">
+                        @* Offered on every running loan. Whether this one may actually be
+                           restructured is the domain's answer, and the screen behind this
+                           gives it rather than guessing here. *@
+                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                   Href="@($"/loans/{context.LoanId.Value}/restructure")">
+                            Restructure
+                        </MudButton>
                     </MudTd>
                 </RowTemplate>
                 <PagerContent>

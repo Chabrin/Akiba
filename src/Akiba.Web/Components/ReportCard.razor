@@ -1,0 +1,55 @@
+@*
+    One report on the reports screen: what it is, what comes out, and a button that fetches it.
+
+    The format is shown because it decides what an official can do with the thing. A schedule
+    the office will sort and check against the register has to be a workbook; a statement a
+    member receives has to be a PDF. Knowing which before clicking saves a download.
+*@
+
+<MudPaper Elevation="1" Class="pa-4" Style="height: 100%">
+    <div class="d-flex align-start mb-2">
+        <MudIcon Icon="@Icon" Color="Color.Primary" Class="mr-3 mt-1" />
+
+        <div class="flex-grow-1">
+            <MudText Typo="Typo.subtitle1">@Title</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@Format</MudText>
+        </div>
+    </div>
+
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@Description</MudText>
+
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Primary"
+               Size="Size.Small"
+               StartIcon="@(IsDownload ? Icons.Material.Filled.Download : Icons.Material.Filled.ArrowForward)"
+               Href="@Href"
+               Target="@(IsDownload ? "_blank" : null)">
+        @(LinkText ?? "Download")
+    </MudButton>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+
+    /// <summary>Excel, PDF or CSV. What actually comes out.</summary>
+    [Parameter, EditorRequired] public string Format { get; set; } = string.Empty;
+
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Description;
+
+    /// <summary>Overrides the button's wording where it goes to a screen rather than a file.</summary>
+    [Parameter] public string? LinkText { get; set; }
+
+    /// <summary>
+    /// Whether this fetches a file.
+    /// </summary>
+    /// <remarks>
+    /// A report opens in a new tab so the panel keeps its place - a Blazor circuit navigated
+    /// away from and back is a circuit that has to rebuild the page. A link to another screen
+    /// stays in the same tab, because that is ordinary navigation.
+    /// </remarks>
+    private bool IsDownload => Href.StartsWith("/reports/", StringComparison.Ordinal);
+}

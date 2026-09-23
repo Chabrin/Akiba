@@ -1,0 +1,171 @@
+@page "/loans/{Id:guid}/restructure"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+@inject NavigationManager Navigation
+
+<PageTitle>Akiba - Restructure a loan</PageTitle>
+
+@if (_proposal is null)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else
+{
+    <PageHeader Title="@($"Restructure {_proposal.LoanNumber}")"
+                Description="@($"{_proposal.BorrowerName}. A restructure rearranges what is owed - it does not lend again, and no money leaves the bank.")">
+        <Actions>
+            <MudButton Variant="Variant.Text" Href="/loans"
+                       StartIcon="@Icons.Material.Filled.ArrowBack">
+                All loans
+            </MudButton>
+        </Actions>
+    </PageHeader>
+
+    <MudAlert Severity="@(_proposal.IsPermitted ? Severity.Success : Severity.Warning)" Class="mb-4">
+        @_proposal.Assessment.Explanation
+    </MudAlert>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Outstanding now" Value="_proposal.Assessment.OutstandingBalance"
+                      Icon="@Icons.Material.Filled.RequestQuote"
+                      Caption="Summed from the loan's receivable account" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Repaid so far" Value="_proposal.Assessment.AmountRepaid"
+                      Icon="@Icons.Material.Filled.TrendingUp" Colour="Color.Success"
+                      Caption="@($"{_proposal.Assessment.ProportionRepaid:P1} of principal plus interest")" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Fee, paid upfront" Value="_proposal.Assessment.Fee"
+                      Icon="@Icons.Material.Filled.Percent" Colour="Color.Warning"
+                      Caption="5% of the outstanding balance. Not rolled into the new loan" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <StatCard Title="Carried over" Value="_proposal.Assessment.RestructuredBalance"
+                      Icon="@Icons.Material.Filled.SwapHoriz" Colour="Color.Info"
+                      Caption="@(_proposal.Assessment.TermMonths is { } months
+                          ? $"Over {months} months, no fresh interest"
+                          : "No term, because it may not be restructured")" />
+        </MudItem>
+    </MudGrid>
+
+    @if (_proposal.IsPermitted)
+    {
+        <MudPaper Elevation="1" Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" Class="mb-1">What this will do</MudText>
+
+            <MudList T="string" Dense="true" Class="mb-4">
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Lock">
+                    Close @_proposal.LoanNumber. It stays readable, and a member can still see
+                    every payment they made against it.
+                </MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Add">
+                    Open the replacement carrying
+                    <b><MoneyText Amount="_proposal.Assessment.RestructuredBalance" /></b>,
+                    @if (_proposal.Instalment is { } instalment)
+                    {
+                        <text>
+                            at <b><MoneyText Amount="instalment" /></b> a month for
+                            @_proposal.Assessment.TermMonths months.
+                        </text>
+                    }
+                </MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Groups">
+                    Carry the guarantors across unchanged. They do not re-sign - the society's
+                    answer was that the terms of the loan still remain.
+                </MudListItem>
+                <MudListItem T="string" Icon="@Icons.Material.Filled.AccountBalance">
+                    Post two journal entries: the fee, and the balance moving from one
+                    receivable to the other. <b>Nothing touches Bank.</b>
+                </MudListItem>
+            </MudList>
+
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_replacementNumber" Label="Replacement loan number"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="Officials quote this. It cannot repeat." />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudDatePicker Label="Agreed on" @bind-Date="_restructuredOn"
+                                   DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense"
+                                   HelperText="The date the committee agreed it" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField @bind-Value="_feeReference" Label="Fee receipt reference"
+                                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  HelperText="How the fee was paid. It is deducted upfront." />
+                </MudItem>
+            </MudGrid>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.SwapHoriz"
+                       Disabled="@(_busy || string.IsNullOrWhiteSpace(_replacementNumber) || string.IsNullOrWhiteSpace(_feeReference))"
+                       OnClick="RestructureAsync">
+                Restructure
+            </MudButton>
+        </MudPaper>
+    }
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+        A loan may be restructured <b>once only</b>, and only once at least half of principal
+        plus interest has been repaid. Both rules are in the domain, not on this screen, so they
+        hold however the restructure is reached.
+    </MudText>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private RestructureProposal? _proposal;
+    private string _replacementNumber = string.Empty;
+    private string _feeReference = string.Empty;
+    private DateTime? _restructuredOn;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _restructuredOn ??= Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+
+        await LoadAsync();
+    }
+
+    private async Task RestructureAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var replacement = await Mediator.Send(new RestructureLoanCommand(
+                new LoanId(Id),
+                _replacementNumber,
+                DateOnly.FromDateTime(_restructuredOn ?? Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue)),
+                _feeReference));
+
+            Navigation.NavigateTo($"/loans?restructured={replacement.Value}");
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task LoadAsync() =>
+        _proposal = await Mediator.Send(new AssessRestructureQuery(new LoanId(Id)));
+}

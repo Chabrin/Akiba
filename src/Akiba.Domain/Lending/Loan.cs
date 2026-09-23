@@ -58,12 +58,11 @@ public sealed class Loan : AggregateRoot<LoanId>
         AccountId receivableAccountId,
         LoanTerms terms,
         DateOnly disbursedOn,
-        ChequeDetails cheque)
+        ChequeDetails? cheque)
         : base(id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(loanNumber);
         ArgumentNullException.ThrowIfNull(terms);
-        ArgumentNullException.ThrowIfNull(cheque);
 
         LoanNumber = loanNumber.Trim().ToUpperInvariant();
         ApplicationId = applicationId;
@@ -93,7 +92,20 @@ public sealed class Loan : AggregateRoot<LoanId>
 
     public DateOnly DisbursedOn { get; }
 
-    public ChequeDetails Cheque { get; }
+    /// <summary>
+    /// The cheque the money went out on.
+    /// </summary>
+    /// <remarks>
+    /// Null for a loan that came out of a restructure. No money moves in a restructure - the
+    /// old loan's balance is carried into the new one by a journal entry - so there is no
+    /// cheque, no voucher and no signatories. A zero-amount cheque with an invented number
+    /// would have kept this property non-null at the cost of recording something that did not
+    /// happen, in the one system whose whole purpose is not doing that.
+    /// </remarks>
+    public ChequeDetails? Cheque { get; }
+
+    /// <summary>Whether this loan replaced a restructured one.</summary>
+    public bool CameFromRestructure => Restructures is not null;
 
     public LoanStatus Status { get; private set; }
 
@@ -171,6 +183,76 @@ public sealed class Loan : AggregateRoot<LoanId>
         return loan;
     }
 
+    /// <summary>
+    /// Brings into being the loan that replaces a restructured one.
+    /// </summary>
+    /// <param name="original">The loan being restructured. It is closed by this.</param>
+    /// <param name="loanNumber">The replacement's own number, which officials quote.</param>
+    /// <param name="receivableAccountId">Its own receivable account.</param>
+    /// <param name="terms">From <see cref="Restructuring.TermsFor"/>. No fresh interest.</param>
+    /// <param name="restructuredOn">The date the committee agreed it.</param>
+    /// <param name="restructuredAtUtc">When it was recorded.</param>
+    /// <remarks>
+    /// <para>
+    /// No cheque, because no money moves: the balance is carried across by a journal entry.
+    /// The replacement keeps the original's application, because there was no second
+    /// application - the committee agreed to restructure the loan that application produced.
+    /// </para>
+    /// <para>
+    /// <b>The guarantees carry over rather than being re-signed.</b> Asked whether guarantors
+    /// must sign again, the questionnaire answered "the terms of the loan still remain", which
+    /// is read here as the guarantees continuing unchanged. It is the reading the society gave;
+    /// if the committee meant something else, this is the line to change.
+    /// </para>
+    /// </remarks>
+    public static Loan FromRestructure(
+        Loan original,
+        string loanNumber,
+        AccountId receivableAccountId,
+        LoanTerms terms,
+        DateOnly restructuredOn,
+        DateTimeOffset restructuredAtUtc)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(terms);
+
+        if (!receivableAccountId.IsSpecified)
+        {
+            throw new ArgumentException(
+                "A loan needs a receivable account; its outstanding balance is that account's " +
+                "balance.",
+                nameof(receivableAccountId));
+        }
+
+        var replacement = new Loan(
+            LoanId.New(),
+            loanNumber,
+            original.ApplicationId,
+            original.BorrowerId,
+            receivableAccountId,
+            terms,
+            restructuredOn,
+            cheque: null);
+
+        // Closes the original and points the replacement back at it, in one step, so the two
+        // cannot end up half-linked.
+        Restructuring.CarryOver(original, replacement, restructuredOn);
+
+        replacement._guarantees.AddRange(original.Guarantees.Where(guarantee => !guarantee.IsReleased));
+
+        replacement.Raise(new LoanRestructured(
+            original.Id,
+            original.LoanNumber,
+            replacement.Id,
+            replacement.LoanNumber,
+            original.BorrowerId,
+            terms,
+            restructuredOn,
+            restructuredAtUtc));
+
+        return replacement;
+    }
+
     /// <summary>Rebuilds a loan from storage. For the persistence layer only.</summary>
     public static Loan Rehydrate(
         LoanId id,
@@ -180,7 +262,7 @@ public sealed class Loan : AggregateRoot<LoanId>
         AccountId receivableAccountId,
         LoanTerms terms,
         DateOnly disbursedOn,
-        ChequeDetails cheque,
+        ChequeDetails? cheque,
         LoanStatus status,
         LoanId? restructures,
         bool hasBeenRestructured,
@@ -279,6 +361,28 @@ public sealed record LoanDisbursed(
     LoanTerms Terms,
     ChequeDetails Cheque,
     DateOnly DisbursedOn,
+    DateTimeOffset OccurredAtUtc) : IDomainEvent;
+
+/// <summary>
+/// Raised when a loan is restructured: the original is closed and a replacement takes its
+/// balance.
+/// </summary>
+/// <param name="OriginalLoanId">The loan that was restructured.</param>
+/// <param name="OriginalLoanNumber">Its number, which officials will still quote.</param>
+/// <param name="ReplacementLoanId">The loan that took its place.</param>
+/// <param name="ReplacementLoanNumber">The number the member will be told.</param>
+/// <param name="BorrowerId">Whose loan.</param>
+/// <param name="Terms">The replacement's terms. No fresh interest.</param>
+/// <param name="RestructuredOn">The date the committee agreed it.</param>
+/// <param name="OccurredAtUtc">When it was recorded.</param>
+public sealed record LoanRestructured(
+    LoanId OriginalLoanId,
+    string OriginalLoanNumber,
+    LoanId ReplacementLoanId,
+    string ReplacementLoanNumber,
+    BorrowerId BorrowerId,
+    LoanTerms Terms,
+    DateOnly RestructuredOn,
     DateTimeOffset OccurredAtUtc) : IDomainEvent;
 
 /// <summary>Raised when a loan's receivable account reaches zero.</summary>

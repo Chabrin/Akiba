@@ -1,0 +1,127 @@
+@page "/reports"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IClock Clock
+
+<PageTitle>Akiba - Reports</PageTitle>
+
+<PageHeader Title="Reports"
+            Description="Every figure in these is summed from the ledger as at the date you choose. Ask for last June in December and you get what June said." />
+
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudDatePicker Label="As at" @bind-Date="_asAt" DateFormat="dd MMM yyyy"
+                           Variant="Variant.Outlined" Margin="Margin.Dense"
+                           HelperText="For the statement and the shareholding summary" />
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="int" @bind-Value="_year" Label="Year" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                       HelperText="For the schedules and the AGM pack">
+                @foreach (var year in Years)
+                {
+                    <MudSelectItem T="int" Value="@year">@year</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect T="int" @bind-Value="_month" Label="Month" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                       HelperText="For the deduction schedules">
+                @for (var month = 1; month <= 12; month++)
+                {
+                    var value = month;
+                    <MudSelectItem T="int" Value="@value">
+                        @CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(value)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Employee deductions"
+                    Icon="@Icons.Material.Filled.TableChart"
+                    Format="Excel"
+                    Href="@($"/reports/deductions/employees/{_year}/{_month}")"
+                    Description="@($"What HR should deduct from each payslip in {MonthName}. It must be with them by the 25th.")" />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Landlord deductions"
+                    Icon="@Icons.Material.Filled.TableChart"
+                    Format="Excel"
+                    Href="@($"/reports/deductions/landlords/{_year}/{_month}")"
+                    Description="A separate schedule from the employee one. The cheque is drawn on a different account, so the two reconcile separately." />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Shareholding summary"
+                    Icon="@Icons.Material.Filled.Groups"
+                    Format="Excel"
+                    Href="@($"/reports/shareholding?asAt={AsAtParameter}")"
+                    Description="@($"Every member's shareholding, borrowing limit and loans outstanding as at {AsAtLabel}. Excel, because the office sorts and checks it against the register.")" />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="AGM pack"
+                    Icon="@Icons.Material.Filled.MenuBook"
+                    Format="PDF"
+                    Href="@($"/reports/agm/{_year}")"
+                    Description="@($"What the members are shown at the {_year} meeting: income and expenditure, the position at the year end, and the trial balance. The chairman's and treasurer's reports are added by hand.")" />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Audit trail"
+                    Icon="@Icons.Material.Filled.History"
+                    Format="CSV"
+                    Href="/reports/audit"
+                    Description="Every change to every table with the before and after values. CSV, because that is what an auditor asks for and it opens in anything." />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="A member's statement"
+                    Icon="@Icons.Material.Filled.Person"
+                    Format="PDF"
+                    Href="/members"
+                    LinkText="Choose a member"
+                    Description="The one document a member actually receives. Open a member and take it from their statement, so you are sure whose it is." />
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.caption" Class="mud-text-secondary mt-4 d-block">
+    Reports are generated rather than stored - an AGM pack is a whole PDF and the shareholding
+    summary sums every member's ledger - so they are rate limited. If one refuses, wait a minute.
+</MudText>
+
+@code {
+    private DateTime? _asAt;
+    private int _year = DateTime.Today.Year;
+    private int _month = DateTime.Today.Month;
+
+    private static IEnumerable<int> Years => Enumerable.Range(DateTime.Today.Year - 4, 6);
+
+    private string MonthName =>
+        $"{CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(_month)} {_year}";
+
+    private string AsAtParameter => _asAt is { } date
+        ? date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+        : Clock.TodayInNairobi.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private string AsAtLabel => _asAt is { } date
+        ? date.ToString("d MMMM yyyy", CultureInfo.InvariantCulture)
+        : "today";
+
+    protected override void OnInitialized()
+    {
+        var today = Clock.TodayInNairobi;
+
+        _asAt = today.ToDateTime(TimeOnly.MinValue);
+        _year = today.Year;
+        _month = today.Month;
+    }
+}

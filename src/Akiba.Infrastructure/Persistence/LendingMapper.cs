@@ -193,11 +193,16 @@ internal static class LendingMapper
             RestructuresLoanId = loan.Restructures?.Value,
             HasBeenRestructured = loan.HasBeenRestructured,
             SettledOn = loan.SettledOn,
-            ChequeNumber = loan.Cheque.ChequeNumber,
-            VoucherReference = loan.Cheque.VoucherReference,
-            ChequeAmount = loan.Cheque.Amount.Amount,
-            ChequeDrawnOn = loan.Cheque.DrawnOn,
-            ChequeSignatories = string.Join('\n', loan.Cheque.Signatories),
+            // Null for a loan that came out of a restructure: no money moved, so there is no
+            // cheque. A zero-amount one with an invented number would record something that
+            // did not happen.
+            ChequeNumber = loan.Cheque?.ChequeNumber,
+            VoucherReference = loan.Cheque?.VoucherReference,
+            ChequeAmount = loan.Cheque?.Amount.Amount,
+            ChequeDrawnOn = loan.Cheque?.DrawnOn,
+            ChequeSignatories = loan.Cheque is null
+                ? null
+                : string.Join('\n', loan.Cheque.Signatories),
         };
 
         row.Guarantees = [.. loan.Guarantees.Select(guarantee => ToRow(guarantee, null, loan.Id.Value))];
@@ -216,12 +221,16 @@ internal static class LendingMapper
             row.TermMonths,
             row.TermScaleVersion);
 
-        var cheque = new ChequeDetails(
-            row.ChequeNumber,
-            row.VoucherReference,
-            Kes(row.ChequeAmount),
-            row.ChequeDrawnOn,
-            row.ChequeSignatories.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        // A loan that came out of a restructure has no cheque, because no money moved.
+        var cheque = row.ChequeNumber is null || row.ChequeDrawnOn is null
+            ? null
+            : new ChequeDetails(
+                row.ChequeNumber,
+                row.VoucherReference ?? string.Empty,
+                Kes(row.ChequeAmount ?? 0m),
+                row.ChequeDrawnOn.Value,
+                (row.ChequeSignatories ?? string.Empty)
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries));
 
         return Loan.Rehydrate(
             new LoanId(row.Id),

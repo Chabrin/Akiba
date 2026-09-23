@@ -28,9 +28,9 @@ Built milestone by milestone, with a review at each one. See `BUILD_BRIEF.md` §
 | 8 | Applications, lock period, approvals, disbursement | ✅ Done |
 | 9 | Receipts, three channels, allocation, clearance | ✅ Done |
 | 10 | Payroll and bank reconciliation | ✅ Done — import, match, sign off, and the period-close gate |
-| 11 | Restructuring | 🟡 Domain done; no screen yet |
+| 11 | Restructuring | ✅ Done — assess, restructure, and a screen that shows what it will do |
 | 12 | Arrears and ageing | ✅ Done |
-| 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack |
+| 13 | Reporting suite | ✅ Done — schedules, statements, summary, income and expenditure, AGM pack, and a screen |
 | 14 | Notifications | ✅ Done — an outbox, email and SMS, nothing sent outside Production |
 | 15 | Identity, roles, MFA, audit trail | ✅ Done — auth, roles, mandatory TOTP, and an append-only audit trail |
 | 16 | Dividend run | ✅ Done — compute, review, approve, post, and a schedule |

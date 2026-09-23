@@ -261,7 +261,9 @@ public sealed class LendingPersistenceTests : IAsyncLifetime
 
         reloaded.Should().NotBeNull();
         reloaded!.Terms.TotalRepayable.Should().Be(Money.Kes(66_000m));
-        reloaded.Cheque.Signatories.Should().Equal("Mr. Mutinda", "Mr. Kimathi");
+        // A disbursed loan has a cheque. Only a loan that came out of a restructure does not.
+        reloaded.Cheque.Should().NotBeNull();
+        reloaded.Cheque!.Signatories.Should().Equal("Mr. Mutinda", "Mr. Kimathi");
         reloaded.Cheque.ChequeNumber.Should().Be("000431");
 
         // The schedule is derived from the stored terms, so the grace month survives too.

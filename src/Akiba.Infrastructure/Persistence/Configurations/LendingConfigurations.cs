@@ -116,9 +116,12 @@ internal sealed class LoanConfiguration : IEntityTypeConfiguration<LoanRow>
         builder.Property(loan => loan.Principal).HasColumnType(AkibaDbContext.MoneyColumnType);
         builder.Property(loan => loan.Interest).HasColumnType(AkibaDbContext.MoneyColumnType);
         builder.Property(loan => loan.ChequeAmount).HasColumnType(AkibaDbContext.MoneyColumnType);
-        builder.Property(loan => loan.ChequeNumber).HasMaxLength(40).IsRequired();
-        builder.Property(loan => loan.VoucherReference).HasMaxLength(40).IsRequired();
-        builder.Property(loan => loan.ChequeSignatories).HasMaxLength(400).IsRequired();
+        // Optional, all of them. A loan that came out of a restructure has no cheque: no money
+        // moved, the balance was carried across by a journal entry, and there is nothing to
+        // record here that would be true.
+        builder.Property(loan => loan.ChequeNumber).HasMaxLength(40);
+        builder.Property(loan => loan.VoucherReference).HasMaxLength(40);
+        builder.Property(loan => loan.ChequeSignatories).HasMaxLength(400);
 
         // The number written in the LOAN NO. box. Officials quote it, so it is unique.
         builder.HasIndex(loan => loan.LoanNumber).IsUnique();
