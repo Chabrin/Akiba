@@ -306,3 +306,57 @@ silently running against a half-upgraded database. That is also the correct beha
 - Break-glass credentials — the `postgres` password, the backup password, and the Akiba admin
   account — are held by the **treasurer and the chairman**, not by ICT. If the IT officer
   leaves, the society still has its system.
+
+---
+
+## 8. Encryption at rest
+
+The backups are already encrypted — AES-256 with encrypted filenames, which is what covers the
+copy that leaves the building. **The live database files on the server are not**, and that is a
+separate decision about the machine rather than about Akiba.
+
+### What was asked for, and why it does not exist
+
+The hardening brief asked for Transparent Data Encryption. **TDE is a SQL Server feature.
+Akiba runs on PostgreSQL, which has no equivalent**, and there are no `.bak` files to protect.
+There is no setting to turn on; the request appears to have come off a SQL Server checklist.
+
+### What to do instead
+
+**Recommendation: BitLocker on the volume holding the PostgreSQL data directory.** It answers
+the realistic threat — a machine or a disk leaving the building — costs nothing, and changes no
+code. On Windows Server:
+
+1. Confirm where the data actually lives:
+
+   ```
+   psql -U postgres -c "SHOW data_directory;"
+   ```
+
+2. Turn BitLocker on for that volume, with a TPM if the machine has one.
+
+3. **Write the recovery key down and give it to the treasurer and the chairman**, alongside the
+   other break-glass credentials. A recovery key held only by ICT, or only on the machine it
+   unlocks, is not a recovery key. This is the step that actually matters, and it is the one
+   that gets skipped.
+
+4. Confirm it is on:
+
+   ```
+   manage-bde -status
+   ```
+
+The machine must still be able to boot unattended, or Akiba will not come back after a power
+cut until somebody types a key. Test that before relying on it.
+
+### What not to do without understanding it
+
+`pgcrypto` on individual columns covers a stolen disk **and** anybody holding a database login
+they should not have. It also stops those columns being searchable or sortable — which for the
+money columns means the ledger can no longer be summed by the database, and Akiba derives every
+figure it reports by summing the ledger. Do not choose this to tick a box.
+
+A filesystem-level encrypted volume sits between the two and is a reasonable answer on Linux.
+
+**Awaiting a committee decision.** Until one is made, the position is: backups encrypted, live
+files not.

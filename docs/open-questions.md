@@ -189,7 +189,9 @@ filenames, so the copy that leaves the building is covered. The live database fi
 server are not.
 
 If the committee wants the live files covered too, that is a decision about the **machine**,
-not the application, and the honest options are:
+not the application. **The steps are written up in `docs/deployment.md` section 8**, including
+the part that actually matters: the recovery key goes to the treasurer and the chairman, not to
+ICT. The honest options are:
 
 - **BitLocker on the data volume.** Covers a stolen or discarded disk, which is the realistic
   threat for a machine in an office. Costs nothing, changes no code.
@@ -202,7 +204,7 @@ not the application, and the honest options are:
 **Recommendation: BitLocker.** It answers the threat the brief is actually describing.
 Awaiting a decision.
 
-### Unbranded member statements — declined as asked, offered differently
+### Unbranded member statements — declined as asked, discreet version built
 
 The brief asks that member statements be printed as "generic, unbranded summaries to
 maintain plausible deniability if a physical document is ever misplaced or intercepted".
@@ -218,11 +220,19 @@ Act and SASRA guidance impose requirements on what a society must issue to its m
 what those documents must show.** That should be read before anything is decided, and read
 by somebody qualified.
 
-What *is* offered instead, and can be built on a word: a **discreet** statement — no colour,
-no logo block, nothing that identifies a member from across a desk, the member's name and
-figures placed so that a page face-up on a counter shows nothing useful. It still says which
-society issued it and when. That covers the "misplaced or intercepted" case as well as an
-unbranded page does, without costing the member the ability to use their own statement.
+**What was built instead:** a discreet statement. The society's name is 9pt grey rather than a
+15pt green masthead, the member's name is 10pt, the headline figures dropped from 12pt bold to
+10pt, and the coloured table headers are now grey. Nothing on the page is set large enough to
+be read from across a room, the member's name included — which is the actual threat when a
+statement sits face-up on a counter.
+
+It still says which society issued it and when. That covers the "misplaced or intercepted"
+case as well as an anonymous page does, without costing the member the ability to use, query or
+rely on a record of their own money.
+
+**If the committee still wants full anonymity after reading the Co-operative Societies Act
+point above, that is their decision to make and I will build it** — but it should be minuted as
+a decision, not slipped in as a formatting preference.
 
 ### Internal-only notifications — built, and now the default
 
