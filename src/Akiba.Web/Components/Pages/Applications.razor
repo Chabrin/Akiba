@@ -18,7 +18,7 @@
 <LoanApplicationPanels @bind-Current="_step" Application="_working" OnChanged="ReloadAsync" />
 
 <MudPaper Elevation="1" Class="pa-2">
-    <MudToolBar Dense="true" Class="akiba-no-print">
+    <MudToolBar Dense="true" Class="akiba-list-toolbar akiba-no-print">
         <MudSelect T="LoanApplicationStatus?"
                    Value="_status"
                    ValueChanged="OnStatusChanged"
@@ -27,20 +27,28 @@
                    Margin="Margin.Dense"
                    Clearable="true"
                    Style="max-width: 18rem"
-                   Class="mt-0">
+                   Class="mt-0 flex-shrink-0">
             <MudSelectItem T="LoanApplicationStatus?" Value="@(null)">All</MudSelectItem>
             @foreach (var status in Enum.GetValues<LoanApplicationStatus>())
             {
                 <MudSelectItem T="LoanApplicationStatus?" Value="@status">@status</MudSelectItem>
             }
         </MudSelect>
+
+        <MudSpacer />
+
+        @* Clients are offered here and not on the members list, because a client is not a
+           member - they hold no shares and borrow on different terms, but they do apply. *@
+        <BorrowerFilter Value="_category" ValueChanged="OnCategoryChanged"
+                        Total="@(_applications?.Count ?? 0)" Counts="CategoryCounts"
+                        Categories="@AllCategories" />
     </MudToolBar>
 
     @if (_applications is null)
     {
         <TableSkeleton Rows="8" Columns="6" />
     }
-    else if (_applications.Count == 0)
+    else if (Filtered.Count == 0)
     {
         <EmptyState Icon="@Icons.Material.Outlined.Assignment"
                     Title="No applications here"
@@ -56,7 +64,7 @@
     }
     else
     {
-        <MudTable Items="_applications" Dense="true" Hover="true" Striped="true" Elevation="0"
+        <MudTable Items="Filtered" Dense="true" Hover="true" Striped="true" Elevation="0"
                   Breakpoint="Breakpoint.Sm">
             <HeaderContent>
                 <MudTh>Applicant</MudTh>
@@ -70,7 +78,10 @@
                 <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Applicant">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Applicant">
+                    @context.BorrowerName
+                    <BorrowerCategoryChip Category="context.BorrowerCategory" />
+                </MudTd>
                 <MudTd DataLabel="Product">@context.Product.DisplayName()</MudTd>
                 <MudTd DataLabel="Applied for" Class="akiba-money-cell">
                     <MoneyText Amount="context.RequestedPrincipal" />
@@ -167,6 +178,25 @@
 @code {
     private LoanApplicationStatus? _status;
     private IReadOnlyList<ApplicationSummary>? _applications;
+
+    private BorrowerCategory? _category;
+
+    private static readonly BorrowerCategory[] AllCategories =
+        [BorrowerCategory.Employee, BorrowerCategory.Landlord, BorrowerCategory.Client];
+
+    private IReadOnlyList<ApplicationSummary> Filtered =>
+        _applications is null
+            ? []
+            : [.. _applications.Where(a => _category is null || a.BorrowerCategory == _category)];
+
+    private IReadOnlyDictionary<BorrowerCategory, int> CategoryCounts =>
+        _applications is null
+            ? new Dictionary<BorrowerCategory, int>()
+            : _applications
+                .GroupBy(application => application.BorrowerCategory)
+                .ToDictionary(group => group.Key, group => group.Count());
+
+    private void OnCategoryChanged(BorrowerCategory? category) => _category = category;
 
     private LoanApplicationPanels.Step _step = LoanApplicationPanels.Step.None;
     private ApplicationSummary? _working;

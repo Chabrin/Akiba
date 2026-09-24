@@ -25,7 +25,20 @@ public sealed record MemberSummary(
     Money BorrowingLimit,
     int RunningLoans,
     bool IsActive,
-    bool IsLandlord);
+    bool IsLandlord)
+{
+    /// <summary>
+    /// Which schedule this member is deducted on.
+    /// </summary>
+    /// <remarks>
+    /// Derived rather than stored, so it cannot disagree with <see cref="IsLandlord"/>. It
+    /// exists so that every list in Akiba filters on the same thing by the same name - the
+    /// members list, the loan book and the applications queue all speak of employees and
+    /// landlords, and none of them works it out for itself.
+    /// </remarks>
+    public BorrowerCategory Category =>
+        IsLandlord ? BorrowerCategory.Landlord : BorrowerCategory.Employee;
+}
 
 /// <summary>
 /// Lists members with their shareholding as at a date.
@@ -126,6 +139,11 @@ public sealed record LoanOnStatement(
 /// <param name="BorrowingLimit">Twice the shareholding.</param>
 /// <param name="ShareMovements">Every entry on the share account, with a running balance.</param>
 /// <param name="Loans">Their loans, running and settled.</param>
+/// <param name="Category">
+/// Which schedule they are deducted on. For the official reading this on screen, not for the
+/// member - it is how you tell whether this person's contribution should have arrived on the
+/// payroll cheque or the landlord one.
+/// </param>
 public sealed record MemberStatement(
     string MemberName,
     string MembershipNumber,
@@ -134,7 +152,8 @@ public sealed record MemberStatement(
     Money Shareholding,
     Money BorrowingLimit,
     IReadOnlyList<StatementLine> ShareMovements,
-    IReadOnlyList<LoanOnStatement> Loans);
+    IReadOnlyList<LoanOnStatement> Loans,
+    BorrowerCategory Category = BorrowerCategory.Employee);
 
 /// <summary>
 /// Builds a member's statement as at any date.
@@ -224,7 +243,8 @@ internal sealed class GetMemberStatementHandler
             shareholding,
             Shareholding.BorrowingLimit(shareholding),
             movements,
-            loans);
+            loans,
+            BorrowerCategories.Of(member));
     }
 
     /// <summary>

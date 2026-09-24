@@ -23,7 +23,7 @@
 <MemberExitPanel @bind-Open="_exiting" Member="_exitingMember" OnRecorded="ReloadAsync" />
 
 <MudPaper Elevation="1" Class="pa-2">
-    <MudToolBar Dense="true" Class="akiba-no-print">
+    <MudToolBar Dense="true" Class="akiba-list-toolbar akiba-no-print">
         <MudTextField T="string"
                       Value="_search"
                       ValueChanged="OnSearchChanged"
@@ -34,9 +34,15 @@
                       Margin="Margin.Dense"
                       Immediate="true"
                       Clearable="true"
-                      Class="mt-0" />
+                      Class="akiba-toolbar-search" />
 
         <MudSpacer />
+
+        @* Employees and landlords are deducted on different schedules, drawn on different
+           accounts, and reconciled separately - so "show me the landlords" is a question the
+           office asks constantly and had no way to ask. *@
+        <BorrowerFilter Value="_category" ValueChanged="OnCategoryChanged"
+                        Total="@(_members?.Count ?? 0)" Counts="CategoryCounts" />
 
         <MudSwitch T="bool"
                    Value="_includeExited"
@@ -52,7 +58,11 @@
     else if (Filtered.Count == 0)
     {
         <EmptyState Icon="@Icons.Material.Outlined.Groups"
-                    Title="@(_members.Count == 0 ? "No members yet" : "No member matches that")"
+                    Title="@(_members.Count == 0
+                        ? "No members yet"
+                        : _category is { } only
+                            ? $"No {only.DisplayName().ToLowerInvariant()}s match that"
+                            : "No member matches that")"
                     Description="@(_members.Count == 0
                         ? "A member is enrolled by the accounts clerk from their letter to the chairman, and becomes a member proper at their first share contribution."
                         : "Nothing in the register matches that search. Try a membership number, or part of a surname.")">
@@ -174,16 +184,35 @@
     private bool _includeExited;
     private IReadOnlyList<MemberSummary>? _members;
 
+    private BorrowerCategory? _category;
     private bool _enrolling;
     private bool _exiting;
     private MemberSummary? _exitingMember;
 
+    /// <summary>
+    /// The rows actually on screen: the search and the employee/landlord filter together.
+    /// </summary>
     private IReadOnlyList<MemberSummary> Filtered =>
         _members is null
             ? []
-            : string.IsNullOrWhiteSpace(_search)
-                ? _members
-                : [.. _members.Where(Matches)];
+            : [.. _members
+                .Where(member => _category is null || member.Category == _category)
+                .Where(member => string.IsNullOrWhiteSpace(_search) || Matches(member))];
+
+    /// <summary>
+    /// How many members are in each category, before the filter is applied.
+    /// </summary>
+    /// <remarks>
+    /// Counted off the whole list rather than the filtered one, so the numbers on the tabs
+    /// stay still when a tab is pressed. A count that changes because you selected it is not
+    /// a count of anything.
+    /// </remarks>
+    private IReadOnlyDictionary<BorrowerCategory, int> CategoryCounts =>
+        _members is null
+            ? new Dictionary<BorrowerCategory, int>()
+            : _members
+                .GroupBy(member => member.Category)
+                .ToDictionary(group => group.Key, group => group.Count());
 
     protected override async Task OnInitializedAsync()
     {
@@ -197,6 +226,10 @@
         || member.PayrollNumber.Contains(_search, StringComparison.OrdinalIgnoreCase);
 
     private void OnSearchChanged(string search) => _search = search ?? string.Empty;
+
+    // Filtered in memory rather than re-queried. The whole register is already loaded to show
+    // it, and a round trip to hide some of it would be slower than not bothering.
+    private void OnCategoryChanged(BorrowerCategory? category) => _category = category;
 
     private async Task OnAsAtChanged(DateOnly asAt)
     {

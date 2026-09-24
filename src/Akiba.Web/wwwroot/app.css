@@ -517,6 +517,113 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 /* ---------------------------------------------------------------------------
+   List toolbars
+
+   A search box, a filter and a switch do not fit on one line on a laptop at
+   the width the drawer leaves, and MudToolBar does not wrap - so the search
+   collapsed to an icon and the switch ran off the edge. These wrap instead,
+   and the search takes the slack on a wide screen and a full row on a narrow
+   one.
+   --------------------------------------------------------------------------- */
+
+.akiba-list-toolbar.mud-toolbar {
+    flex-wrap: wrap;
+    height: auto;
+    gap: var(--akiba-space-3);
+    padding-top: var(--akiba-space-2);
+    padding-bottom: var(--akiba-space-2);
+    row-gap: var(--akiba-space-2);
+}
+
+.akiba-list-toolbar .akiba-toolbar-search {
+    flex: 1 1 18rem;
+    min-width: 12rem;
+    margin-top: 0;
+}
+
+/* Below this the controls each take their own line rather than being squeezed
+   into a shape nobody can read. */
+@media (max-width: 720px) {
+    .akiba-list-toolbar.mud-toolbar > * {
+        flex-basis: 100%;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   The employee / landlord filter
+
+   A segmented control. Small, quiet, and always showing which way it is set -
+   a total read off a filtered list is wrong if you have forgotten the filter
+   is on, and this is a screen where somebody checks a figure against a paper
+   schedule.
+   --------------------------------------------------------------------------- */
+
+.akiba-segment {
+    display: inline-flex;
+    align-items: stretch;
+    padding: 2px;
+    gap: 2px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--akiba-radius);
+    background-color: var(--mud-palette-background-gray);
+}
+
+/* The whole control gains the society's colour while anything narrower than
+   "everyone" is selected, so a filtered list is visibly a filtered list. */
+.akiba-segment-active {
+    border-color: var(--mud-palette-primary);
+}
+
+.akiba-segment-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--akiba-space-2);
+    padding: var(--akiba-space-1) var(--akiba-space-3);
+    border: 0;
+    border-radius: var(--akiba-radius-sm);
+    background: transparent;
+    color: var(--mud-palette-text-secondary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--akiba-transition), color var(--akiba-transition);
+}
+
+.akiba-segment-option:hover {
+    color: var(--mud-palette-text-primary);
+    background-color: var(--mud-palette-action-default-hover);
+}
+
+.akiba-segment-option:focus-visible {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: -2px;
+}
+
+.akiba-segment-on {
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    box-shadow: 0 1px 2px rgba(16, 24, 32, .08);
+}
+
+/* How many rows are behind each tab, so the size of the answer is visible
+   before it is asked for. */
+.akiba-segment-count {
+    padding: 0 6px;
+    border-radius: 999px;
+    background-color: var(--mud-palette-background-gray);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.akiba-segment-on .akiba-segment-count {
+    background-color: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+}
+
+/* ---------------------------------------------------------------------------
    Row actions
 
    Kept out of the way until the pointer is on the row, so a dense table reads

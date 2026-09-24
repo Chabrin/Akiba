@@ -11,8 +11,11 @@
 }
 else
 {
+    @* The category is on the screen, not on the printed statement. An official needs to know
+       which schedule this member's contribution should have arrived on; the member already
+       knows how they are paid. *@
     <PageHeader Title="@_statement.MemberName"
-                Description="@($"Membership number {_statement.MembershipNumber}")">
+                Description="@($"Membership number {_statement.MembershipNumber} — {_statement.Category.DisplayName()}")">
         <Actions>
             <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
         </Actions>

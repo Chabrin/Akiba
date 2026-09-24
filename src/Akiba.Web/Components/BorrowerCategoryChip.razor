@@ -1,0 +1,36 @@
+@*
+    Which schedule somebody is deducted on, shown in a row.
+
+    Only ever drawn for a landlord or a client. A CAL employee is the ordinary case and
+    labelling every one of them would put a chip on nearly every row in the application, which
+    turns the marking into wallpaper and means nobody reads the ones that matter.
+
+    The filter above the table is how an official asks "which are the landlords". This is how
+    they see it without asking, on the row they happen to be looking at.
+*@
+
+@if (Category is not BorrowerCategory.Employee)
+{
+    <MudTooltip Text="@Explanation">
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                 Color="@(Category == BorrowerCategory.Client ? Color.Secondary : Color.Tertiary)"
+                 Class="@($"ml-2 {Class}")">
+            @Category.DisplayName()
+        </MudChip>
+    </MudTooltip>
+}
+
+@code {
+    [Parameter, EditorRequired] public BorrowerCategory Category { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string Explanation => Category switch
+    {
+        BorrowerCategory.Landlord =>
+            "Deducted against the rent CAL pays them. They appear on the landlord schedule, "
+            + "which is drawn on the main account and reconciled separately from the payroll one.",
+
+        _ => "Not a member. They hold no shares and borrow on different terms.",
+    };
+}

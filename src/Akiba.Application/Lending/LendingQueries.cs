@@ -21,7 +21,8 @@ public sealed record LoanSummary(
     LoanStatus Status,
     Money AmountOverdue,
     ArrearsBucket ArrearsBucket,
-    int DaysOverdue)
+    int DaysOverdue,
+    BorrowerCategory BorrowerCategory)
 {
     public bool IsInArrears => AmountOverdue.IsPositive;
 
@@ -92,7 +93,8 @@ internal sealed class GetLoanPortfolioHandler
                 loan.Status,
                 arrears.AmountOverdue,
                 arrears.Bucket,
-                arrears.DaysOverdue));
+                arrears.DaysOverdue,
+                BorrowerCategories.Of(borrower)));
         }
 
         return [.. summaries.OrderByDescending(loan => loan.AmountOverdue.Amount)
@@ -169,7 +171,8 @@ public sealed record ApplicationSummary(
     LoanApplicationStatus Status,
     int DecisionsRecorded,
     int Guarantors,
-    Money TotalGuaranteed);
+    Money TotalGuaranteed,
+    BorrowerCategory BorrowerCategory);
 
 /// <summary>
 /// Applications by status.
@@ -235,7 +238,8 @@ internal sealed class ListApplicationsHandler
                 application.Status,
                 application.Decisions.Count,
                 application.Guarantees.Count,
-                application.Guarantees.Sum(g => g.GuaranteedAmount, Currency.Kes)));
+                application.Guarantees.Sum(g => g.GuaranteedAmount, Currency.Kes),
+                BorrowerCategories.Of(borrower)));
         }
 
         return [.. summaries.OrderByDescending(application => application.ReceivedOn)];

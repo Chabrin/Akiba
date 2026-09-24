@@ -56,15 +56,34 @@ else
     }
 
     <MudPaper Elevation="1" Class="pa-2">
-        @if (_loans.Count == 0)
+        <MudToolBar Dense="true" Class="akiba-list-toolbar akiba-no-print">
+            @* The arrears figures above are the whole book on purpose. This filters the rows
+               below it, so a clerk chasing landlord arrears can see whose they are without
+               the totals moving under them. *@
+            <BorrowerFilter Value="_category" ValueChanged="OnCategoryChanged"
+                            Total="@(_loans?.Count ?? 0)" Counts="CategoryCounts"
+                            Categories="@AllCategories" />
+
+            <MudSpacer />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                The ageing above covers every running loan, whichever tab is selected.
+            </MudText>
+        </MudToolBar>
+
+        @if (Filtered.Count == 0)
         {
-            <MudAlert Severity="Severity.Normal" Class="ma-4">
-                No loans running as at this date.
-            </MudAlert>
+            <EmptyState Icon="@Icons.Material.Outlined.RequestQuote"
+                        Title="@(_loans.Count == 0
+                            ? "No loans running"
+                            : "No loans on that tab")"
+                        Description="@(_loans.Count == 0
+                            ? "Nothing is outstanding as at this date. A loan starts when the cheque is recorded against an approved application."
+                            : "Every running loan belongs to one of the other tabs.")" />
         }
         else
         {
-            <MudTable Items="_loans" Dense="true" Hover="true" Striped="true" Elevation="0"
+            <MudTable Items="Filtered" Dense="true" Hover="true" Striped="true" Elevation="0"
                       Breakpoint="Breakpoint.Sm">
                 <HeaderContent>
                     <MudTh>Loan</MudTh>
@@ -79,7 +98,10 @@ else
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Loan">@context.LoanNumber</MudTd>
-                    <MudTd DataLabel="Borrower">@context.BorrowerName</MudTd>
+                    <MudTd DataLabel="Borrower">
+                        @context.BorrowerName
+                        <BorrowerCategoryChip Category="context.BorrowerCategory" />
+                    </MudTd>
                     <MudTd DataLabel="Product">@context.Product.DisplayName()</MudTd>
                     <MudTd DataLabel="Repayable" Class="akiba-money-cell">
                         <MoneyText Amount="context.TotalRepayable" />
@@ -138,6 +160,29 @@ else
 }
 
 @code {
+    private BorrowerCategory? _category;
+
+    private static readonly BorrowerCategory[] AllCategories =
+        [BorrowerCategory.Employee, BorrowerCategory.Landlord, BorrowerCategory.Client];
+
+    private IReadOnlyList<LoanSummary> Filtered =>
+        _loans is null
+            ? []
+            : [.. _loans.Where(loan => _category is null || loan.BorrowerCategory == _category)];
+
+    /// <remarks>
+    /// Counted off the whole portfolio rather than the filtered rows, so the numbers on the
+    /// tabs do not move when a tab is pressed.
+    /// </remarks>
+    private IReadOnlyDictionary<BorrowerCategory, int> CategoryCounts =>
+        _loans is null
+            ? new Dictionary<BorrowerCategory, int>()
+            : _loans
+                .GroupBy(loan => loan.BorrowerCategory)
+                .ToDictionary(group => group.Key, group => group.Count());
+
+    private void OnCategoryChanged(BorrowerCategory? category) => _category = category;
+
     private static readonly ArrearsBucket[] AgeingBuckets =
     [
         ArrearsBucket.Days1To30,

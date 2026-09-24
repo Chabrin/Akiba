@@ -1,0 +1,100 @@
+@*
+    Employees, landlords, or both.
+
+    The same control on every list that holds both kinds, because the office does not think of
+    this as a different question on each screen. A clerk producing the landlord schedule wants
+    the landlords everywhere at once - their members, their applications, their loans - and
+    should not have to find a differently-shaped filter on each one.
+
+    It is a segmented control rather than a dropdown for two reasons. The options are few and
+    fixed, so hiding them behind a click buys nothing; and the current state stays visible,
+    which matters because a figure read off a filtered list is wrong if you have forgotten the
+    filter is on. This is a screen where somebody checks a total against a paper schedule.
+*@
+
+<div class="akiba-segment @(Value is not null ? "akiba-segment-active" : null)" role="group"
+     aria-label="Filter by how the member is deducted">
+    <button type="button"
+            class="akiba-segment-option @(Value is null ? "akiba-segment-on" : null)"
+            aria-pressed="@(Value is null)"
+            @onclick="@(() => SelectAsync(null))">
+        <span>Everyone</span>
+        <span class="akiba-segment-count">@Total</span>
+    </button>
+
+    @foreach (var category in Categories)
+    {
+        var selected = Value == category;
+
+        <button type="button"
+                class="akiba-segment-option @(selected ? "akiba-segment-on" : null)"
+                aria-pressed="@selected"
+                @onclick="@(() => SelectAsync(category))">
+            <span>@Label(category)</span>
+
+            @* Always shown, including zero. A tab with no number beside it looks like a tab
+               that might have something behind it, and finding out costs a click and a moment
+               of wondering whether the list failed to load. *@
+            <span class="akiba-segment-count">@Count(category)</span>
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public BorrowerCategory? Value { get; set; }
+
+    [Parameter] public EventCallback<BorrowerCategory?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// Which categories this list can contain.
+    /// </summary>
+    /// <remarks>
+    /// The members list holds no clients, so offering a Clients tab there would be offering an
+    /// answer that is always empty. Loans and applications hold all three.
+    /// </remarks>
+    [Parameter]
+    public IReadOnlyList<BorrowerCategory> Categories { get; set; } =
+        [BorrowerCategory.Employee, BorrowerCategory.Landlord];
+
+    /// <summary>
+    /// How many rows fall into each category, before filtering.
+    /// </summary>
+    /// <remarks>
+    /// Shown on the tabs so the size of the answer is visible before it is asked for, and so a
+    /// clerk who filters to landlords and sees three rows knows that is all of them rather than
+    /// wondering whether something is missing.
+    /// </remarks>
+    [Parameter] public IReadOnlyDictionary<BorrowerCategory, int> Counts { get; set; } =
+        new Dictionary<BorrowerCategory, int>();
+
+    [Parameter] public int Total { get; set; }
+
+    /// <summary>
+    /// Shorter on the control than in prose.
+    /// </summary>
+    /// <remarks>
+    /// "CAL employee" is the honest name and is what the enrolment form says, but three of them
+    /// in a row reads as noise. Here the contrast with Landlords already carries the meaning.
+    /// </remarks>
+    private static string Label(BorrowerCategory category) => category switch
+    {
+        BorrowerCategory.Employee => "CAL employees",
+        BorrowerCategory.Landlord => "Landlords",
+        _ => "Clients",
+    };
+
+    private int Count(BorrowerCategory category) =>
+        Counts.TryGetValue(category, out var count) ? count : 0;
+
+    private async Task SelectAsync(BorrowerCategory? category)
+    {
+        if (Value == category)
+        {
+            return;
+        }
+
+        Value = category;
+
+        await ValueChanged.InvokeAsync(category);
+    }
+}
