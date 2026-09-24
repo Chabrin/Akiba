@@ -16,68 +16,76 @@
     </Actions>
 </PageHeader>
 
-@if (_importing)
-{
-    <MudPaper Elevation="1" Class="pa-4 mb-4">
-        <MudText Typo="Typo.h6" Class="mb-1">Import a statement</MudText>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-            A CSV or Excel file as the bank exported it. Nothing is posted by importing: lines
-            are read, and anything the bank charged that Akiba never recorded is posted by hand
-            afterwards, so it has a date and an author like every other entry.
-        </MudText>
+@* The same panel every other form in Akiba uses. It was an inline card that pushed the list
+   of statements down the page as it opened; now the list stays where it is, which matters
+   here because the dates being typed in are read off it. *@
+<WorkPanel @bind-Open="_importing"
+           Title="Import a statement"
+           Subtitle="As the bank exported it"
+           Consequence="Nothing is posted by importing. Lines are read and matched; anything the bank charged that Akiba never recorded is posted by hand afterwards, so it carries a date and an author like every other entry."
+           ConfirmText="Import"
+           ConfirmIcon="@Icons.Material.Filled.UploadFile"
+           CanConfirm="@(_file is not null)"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ImportAsync">
 
-        <MudGrid>
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">Statement file</MudText>
-                <InputFile OnChange="OnFileChanged" accept=".csv,.xlsx,.xls" class="d-block mt-1" />
-                @if (_file is not null)
-                {
-                    <MudText Typo="Typo.caption" Class="d-block mt-1">@_file.Name</MudText>
-                }
-            </MudItem>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">The file</span>
 
-            <MudItem xs="12" md="3">
-                <MudDatePicker Label="Statement from" @bind-Date="_from"
+        <InputFile OnChange="OnFileChanged" accept=".csv,.xlsx,.xls" class="d-block" />
+
+        @if (_file is not null)
+        {
+            <MudText Typo="Typo.caption" Class="d-block mt-2">
+                <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" />
+                @_file.Name
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+                CSV or Excel, whichever the bank gives you.
+            </MudText>
+        }
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">What the statement covers</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="From" @bind-Date="_from"
                                DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
                                Margin="Margin.Dense" />
             </MudItem>
-            <MudItem xs="12" md="3">
-                <MudDatePicker Label="Statement to" @bind-Date="_to"
+            <MudItem xs="12" sm="6">
+                <MudDatePicker Label="To" @bind-Date="_to"
                                DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
                                Margin="Margin.Dense" />
             </MudItem>
-
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" sm="6">
                 <MudNumericField T="decimal" @bind-Value="_opening" Label="Opening balance"
-                                 HideSpinButtons="true" Format="N2" Culture="@CultureInfo.InvariantCulture" />
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 HideSpinButtons="true" Format="N2"
+                                 Culture="@CultureInfo.InvariantCulture" />
             </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" sm="6">
                 <MudNumericField T="decimal" @bind-Value="_closing" Label="Closing balance"
-                                 HideSpinButtons="true" Format="N2" Culture="@CultureInfo.InvariantCulture" />
-            </MudItem>
-
-            <MudItem xs="12" Class="d-flex gap-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                           Disabled="@(_file is null || _busy)" OnClick="ImportAsync">
-                    Import
-                </MudButton>
-                <MudButton Variant="Variant.Text" OnClick="@(() => _importing = false)">
-                    Cancel
-                </MudButton>
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 HideSpinButtons="true" Format="N2"
+                                 Culture="@CultureInfo.InvariantCulture" />
             </MudItem>
         </MudGrid>
 
-        @if (_busy)
-        {
-            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
-        }
-
-        @if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
-        }
-    </MudPaper>
-}
+        @* Both are copied off the statement itself. The reconciliation identity is built on
+           them, so a typo here shows up as a difference nobody can explain. *@
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Both figures come off the statement, not out of Akiba. The reconciliation is built
+            on them.
+        </MudText>
+    </div>
+</WorkPanel>
 
 <MudPaper Elevation="1" Class="pa-2">
     @if (_summaries is null)
@@ -173,6 +181,13 @@
 
     private async Task ImportAsync()
     {
+        // Importing reads a file and creates a reconciliation. A second click landing before
+        // the first finished would create a second one from the same statement.
+        if (_busy)
+        {
+            return;
+        }
+
         if (_file is null)
         {
             _error = "Choose the statement file first.";

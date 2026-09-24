@@ -115,11 +115,18 @@ else
                     <MudTd Class="akiba-no-print">
                         @* Offered on every running loan. Whether this one may actually be
                            restructured is the domain's answer, and the screen behind this
-                           gives it rather than guessing here. *@
-                        <MudButton Size="Size.Small" Variant="Variant.Text"
-                                   Href="@($"/loans/{context.LoanId.Value}/restructure")">
-                            Restructure
-                        </MudButton>
+                           gives it rather than guessing here.
+
+                           Hidden until the pointer is on the row, like every other row action
+                           in Akiba - a portfolio of running loans should read as balances. *@
+                        <div class="akiba-row-actions">
+                            <MudTooltip Text="Restructure this loan">
+                                <MudIconButton Icon="@Icons.Material.Filled.ChangeCircle"
+                                               Size="Size.Small"
+                                               aria-label="@($"Restructure {context.LoanNumber}")"
+                                               Href="@($"/loans/{context.LoanId.Value}/restructure")" />
+                            </MudTooltip>
+                        </div>
                     </MudTd>
                 </RowTemplate>
                 <PagerContent>

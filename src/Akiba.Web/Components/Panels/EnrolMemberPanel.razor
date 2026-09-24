@@ -154,14 +154,25 @@
     /// Loads the lists the form needs, the first time the panel is opened.
     /// </summary>
     /// <remarks>
+    /// Loaded when the panel opens and dropped when it closes, rather than cached for the life
+    /// of the page. A clerk who enrols a member and then allocates a receipt to them would
+    /// otherwise be choosing from a list that predates the member, and the reason the name is
+    /// missing would be invisible. The query costs less than that confusion.
+    ///
     /// Deliberately not in OnInitializedAsync. A panel is part of the page it sits on, so its
     /// initialisation runs alongside the page's own - and both would be querying the same
-    /// scoped DbContext at the same moment, which EF refuses outright. Waiting until the panel
-    /// is actually opened also means a clerk who never opens it never pays for the query.
+    /// scoped DbContext at the same moment, which EF refuses outright.
     /// </remarks>
     protected override async Task OnParametersSetAsync()
     {
-        if (!Open || _loaded)
+        if (!Open)
+        {
+            _loaded = false;
+
+            return;
+        }
+
+        if (_loaded)
         {
             return;
         }

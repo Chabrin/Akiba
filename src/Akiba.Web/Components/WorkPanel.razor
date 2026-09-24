@@ -17,8 +17,12 @@
 <MudOverlay Visible="Open" DarkBackground="true" ZIndex="1400"
             AutoClose="false" OnClick="CancelAsync" />
 
-<div class="akiba-panel @(Open ? "akiba-panel-open" : null)"
-     role="dialog" aria-modal="true" aria-label="@Title">
+@* tabindex so the panel itself can hold focus, which is what makes Escape work and what
+   stops the first Tab after opening landing back on the page behind. *@
+<div @ref="_panel"
+     class="akiba-panel @(Open ? "akiba-panel-open" : null)"
+     role="dialog" aria-modal="true" aria-label="@Title" tabindex="-1"
+     @onkeydown="OnKeyDownAsync">
     @if (Open)
     {
         <header class="akiba-panel-head">
@@ -104,6 +108,65 @@
     [Parameter] public EventCallback OnCancel { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _panel;
+    private bool _wasOpen;
+
+    /// <summary>
+    /// Moves focus into the panel the moment it opens.
+    /// </summary>
+    /// <remarks>
+    /// Without this the panel is on screen but the keyboard is still on the page behind it, so
+    /// Escape does nothing and the first Tab walks the list the official was just reading
+    /// rather than the form in front of them. Focus goes to the panel itself rather than to
+    /// the first field: a clerk who opened this by accident can press Escape immediately, and
+    /// one who meant it is a single Tab from typing.
+    /// </remarks>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open == _wasOpen)
+        {
+            return;
+        }
+
+        _wasOpen = Open;
+
+        if (!Open)
+        {
+            return;
+        }
+
+        try
+        {
+            await _panel.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // The circuit went, or the element has already been replaced. Focus is a
+            // convenience; the panel works without it.
+        }
+    }
+
+    /// <summary>
+    /// Escape closes the panel, unless something is in flight.
+    /// </summary>
+    /// <remarks>
+    /// The one shortcut worth having here. Every other way out of this panel needs the mouse,
+    /// and an official who opened the wrong row should not have to find the Cancel button to
+    /// say so.
+    ///
+    /// Deliberately not Enter-to-confirm. Half of these post to the ledger, and a stray Enter
+    /// in a text field is not somebody deciding to disburse a loan.
+    /// </remarks>
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key is not "Escape" || Busy)
+        {
+            return;
+        }
+
+        await CancelAsync();
+    }
 
     private async Task ConfirmAsync()
     {
