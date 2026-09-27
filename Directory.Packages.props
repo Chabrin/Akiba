@@ -26,6 +26,8 @@
 
   <ItemGroup Label="Web">
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
+    <!-- Lets Akiba run as the Windows service docs/deployment.md tells you to create. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageVersion Include="MudBlazor" Version="9.10.0" />
   </ItemGroup>
 

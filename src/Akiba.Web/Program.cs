@@ -43,7 +43,28 @@ var akibaCulture = new CultureInfo("en-KE");
 CultureInfo.DefaultThreadCurrentCulture = akibaCulture;
 CultureInfo.DefaultThreadCurrentUICulture = akibaCulture;
 
-var builder = WebApplication.CreateBuilder(args);
+// Akiba is hosted as a Windows service (docs/deployment.md, section 4), and a service needs
+// two things a console app does not.
+//
+// It has to tell Windows it has started. Without that the Service Control Manager waits thirty
+// seconds, gives up with error 1053, and kills the process - so the service the guide tells
+// you to create would never have stayed up.
+//
+// And it has to find its own files. A service starts with C:\Windows\System32 as its working
+// directory, so without this the pages would load with no stylesheet and no scripts.
+//
+// The content root is set here rather than afterwards because the builder fixes it at creation.
+// Run from a terminal, IsWindowsService() is false and none of this changes anything.
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers
+        .IsWindowsService()
+            ? AppContext.BaseDirectory
+            : default,
+});
+
+builder.Services.AddWindowsService(options => options.ServiceName = "Akiba");
 
 var connectionString = builder.Configuration.GetConnectionString("Akiba")
     ?? throw new InvalidOperationException(

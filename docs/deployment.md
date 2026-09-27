@@ -140,21 +140,62 @@ If the machine has no certificate, get one before go-live. On an internal machin
 either a certificate from the organisation's own authority, or a self-signed certificate
 installed as trusted on the four machines that use Akiba. It is an afternoon's work once.
 
+### The certificate
+
+**Akiba will not start over HTTPS until it is told where its certificate is.** There is no
+developer certificate on a server, so without this the service stops at startup with *"Unable
+to configure HTTPS endpoint. No server certificate was specified."*
+
+If the organisation has its own certificate authority, ask it for a certificate for the Akiba
+machine's name and IP address, as a `.pfx` file. Otherwise make a self-signed one on the Akiba
+machine, in an elevated PowerShell:
+
+```powershell
+$cert = New-SelfSignedCertificate -DnsName 'akiba.local', '192.168.1.40' `
+            -CertStoreLocation Cert:\LocalMachine\My -NotAfter (Get-Date).AddYears(5)
+$pfxPassword = Read-Host -AsSecureString 'Choose a password for the certificate file'
+Export-PfxCertificate -Cert $cert -FilePath C:\Akiba\akiba.pfx -Password $pfxPassword
+Export-Certificate    -Cert $cert -FilePath C:\Akiba\akiba.cer
+```
+
+Use the machine's real name and address, not these examples. Then:
+
+- **On each of the four officials' machines,** double-click `akiba.cer` → *Install
+  Certificate* → *Local Machine* → *Trusted Root Certification Authorities*. Until this is
+  done their browser will warn that the connection is not private — and an office that learns
+  to click through that warning will click through it on the day it is real.
+- **Keep the `.pfx` password with the other break-glass credentials** — the treasurer and the
+  chairman, not only ICT.
+
+### Where it listens
+
 **On `ASPNETCORE_URLS`, read this twice.** Akiba holds member financial records.
 
-- `http://127.0.0.1:8080` — reachable only from the Akiba machine itself. The safe default.
-- `http://192.168.1.40:8080` — the machine's **own LAN address**, so the four officials can
+- `https://127.0.0.1:8443` — reachable only from the Akiba machine itself.
+- `https://192.168.1.40:8443` — the machine's **own LAN address**, so the four officials can
   reach it. This is what you want in production.
-- `http://0.0.0.0:8080` — every network interface. **Never use this.**
+- `https://0.0.0.0:8443` — every network interface. **Never use this.**
 
-Set them as machine-level environment variables so the service picks them up:
+Set everything as machine-level environment variables so the service picks them up:
 
 ```powershell
 [Environment]::SetEnvironmentVariable('ConnectionStrings__Akiba', 'Host=localhost;Port=5432;Database=akiba;Username=akiba_app;Password=...', 'Machine')
 [Environment]::SetEnvironmentVariable('ASPNETCORE_URLS', 'https://192.168.1.40:8443', 'Machine')
 [Environment]::SetEnvironmentVariable('ASPNETCORE_ENVIRONMENT', 'Production', 'Machine')
 [Environment]::SetEnvironmentVariable('AllowedHosts', 'akiba.local;192.168.1.40', 'Machine')
+[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__Path', 'C:\Akiba\akiba.pfx', 'Machine')
+[Environment]::SetEnvironmentVariable('Kestrel__Certificates__Default__Password', '...', 'Machine')
 ```
+
+Open the port to the office network and nothing else:
+
+```powershell
+New-NetFirewallRule -DisplayName 'Akiba' -Direction Inbound -Protocol TCP -LocalPort 8443 `
+                    -RemoteAddress LocalSubnet -Action Allow
+```
+
+`LocalSubnet` is the point: the four machines on the office network can reach Akiba, and
+nothing routed in from outside can, even if a router is later misconfigured.
 
 ---
 
@@ -175,6 +216,12 @@ Start-Service Akiba
 Check on it with `Get-Service Akiba`. When it will not start, **Event Viewer → Windows Logs →
 Application** says why.
 
+Set it to restart itself if it ever stops, so a crash at 2am is not discovered at 9:
+
+```powershell
+sc.exe failure Akiba reset= 86400 actions= restart/60000/restart/60000/restart/60000
+```
+
 ### Linux
 
 Create `/etc/systemd/system/akiba.service`:
@@ -191,7 +238,9 @@ Restart=always
 RestartSec=10
 User=akiba
 Environment=ASPNETCORE_ENVIRONMENT=Production
-Environment=ASPNETCORE_URLS=http://192.168.1.40:8080
+Environment=ASPNETCORE_URLS=https://192.168.1.40:8443
+Environment=Kestrel__Certificates__Default__Path=/opt/akiba/akiba.pfx
+Environment=Kestrel__Certificates__Default__Password=...
 Environment=ConnectionStrings__Akiba=Host=localhost;Port=5432;Database=akiba;Username=akiba;Password=...
 
 [Install]
@@ -207,11 +256,15 @@ sudo systemctl status akiba
 
 ## 5. Check it is up
 
-From the Akiba machine:
+From one of the officials' machines, in a browser:
 
 ```
-http://localhost:8080/health
+https://192.168.1.40:8443/health
 ```
+
+It should say `Healthy`, with no certificate warning. Checking from an official's machine
+rather than the server proves three things at once: the service is up, the firewall lets the
+office in, and that machine trusts the certificate.
 
 It should say `Healthy`. That checks the database too, so a healthy response means Akiba has
 applied its migrations and can read and write.
