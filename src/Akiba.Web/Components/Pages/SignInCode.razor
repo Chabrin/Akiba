@@ -4,11 +4,14 @@
 
 <PageTitle>Akiba - Authentication code</PageTitle>
 
-<div>
-    <MudText Typo="Typo.h2" Class="mb-1">
-        <h1 style="all: unset">Authentication code</h1>
-    </MudText>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-5">
+@* The same heading as the password step, so the two read as one sign-in in two parts
+   rather than two different screens. *@
+<div class="akiba-signin-content">
+    <div class="akiba-signin-heading">
+        <span class="akiba-signin-eyebrow">Official access · Step 2 of 2</span>
+        <h1 class="akiba-signin-title">Authentication code</h1>
+    </div>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
         Enter the six-digit code from your authenticator app.
     </MudText>
 

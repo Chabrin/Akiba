@@ -52,6 +52,14 @@ internal sealed class LoanApplicationRow
 
     public bool RentStatementsAttached { get; set; }
 
+    public string? PreparedLoanNumber { get; set; }
+    public Guid? ChequeBookId { get; set; }
+    public Guid? ChequeLeafId { get; set; }
+    public string? ReservedChequeNumber { get; set; }
+    public string? PaymentVoucherReference { get; set; }
+    public DateOnly? VoucherPreparedOn { get; set; }
+    public int VoucherRevision { get; set; }
+
     public List<ApprovalDecisionRow> Decisions { get; set; } = [];
 
     public List<GuaranteeRow> Guarantees { get; set; } = [];
@@ -176,6 +184,29 @@ internal sealed class LoanRow
     public string? ChequeSignatories { get; set; }
 
     public List<GuaranteeRow> Guarantees { get; set; } = [];
+}
+
+internal sealed class ChequeBookRow
+{
+    public Guid Id { get; set; }
+    public string BookReference { get; set; } = string.Empty;
+    public Guid BankAccountId { get; set; }
+    public DateOnly ReceivedOn { get; set; }
+    public bool IsClosed { get; set; }
+    public int Revision { get; set; }
+    public List<ChequeLeafRow> Leaves { get; set; } = [];
+}
+
+internal sealed class ChequeLeafRow
+{
+    public Guid Id { get; set; }
+    public Guid ChequeBookId { get; set; }
+    public Guid BankAccountId { get; set; }
+    public string Number { get; set; } = string.Empty;
+    public int Status { get; set; }
+    public Guid? ReservedForApplicationId { get; set; }
+    public Guid? IssuedForLoanId { get; set; }
+    public string? VoidReason { get; set; }
 }
 
 /// <summary>The stored shape of a receipt.</summary>

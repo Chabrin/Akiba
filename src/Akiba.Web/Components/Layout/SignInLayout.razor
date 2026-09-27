@@ -31,23 +31,30 @@
         </div>
 
         <div class="akiba-signin-statement">
+            <span class="akiba-signin-eyebrow">Staff welfare · Financial operations</span>
+            <h2>Clear records.<br />Accountable decisions.</h2>
             <p>
-                Every figure in this system is summed from the society's journal entries.
-                None of them is stored, so none of them can quietly disagree with the books.
+                A private workspace for authorised society officials to manage member records,
+                lending and the ledger.
             </p>
             <p>
-                Every entry records who made it and when, and nothing written can be edited
-                or deleted afterwards — a correction is a new entry that reverses the old one.
+                Financial entries are retained in an auditable journal. Corrections are recorded
+                as new reversing entries.
             </p>
         </div>
 
+        <div class="akiba-signin-access">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
+            <span>Restricted to authorised officials</span>
+        </div>
         @if (!Environment.IsProduction())
         {
             <div class="akiba-signin-environment">
                 <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                 <span>
-                    <b>@Environment.EnvironmentName.</b>
-                    This is not the society's live system. Nothing typed here is sent anywhere.
+                    <b>@Environment.EnvironmentName environment.</b>
+                    Verify the connected database before entering data. Changes may be saved;
+                    outbound notifications are disabled here.
                 </span>
             </div>
         }

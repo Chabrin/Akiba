@@ -172,7 +172,24 @@ public sealed record ApplicationSummary(
     int DecisionsRecorded,
     int Guarantors,
     Money TotalGuaranteed,
-    BorrowerCategory BorrowerCategory);
+    BorrowerCategory BorrowerCategory,
+    PreparedVoucherSummary? PreparedVoucher = null);
+
+/// <summary>
+/// A payment voucher prepared for an approved application, and the cheque reserved for it.
+/// </summary>
+/// <remarks>
+/// On the summary so the screen can pick up where the clerk left off. Preparing a voucher and
+/// writing the cheque are hours apart in practice - the cheque goes to the chairman for a
+/// signature - and without this a reopened panel had no idea a voucher existed, offered to
+/// prepare another, was refused, and left the loan unpayable and the cheque unvoidable.
+/// </remarks>
+/// <param name="VoucherReference">The voucher's own reference.</param>
+/// <param name="ChequeNumber">The cheque leaf reserved for it.</param>
+/// <param name="LoanNumber">The loan number the voucher was prepared under.</param>
+/// <param name="PreparedOn">The voucher date, which is also the date on the cheque.</param>
+public sealed record PreparedVoucherSummary(
+    string VoucherReference, string ChequeNumber, string LoanNumber, DateOnly PreparedOn);
 
 /// <summary>
 /// Applications by status.
@@ -239,7 +256,16 @@ internal sealed class ListApplicationsHandler
                 application.Decisions.Count,
                 application.Guarantees.Count,
                 application.Guarantees.Sum(g => g.GuaranteedAmount, Currency.Kes),
-                BorrowerCategories.Of(borrower)));
+                BorrowerCategories.Of(borrower),
+                application is
+                {
+                    PaymentVoucherReference: { } voucher,
+                    ReservedChequeNumber: { } cheque,
+                    PreparedLoanNumber: { } loanNumber,
+                    VoucherPreparedOn: { } preparedOn,
+                }
+                    ? new PreparedVoucherSummary(voucher, cheque, loanNumber, preparedOn)
+                    : null));
         }
 
         return [.. summaries.OrderByDescending(application => application.ReceivedOn)];

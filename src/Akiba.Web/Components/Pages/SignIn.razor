@@ -5,14 +5,15 @@
 
 <PageTitle>Akiba - Sign in</PageTitle>
 
-<div>
+<div class="akiba-signin-content">
     @* The society's name is on the panel beside this, so it is not repeated here. What this
        needs is a heading that says which of the two steps you are on. *@
-    <MudText Typo="Typo.h2" Class="mb-1">
-        <h1 style="all: unset">Sign in</h1>
-    </MudText>
+    <div class="akiba-signin-heading">
+        <span class="akiba-signin-eyebrow">Official access · Step 1 of 2</span>
+        <h1 class="akiba-signin-title">Sign in</h1>
+    </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-        Your account is one of five. There is no self sign-up.
+        Access is provisioned by an administrator. Self-registration is disabled.
     </MudText>
 
     @if (Error is not null)
@@ -28,7 +29,7 @@
         <AntiforgeryToken />
 
         <MudTextField T="string"
-                      Label="User name"
+                      Label="Username"
                       InputType="InputType.Text"
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"

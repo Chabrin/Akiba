@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IZoneRepository, ZoneRepository>();
         services.AddScoped<ILoanApplicationRepository, LoanApplicationRepository>();
         services.AddScoped<ILoanRepository, LoanRepository>();
+        services.AddScoped<IChequeBookRepository, ChequeBookRepository>();
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
         services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
         services.AddScoped<IDividendRunRepository, DividendRunRepository>();
@@ -89,6 +90,7 @@ public static class DependencyInjection
         services.AddSingleton<IShareholdingSummaryWriter, ShareholdingSummaryWriter>();
         services.AddSingleton<IAgmPackWriter, AgmPackWriter>();
         services.AddSingleton<IDividendScheduleWriter, DividendScheduleWriter>();
+        services.AddSingleton<ILoanPaymentVoucherWriter, LoanPaymentVoucherWriter>();
 
         // QuestPDF is MIT below a revenue threshold Akiba is far beneath. Declaring it is a
         // licence term, not a formality.

@@ -141,6 +141,14 @@
                         @switch (context.Status)
                         {
                             case LoanApplicationStatus.Draft:
+                                <MudTooltip Text="Submit the completed form for representative decisions">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Send"
+                                                   Size="Size.Small" Color="Color.Primary"
+                                                   aria-label="Submit application"
+                                                   OnClick="@(() => SubmitAsync(context))" />
+                                </MudTooltip>
+                                break;
+
                             case LoanApplicationStatus.Submitted:
                                 <MudTooltip Text="Record a representative's decision">
                                     <MudIconButton Icon="@Icons.Material.Filled.HowToVote"
@@ -205,6 +213,12 @@
     {
         _working = application;
         _step = step;
+    }
+
+    private async Task SubmitAsync(ApplicationSummary application)
+    {
+        await Mediator.Send(new SubmitLoanApplicationCommand(application.ApplicationId));
+        await ReloadAsync();
     }
 
     private async Task ReloadAsync()

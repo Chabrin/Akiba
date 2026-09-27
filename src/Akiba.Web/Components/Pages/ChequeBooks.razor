@@ -1,0 +1,184 @@
+@page "/cheque-books"
+@attribute [Authorize(Policy = AkibaPolicies.RecordsMoney)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Cheque books</PageTitle>
+
+<PageHeader Title="Cheque books"
+            Description="Register books received from the bank, track every leaf, and select a leaf or take the next available number when preparing a loan payment voucher.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => _open = true)">
+            Add a cheque book
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+<WorkPanel @bind-Open="_open" Title="Register a cheque book"
+           Subtitle="Enter the book as printed by the bank. The complete leaf range is stored."
+           Consequence="Registered cheque numbers cannot be registered again for this account. Used and voided leaves remain in the audit record."
+           ConfirmText="Register book" ConfirmIcon="@Icons.Material.Filled.LibraryAdd"
+           CanConfirm="@CanSave" Busy="_busy" Error="_error" OnConfirm="SaveAsync">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6">
+            <MudTextField @bind-Value="_bookReference" Label="Book reference" Required="true"
+                          HelperText="The bank's book serial or issue reference"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <MudSelect T="Guid?" @bind-Value="_bankAccountId" Label="Bank ledger account"
+                       Variant="Variant.Outlined" Margin="Margin.Dense">
+                @foreach (var account in BankAccounts)
+                {
+                    <MudSelectItem T="Guid?" Value="@account.Id.Value">
+                        @account.Code — @account.Name
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_receivedOn" Label="Received from bank"
+                           DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_prefix" Label="Printed prefix (if any)"
+                          HelperText="For example, ABC — leave blank if none"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_firstNumber" Label="First leaf serial" Required="true"
+                          HelperText="Enter digits only; keep leading zeroes"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudTextField @bind-Value="_lastNumber" Label="Last leaf serial" Required="true"
+                          HelperText="Up to 1,000 leaves per book"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+        </MudItem>
+    </MudGrid>
+</WorkPanel>
+
+@if (_books is null)
+{
+    <TableSkeleton Rows="5" Columns="5" />
+}
+else if (_books.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.ConfirmationNumber" Title="No cheque books registered"
+                Description="Add the books received from the bank before recording cheque disbursements." />
+}
+else
+{
+    <MudTable Items="_books" Dense="true" Hover="true" Striped="true" Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>Book</MudTh><MudTh>Bank account</MudTh><MudTh>Received</MudTh>
+            <MudTh>Leaf range</MudTh><MudTh>Available</MudTh><MudTh>Issued</MudTh><MudTh>Status</MudTh><MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Book">@context.BookReference</MudTd>
+            <MudTd DataLabel="Bank account">@context.BankAccountCode — @context.BankAccountName</MudTd>
+            <MudTd DataLabel="Received">@context.ReceivedOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)</MudTd>
+            <MudTd DataLabel="Leaf range">
+                @(context.Leaves.FirstOrDefault()?.Number ?? "—") – @(context.Leaves.LastOrDefault()?.Number ?? "—")
+            </MudTd>
+            <MudTd DataLabel="Available">@context.Leaves.Count(leaf => leaf.Status == ChequeLeafStatus.Available)</MudTd>
+            <MudTd DataLabel="Issued">@context.Leaves.Count(leaf => leaf.Status == ChequeLeafStatus.Issued)</MudTd>
+            <MudTd DataLabel="Status">@(context.IsClosed ? "Closed" : "Open")</MudTd>
+            <MudTd>
+                @if (!context.IsClosed)
+                {
+                    <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                               OnClick="@(() => CloseBookAsync(context))">Close book</MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+        <ChildRowContent>
+            <MudTr><td colspan="8" class="pa-3">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Cheque leaves and their current status</MudText>
+                <MudChipSet T="string">
+                    @foreach (var leaf in context.Leaves)
+                    {
+                        <MudTooltip Text="@leaf.VoidReason">
+                            <MudChip T="string" Size="Size.Small" Color="LeafColour(leaf.Status)"
+                                     Variant="Variant.Outlined">
+                                @leaf.Number · @leaf.Status
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudChipSet>
+            </td></MudTr>
+        </ChildRowContent>
+    </MudTable>
+}
+
+@code {
+    private IReadOnlyList<ChequeBookSummary>? _books;
+    private IReadOnlyList<ChartAccount> _accounts = [];
+    private bool _open;
+    private bool _busy;
+    private string? _error;
+    private string _bookReference = string.Empty;
+    private Guid? _bankAccountId;
+    private DateTime? _receivedOn;
+    private string _prefix = string.Empty;
+    private string _firstNumber = string.Empty;
+    private string _lastNumber = string.Empty;
+
+    private IEnumerable<ChartAccount> BankAccounts => _accounts.Where(account =>
+        account.IsOpen && account.OwnerKind == AccountOwnerKind.Society && account.Type == AccountType.Asset);
+
+    private bool CanSave => !string.IsNullOrWhiteSpace(_bookReference)
+        && _bankAccountId is not null && _receivedOn is not null
+        && !string.IsNullOrWhiteSpace(_firstNumber) && !string.IsNullOrWhiteSpace(_lastNumber);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _accounts = await Mediator.Send(new GetChartOfAccountsQuery(Clock.TodayInNairobi));
+        await ReloadAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Mediator.Send(new CreateChequeBookCommand(
+                _bookReference.Trim(), new AccountId(_bankAccountId!.Value),
+                DateOnly.FromDateTime(_receivedOn!.Value), _prefix,
+                _firstNumber.Trim(), _lastNumber.Trim()));
+            _bookReference = _prefix = _firstNumber = _lastNumber = string.Empty;
+            _bankAccountId = null;
+            _receivedOn = null;
+            _open = false;
+            await ReloadAsync();
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CloseBookAsync(ChequeBookSummary book)
+    {
+        try
+        {
+            await Mediator.Send(new CloseChequeBookCommand(book.Id));
+            await ReloadAsync();
+        }
+        catch (Exception exception) { _error = exception.Message; }
+    }
+
+    private async Task ReloadAsync() => _books = await Mediator.Send(new ListChequeBooksQuery());
+
+    private static Color LeafColour(ChequeLeafStatus status) => status switch
+    {
+        ChequeLeafStatus.Available => Color.Success,
+        ChequeLeafStatus.Reserved => Color.Warning,
+        ChequeLeafStatus.Issued => Color.Primary,
+        ChequeLeafStatus.Voided => Color.Error,
+        _ => Color.Default,
+    };
+}

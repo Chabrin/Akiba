@@ -141,6 +141,14 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
 
     public Money? ApprovedPrincipal { get; private set; }
 
+    public string? PreparedLoanNumber { get; private set; }
+    public ChequeBookId? ChequeBookId { get; private set; }
+    public ChequeLeafId? ChequeLeafId { get; private set; }
+    public string? ReservedChequeNumber { get; private set; }
+    public string? PaymentVoucherReference { get; private set; }
+    public DateOnly? VoucherPreparedOn { get; private set; }
+    public int VoucherRevision { get; private set; }
+
     public IReadOnlyList<ApprovalDecision> Decisions => _decisions;
 
     public IReadOnlyList<Guarantee> Guarantees => _guarantees;
@@ -212,6 +220,13 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         LoanTerms? approvedTerms,
         string? rejectionReason,
         RentalIncomeSecurity? rentalIncome,
+        string? preparedLoanNumber,
+        ChequeBookId? chequeBookId,
+        ChequeLeafId? chequeLeafId,
+        string? reservedChequeNumber,
+        string? paymentVoucherReference,
+        DateOnly? voucherPreparedOn,
+        int voucherRevision,
         IEnumerable<ApprovalDecision> decisions,
         IEnumerable<Guarantee> guarantees,
         IEnumerable<LoanSecurity> security,
@@ -227,6 +242,13 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
             ApprovedTerms = approvedTerms,
             RejectionReason = rejectionReason,
             RentalIncome = rentalIncome,
+            PreparedLoanNumber = preparedLoanNumber,
+            ChequeBookId = chequeBookId,
+            ChequeLeafId = chequeLeafId,
+            ReservedChequeNumber = reservedChequeNumber,
+            PaymentVoucherReference = paymentVoucherReference,
+            VoucherPreparedOn = voucherPreparedOn,
+            VoucherRevision = voucherRevision,
         };
 
         application._decisions.AddRange(decisions);
@@ -312,6 +334,51 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         Status = LoanApplicationStatus.Submitted;
     }
 
+    public string PreparePaymentVoucher(
+        string loanNumber,
+        ChequeBookId chequeBookId,
+        ChequeLeafId chequeLeafId,
+        string chequeNumber,
+        DateOnly preparedOn)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(loanNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(chequeNumber);
+        if (Status != LoanApplicationStatus.Approved || ApprovedTerms is null)
+        {
+            throw new InvalidOperationException("Only an approved application can have a payment voucher.");
+        }
+
+        if (ChequeLeafId is not null)
+        {
+            throw new InvalidOperationException("A payment voucher has already been prepared for this application.");
+        }
+
+        PreparedLoanNumber = loanNumber.Trim().ToUpperInvariant();
+        ChequeBookId = chequeBookId;
+        ChequeLeafId = chequeLeafId;
+        ReservedChequeNumber = chequeNumber.Trim();
+        VoucherPreparedOn = preparedOn;
+        VoucherRevision++;
+        PaymentVoucherReference = LoanPaymentVoucherReference.For(Id, VoucherRevision);
+        return PaymentVoucherReference;
+    }
+
+    public void CancelPreparedPaymentVoucher(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        if (Status != LoanApplicationStatus.Approved || ChequeLeafId is null)
+        {
+            throw new InvalidOperationException("There is no prepared payment voucher to cancel.");
+        }
+
+        PreparedLoanNumber = null;
+        ChequeBookId = null;
+        ChequeLeafId = null;
+        ReservedChequeNumber = null;
+        PaymentVoucherReference = null;
+        VoucherPreparedOn = null;
+    }
+
     /// <summary>Records one representative's decision.</summary>
     public void RecordDecision(
         Actor approver,
@@ -354,6 +421,12 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         {
             throw new InvalidOperationException(
                 $"Only a submitted application can be approved; this one is {Status}.");
+        }
+
+        if (!terms.Principal.IsPositive || terms.Principal > RequestedPrincipal)
+        {
+            throw new InvalidOperationException(
+                "Approved principal must be positive and cannot exceed the amount requested.");
         }
 
         if (_decisions.Count == 0)
@@ -424,6 +497,15 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
                 "has been submitted.");
         }
     }
+}
+
+public static class LoanPaymentVoucherReference
+{
+    /// <summary>A stable application-unique number that can be printed before the cheque is issued.</summary>
+    public static string For(LoanApplicationId applicationId, int revision) =>
+        revision <= 1
+            ? $"PV-{applicationId.Value:N}".ToUpperInvariant()
+            : $"PV-{applicationId.Value:N}-{revision}".ToUpperInvariant();
 }
 
 /// <summary>Raised when an application is approved and joins the awaiting-cheque queue.</summary>

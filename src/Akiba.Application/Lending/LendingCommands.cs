@@ -105,6 +105,38 @@ internal sealed class ReceiveLoanApplicationHandler
     }
 }
 
+/// <summary>Moves a complete draft application into the representative decision queue.</summary>
+public sealed record SubmitLoanApplicationCommand(LoanApplicationId ApplicationId) : IRequest;
+
+internal sealed class SubmitLoanApplicationHandler
+    : IRequestHandler<SubmitLoanApplicationCommand>
+{
+    private readonly ILoanApplicationRepository _applications;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SubmitLoanApplicationHandler(
+        ILoanApplicationRepository applications,
+        IUnitOfWork unitOfWork)
+    {
+        _applications = applications;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(
+        SubmitLoanApplicationCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var application = await _applications.FindByIdAsync(command.ApplicationId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No application with id {command.ApplicationId}.");
+
+        application.Submit();
+        _applications.Update(application);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+}
+
 /// <summary>Records one zone or office representative's decision on an application.</summary>
 public sealed record RecordApprovalDecisionCommand(
     LoanApplicationId ApplicationId,
@@ -413,8 +445,11 @@ public sealed class DisburseLoanValidator : AbstractValidator<DisburseLoanComman
         RuleFor(command => command.VoucherReference).NotEmpty();
 
         RuleFor(command => command.Signatories)
-            .Must(signatories => signatories is { Count: >= 2 })
-            .WithMessage("Every Akiba cheque carries two signatories.");
+            .Must(signatories => signatories is not null
+                && signatories.Select(name => name.Trim())
+                    .Where(name => name.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() >= 2)
+            .WithMessage("Every Akiba cheque carries two distinct, named signatories.");
     }
 }
 
@@ -422,6 +457,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
 {
     private readonly ILoanApplicationRepository _applications;
     private readonly ILoanRepository _loans;
+    private readonly IChequeBookRepository _chequeBooks;
     private readonly IJournalRepository _journal;
     private readonly IAkibaAccounts _accounts;
     private readonly IBorrowerRepository _borrowers;
@@ -433,6 +469,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
     public DisburseLoanHandler(
         ILoanApplicationRepository applications,
         ILoanRepository loans,
+        IChequeBookRepository chequeBooks,
         IJournalRepository journal,
         IAkibaAccounts accounts,
         IBorrowerRepository borrowers,
@@ -443,6 +480,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
     {
         _applications = applications;
         _loans = loans;
+        _chequeBooks = chequeBooks;
         _journal = journal;
         _accounts = accounts;
         _borrowers = borrowers;
@@ -474,6 +512,39 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
             ?? throw new InvalidOperationException(
                 "An application must be approved on terms before it can be disbursed.");
 
+        ChequeBook? chequeBook = null;
+        ChequeLeaf? chequeLeaf = null;
+        var chequeNumber = command.ChequeNumber;
+        var voucherReference = command.VoucherReference;
+        var bankAccountId = await _accounts.BankAsync(cancellationToken).ConfigureAwait(false);
+
+        if (application.ChequeBookId is { } preparedBookId
+            && application.ChequeLeafId is { } preparedLeafId)
+        {
+            chequeBook = await _chequeBooks.FindByIdAsync(preparedBookId, cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The cheque book reserved for this voucher no longer exists.");
+            chequeLeaf = chequeBook.Leaf(preparedLeafId);
+
+            if (chequeLeaf.Status != ChequeLeafStatus.Reserved
+                || chequeLeaf.ReservedForApplication != application.Id)
+            {
+                throw new InvalidOperationException("The cheque leaf is no longer reserved for this application.");
+            }
+
+            if (!string.Equals(command.LoanNumber, application.PreparedLoanNumber, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(command.ChequeNumber, application.ReservedChequeNumber, StringComparison.Ordinal)
+                || !string.Equals(command.VoucherReference, application.PaymentVoucherReference, StringComparison.Ordinal)
+                || command.DisbursedOn != application.VoucherPreparedOn)
+            {
+                throw new InvalidOperationException("The loan number, cheque number, cheque date, or voucher does not match the prepared payment voucher.");
+            }
+
+            chequeNumber = chequeLeaf.Number;
+            voucherReference = application.PaymentVoucherReference!;
+            bankAccountId = chequeBook.BankAccountId;
+        }
+
         var loanId = Guid.NewGuid();
 
         var receivable = await _accounts
@@ -481,8 +552,8 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
             .ConfigureAwait(false);
 
         var cheque = new ChequeDetails(
-            command.ChequeNumber,
-            command.VoucherReference,
+            chequeNumber,
+            voucherReference,
             terms.Principal,
             command.DisbursedOn,
             command.Signatories);
@@ -490,18 +561,24 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         var loan = Loan.Disburse(
             application, command.LoanNumber, receivable.Id, command.DisbursedOn, cheque, _clock.UtcNow);
 
+        if (chequeBook is not null && chequeLeaf is not null)
+        {
+            chequeBook.Issue(chequeLeaf.Id, application.Id, loan.Id);
+            _chequeBooks.Update(chequeBook);
+        }
+
         _loans.Add(loan);
         _applications.Update(application);
 
         var entry = AkibaPostings.Disbursement(
             receivable.Id,
-            await _accounts.BankAsync(cancellationToken).ConfigureAwait(false),
+            bankAccountId,
             await _accounts.LoanInterestIncomeAsync(cancellationToken).ConfigureAwait(false),
             terms.Principal,
             terms.Interest,
             command.DisbursedOn,
             command.LoanNumber,
-            SourceDocument.PaymentVoucher(command.VoucherReference),
+            SourceDocument.PaymentVoucher(voucherReference),
             _currentUser.Actor,
             _clock.UtcNow);
 

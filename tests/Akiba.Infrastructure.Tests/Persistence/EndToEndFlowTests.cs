@@ -288,6 +288,146 @@ public sealed class EndToEndFlowTests : IAsyncLifetime
     }
 
     // -----------------------------------------------------------------
+    // Cheque control under two officials at once
+    //
+    // The database context lives for an official's whole session in Blazor Server, so these
+    // hold two scopes open side by side - two sessions - rather than one per command.
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public async Task Two_officials_reaching_for_the_same_cheque_cannot_both_have_it()
+    {
+        var (first, second, book) = await TwoApprovedApplicationsAndABookAsync();
+
+        await using var sessionA = _services.CreateAsyncScope();
+        await using var sessionB = _services.CreateAsyncScope();
+
+        var booksA = sessionA.ServiceProvider.GetRequiredService<IChequeBookRepository>();
+        var booksB = sessionB.ServiceProvider.GetRequiredService<IChequeBookRepository>();
+
+        // Both read the book before either saves - the race, made deterministic.
+        var seenByA = (await booksA.FindByIdAsync(book))!;
+        var seenByB = (await booksB.FindByIdAsync(book))!;
+
+        var chequeA = seenByA.ReserveNext(first);
+        var chequeB = seenByB.ReserveNext(second);
+        chequeB.Number.Should().Be(chequeA.Number, because: "both saw the same leaf as free");
+
+        booksA.Update(seenByA);
+        await sessionA.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+
+        booksB.Update(seenByB);
+        var late = async () =>
+            await sessionB.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+
+        // Refused, and as something every screen shows inline - not the database's own error.
+        await late.Should().ThrowAsync<ChangeConflictException>();
+
+        var settled = await ReadBookAsync(book);
+        settled.Leaves.Single(leaf => leaf.Number == chequeA.Number)
+            .ReservedForApplication.Should().Be(first, because: "the cheque went to whoever saved first");
+    }
+
+    [Fact]
+    public async Task A_refused_save_does_not_lock_the_official_out_for_the_rest_of_the_session()
+    {
+        // Before: the refused change stayed in the session's context, every later save retried
+        // it and failed the same way, and only reloading the page got the official out.
+        var (first, second, book) = await TwoApprovedApplicationsAndABookAsync();
+
+        await using var sessionA = _services.CreateAsyncScope();
+        await using var sessionB = _services.CreateAsyncScope();
+
+        var seenByA = (await sessionA.ServiceProvider.GetRequiredService<IChequeBookRepository>().FindByIdAsync(book))!;
+        var booksB = sessionB.ServiceProvider.GetRequiredService<IChequeBookRepository>();
+        var unitOfWorkB = sessionB.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var seenByB = (await booksB.FindByIdAsync(book))!;
+
+        seenByA.ReserveNext(first);
+        sessionA.ServiceProvider.GetRequiredService<IChequeBookRepository>().Update(seenByA);
+        await sessionA.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+
+        seenByB.ReserveNext(second);
+        booksB.Update(seenByB);
+        await FluentActions.Invoking(() => unitOfWorkB.SaveChangesAsync())
+            .Should().ThrowAsync<ChangeConflictException>();
+
+        // The same session tries again, as the official would after closing and reopening.
+        var retry = (await booksB.FindByIdAsync(book))!;
+        var cheque = retry.ReserveNext(second);
+        booksB.Update(retry);
+        await unitOfWorkB.SaveChangesAsync();
+
+        cheque.Number.Should().Be("000102", because: "000101 had gone to the first official");
+    }
+
+    [Fact]
+    public async Task A_session_that_looked_earlier_sees_cheques_issued_since()
+    {
+        // The stale-read bug. A tracked read returned the book exactly as this session first
+        // saw it, however many cheques had gone since - so it offered a leaf another official
+        // had already reserved, and the save then failed.
+        var (first, second, book) = await TwoApprovedApplicationsAndABookAsync();
+
+        await using var session = _services.CreateAsyncScope();
+        var books = session.ServiceProvider.GetRequiredService<IChequeBookRepository>();
+
+        await books.FindByIdAsync(book);
+
+        // Somebody else, in their own session, takes the first cheque.
+        await SendAsync(new PrepareLoanPaymentVoucherCommand(
+            first, "AKB-2026-0201", book, null, new DateOnly(2026, 9, 20)));
+
+        var now = (await books.FindByIdAsync(book))!;
+        var cheque = now.ReserveNext(second);
+        books.Update(now);
+        await session.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync();
+
+        cheque.Number.Should().Be("000102");
+    }
+
+    private async Task<(LoanApplicationId First, LoanApplicationId Second, ChequeBookId Book)>
+        TwoApprovedApplicationsAndABookAsync()
+    {
+        var zoneId = await CreateZoneAsync();
+        var memberId = await EnrolAndFundAsync(zoneId, shares: 500_000m);
+
+        var approved = new List<LoanApplicationId>();
+
+        foreach (var amount in new[] { 60_000m, 50_000m })
+        {
+            var id = await SendAsync(new ReceiveLoanApplicationCommand(
+                memberId, LoanProduct.Normal, Money.Kes(amount),
+                new DateOnly(2026, 9, 10), Money.Kes(400_000m), null));
+
+            await AddGuarantorAsync(id, "Peter Mwangi", Money.Kes(70_000m));
+            await SubmitAsync(id);
+            await DecideAsync(id, ZoneRep, ApprovalDecisionKind.Approve);
+            await SendAsync(new ApproveLoanApplicationCommand(id, null));
+
+            approved.Add(id);
+        }
+
+        AccountId bank;
+        await using (var scope = _services.CreateAsyncScope())
+        {
+            bank = await scope.ServiceProvider.GetRequiredService<IAkibaAccounts>().BankAsync();
+        }
+
+        var book = await SendAsync(new CreateChequeBookCommand(
+            "CB-TEST", bank, new DateOnly(2026, 9, 1), string.Empty, "000101", "000125"));
+
+        return (approved[0], approved[1], book);
+    }
+
+    private async Task<ChequeBook> ReadBookAsync(ChequeBookId book)
+    {
+        await using var scope = _services.CreateAsyncScope();
+
+        return (await scope.ServiceProvider.GetRequiredService<IChequeBookRepository>().FindByIdAsync(book))!;
+    }
+
+    // -----------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------
 

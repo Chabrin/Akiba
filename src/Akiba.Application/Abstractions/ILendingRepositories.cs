@@ -103,6 +103,18 @@ public interface ILoanRepository
     void Update(Loan loan);
 }
 
+/// <summary>Persists cheque books and their controlled cheque leaves.</summary>
+public interface IChequeBookRepository
+{
+    Task<ChequeBook?> FindByIdAsync(ChequeBookId id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ChequeBook>> ListAsync(CancellationToken cancellationToken = default);
+
+    void Add(ChequeBook book);
+
+    void Update(ChequeBook book);
+}
+
 /// <summary>Reads and writes receipts.</summary>
 public interface IReceiptRepository
 {

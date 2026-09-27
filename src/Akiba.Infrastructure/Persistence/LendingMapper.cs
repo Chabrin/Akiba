@@ -43,6 +43,13 @@ internal static class LendingMapper
             MonthlyRentalIncome = application.RentalIncome?.MonthlyRentalIncome.Amount,
             NumberOfRentalUnits = application.RentalIncome?.NumberOfUnits,
             RentStatementsAttached = application.RentalIncome?.RentStatementsAttached ?? false,
+            PreparedLoanNumber = application.PreparedLoanNumber,
+            ChequeBookId = application.ChequeBookId?.Value,
+            ChequeLeafId = application.ChequeLeafId?.Value,
+            ReservedChequeNumber = application.ReservedChequeNumber,
+            PaymentVoucherReference = application.PaymentVoucherReference,
+            VoucherPreparedOn = application.VoucherPreparedOn,
+            VoucherRevision = application.VoucherRevision,
         };
 
         row.Decisions =
@@ -126,6 +133,13 @@ internal static class LendingMapper
                     Kes(row.MonthlyRentalIncome.Value),
                     row.NumberOfRentalUnits.Value,
                     row.RentStatementsAttached),
+            row.PreparedLoanNumber,
+            row.ChequeBookId is { } bookId ? new ChequeBookId(bookId) : null,
+            row.ChequeLeafId is { } leafId ? new ChequeLeafId(leafId) : null,
+            row.ReservedChequeNumber,
+            row.PaymentVoucherReference,
+            row.VoucherPreparedOn,
+            row.VoucherRevision,
             row.Decisions
                 .OrderBy(decision => decision.DecidedAtUtc)
                 .Select(decision => new ApprovalDecision(

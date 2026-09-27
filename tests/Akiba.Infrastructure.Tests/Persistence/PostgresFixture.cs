@@ -130,6 +130,8 @@ public sealed class PostgresFixture : IAsyncLifetime
                 "{AkibaDbContext.Schema}"."approval_decisions",
                 "{AkibaDbContext.Schema}"."loan_security",
                 "{AkibaDbContext.Schema}"."attached_documents",
+                "{AkibaDbContext.Schema}"."cheque_leaves",
+                "{AkibaDbContext.Schema}"."cheque_books",
                 "{AkibaDbContext.Schema}"."loans",
                 "{AkibaDbContext.Schema}"."loan_applications",
                 "{AkibaDbContext.Schema}"."zone_representatives",

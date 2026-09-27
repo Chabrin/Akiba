@@ -35,6 +35,62 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
     {
     }
 
+    /// <summary>
+    /// Saves a command's changes, and makes sure a refused save cannot outlive the command.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In Blazor Server this context lives as long as the official's session, not as long as
+    /// one command, so anything a failed save leaves behind is still here for the next command
+    /// - which then tries to save it again, fails the same way, and keeps failing until the
+    /// page is reloaded. One refused save would have locked an official out of every later one.
+    /// The tracker is cleared on failure so the refused command is gone in full, as it would be
+    /// with a context per request.
+    /// </para>
+    /// <para>
+    /// Two refusals are ordinary on a system four people use at once, and are turned into a
+    /// <see cref="ChangeConflictException"/> the screens already know how to show: somebody else
+    /// changed the same record first, or recorded the same thing a moment earlier. Anything
+    /// else is rethrown as it was, because it is a fault rather than a race.
+    /// </para>
+    /// <para>
+    /// Explicit, so only callers going through the unit of work get this. The seeders and
+    /// tests that hold the context directly keep Entity Framework's own behaviour.
+    /// </para>
+    /// </remarks>
+    async Task<int> IUnitOfWork.SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException conflict)
+        {
+            ChangeTracker.Clear();
+
+            throw new ChangeConflictException(
+                "Somebody else changed this at the same moment, so your change was not saved. "
+                + "Close it and open it again to see where it now stands.",
+                conflict);
+        }
+        catch (DbUpdateException refused)
+            when (refused.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            ChangeTracker.Clear();
+
+            throw new ChangeConflictException(
+                "That is already recorded - most likely by somebody else a moment ago - so it "
+                + "was not recorded twice. Nothing was saved.",
+                refused);
+        }
+        catch (DbUpdateException)
+        {
+            ChangeTracker.Clear();
+
+            throw;
+        }
+    }
+
     internal DbSet<AccountRow> Accounts => Set<AccountRow>();
 
     internal DbSet<JournalEntryRow> JournalEntries => Set<JournalEntryRow>();
@@ -60,6 +116,10 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
     internal DbSet<LoanSecurityRow> LoanSecurity => Set<LoanSecurityRow>();
 
     internal DbSet<LoanRow> Loans => Set<LoanRow>();
+
+    internal DbSet<ChequeBookRow> ChequeBooks => Set<ChequeBookRow>();
+
+    internal DbSet<ChequeLeafRow> ChequeLeaves => Set<ChequeLeafRow>();
 
     internal DbSet<ReceiptRow> Receipts => Set<ReceiptRow>();
 

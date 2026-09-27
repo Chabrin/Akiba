@@ -237,9 +237,10 @@ public static class AkibaTheme
     /// The money figures are the part to watch. See <c>--akiba-font-numeric</c> in app.css.
     /// </para>
     /// </remarks>
+    // Keep in step with --akiba-font-ui in app.css, which covers what MudBlazor does not render.
     private static readonly string[] Sans =
     [
-        "Century Gothic", "URW Gothic", "Questrial", "Futura", "Segoe UI", "Roboto",
+        "Century Gothic", "URW Gothic", "Questrial", "Futura", "Segoe UI", "Roboto", "Arial",
         "sans-serif",
     ];
 

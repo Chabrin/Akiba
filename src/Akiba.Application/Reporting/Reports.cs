@@ -50,6 +50,24 @@ public interface IDividendScheduleWriter
     GeneratedReport Write(DividendRun run);
 }
 
+public sealed record LoanPaymentVoucherData(
+    string VoucherReference,
+    string LoanNumber,
+    string BorrowerName,
+    string BankAccountCode,
+    string BankAccountName,
+    string ChequeNumber,
+    DateOnly PreparedOn,
+    Money Principal,
+    Money Interest,
+    int TermMonths);
+
+/// <summary>Writes a printable payment voucher for an approved loan cheque.</summary>
+public interface ILoanPaymentVoucherWriter
+{
+    GeneratedReport Write(LoanPaymentVoucherData voucher);
+}
+
 /// <summary>One member on the shareholding summary.</summary>
 public sealed record ShareholdingLine(
     string MembershipNumber,

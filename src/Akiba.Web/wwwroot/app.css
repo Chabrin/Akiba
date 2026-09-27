@@ -37,7 +37,18 @@
        somebody changed the family and not this - point this one variable at a
        font with real tabular numerals and nothing else has to move. That is
        the whole reason it is a variable. */
-    --akiba-font-numeric: "Century Gothic", "URW Gothic", "Questrial", "Segoe UI", Roboto, sans-serif;
+    /* Keep in step with AkibaTheme.Sans - the theme sets MudBlazor's type from that list and
+       this one covers everything MudBlazor does not render. Two lists that drift apart put two
+       fonts on one screen whenever Century Gothic is missing. */
+    --akiba-font-ui: "Century Gothic", "URW Gothic", "Questrial", Futura, "Segoe UI", Roboto, Arial, sans-serif;
+
+    /* The keyboard focus ring. One amber chosen to clear 3:1 against everything it can sit
+       on: white (3.4), the page background (3.2), the green top bar (3.5) and the dark theme's
+       surfaces (4.7 to 5.4). The theme's own warning amber reaches 5:1 on white but only 2.4
+       on the green bar, where the privacy, theme and sign-out buttons are - so borrowing it
+       would have moved the failure rather than fixed it. */
+    --akiba-focus: #C47A0F;
+    --akiba-font-numeric: var(--akiba-font-ui);
     --akiba-numeric-features: "tnum" 1, "lnum" 1;
 
     --akiba-row-height: 38px;
@@ -57,6 +68,68 @@ html {
 
 body {
     margin: 0;
+    font-family: var(--akiba-font-ui);
+}
+
+.akiba-skip-link {
+    position: fixed;
+    top: .75rem;
+    left: .75rem;
+    z-index: 3000;
+    padding: .7rem 1rem;
+    transform: translateY(calc(-100% - 1rem));
+    border-radius: var(--akiba-radius-sm);
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.akiba-skip-link:focus {
+    transform: translateY(0);
+}
+
+:focus-visible {
+    outline: 3px solid var(--akiba-focus);
+    outline-offset: 2px;
+}
+
+/* MudBlazor switches the outline off on its own buttons and navigation links, and marks
+   keyboard focus by darkening the shade a little - which on a filled green button is close to
+   invisible. Measured: the rule above matched the focused Sign in button and drew nothing,
+   because MudBlazor's more specific rule won. Text fields are left alone: MudBlazor draws a
+   clear 2px border round a focused field, which already does the job. */
+.mud-button-root:focus-visible,
+.mud-nav-link:focus-visible {
+    outline: 3px solid var(--akiba-focus);
+    outline-offset: 2px;
+}
+
+/* Containers that are focused by code rather than tabbed to - the side panel as it opens, and
+   the main content when the skip link is used. Focus lands on them so the next Tab goes to the
+   right place; a 3px ring round the whole panel or the whole page says nothing a keyboard user
+   needs, and the control they tab to next has its own. */
+.akiba-panel:focus-visible,
+.akiba-main:focus-visible {
+    outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
 }
 
 /* Century Gothic is wide, so a heading at the same size takes noticeably more
@@ -343,22 +416,38 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 
 .akiba-signin {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
     min-height: 100vh;
     min-height: 100dvh;
+    background: var(--mud-palette-background);
 }
 
 .akiba-signin-brand {
     display: flex;
     flex-direction: column;
-    gap: var(--akiba-space-6);
-    padding: var(--akiba-space-6) clamp(2rem, 6vw, 5rem);
+    gap: clamp(2rem, 5vh, 3.5rem);
+    padding: clamp(2rem, 7vw, 7rem);
     justify-content: center;
+    position: relative;
+    overflow: hidden;
 
     /* The society's colour, and the only place in the application it covers a
        whole surface. Everywhere else green is reserved for meaning. */
-    background-color: #14401A;
+    background: radial-gradient(ellipse at 14% 82%, rgba(91, 153, 104, .2), transparent 48%), #123A20;
     color: #E8EDE9;
+}
+
+.akiba-signin-brand::after {
+    content: "";
+    position: absolute;
+    width: 22rem;
+    height: 22rem;
+    right: -10rem;
+    top: -10rem;
+    border: 1px solid rgba(232, 237, 233, .12);
+    border-radius: 50%;
+    box-shadow: 0 0 0 2rem rgba(232, 237, 233, .025), 0 0 0 4rem rgba(232, 237, 233, .02);
+    pointer-events: none;
 }
 
 .akiba-signin-mark {
@@ -368,8 +457,8 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-name {
-    font-size: 2rem;
-    font-weight: 650;
+    font-size: 1.75rem;
+    font-weight: 700;
     letter-spacing: -0.03em;
     line-height: 1.1;
 }
@@ -380,21 +469,57 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-statement {
-    max-width: 44ch;
-    font-size: 0.875rem;
-    line-height: 1.7;
-    opacity: .85;
+    max-width: 40rem;
+    position: relative;
+    z-index: 1;
+}
+
+.akiba-signin-eyebrow {
+    display: block;
+
+    /* Upper case by style rather than typed in capitals, which some screen readers spell out
+       letter by letter. The rest of this file does overlines the same way. */
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    color: #A8C8AE;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+}
+
+.akiba-signin-statement h2 {
+    max-width: 12ch;
+    margin: 0 0 1.5rem;
+    color: #F4F7F4;
+    font-size: clamp(2.5rem, 4.3vw, 4.25rem);
+    font-weight: 650;
+    letter-spacing: -.035em;
+    line-height: 1.04;
 }
 
 .akiba-signin-statement p {
-    margin: 0 0 var(--akiba-space-4);
+    max-width: 43ch;
+    margin: 0 0 1rem;
+    color: rgba(232, 237, 233, .78);
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.akiba-signin-access {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    color: rgba(232, 237, 233, .72);
+    font-size: .8125rem;
+    position: relative;
+    z-index: 1;
 }
 
 .akiba-signin-environment {
     display: flex;
     align-items: flex-start;
     gap: var(--akiba-space-2);
-    max-width: 44ch;
+    max-width: 30rem;
     padding: var(--akiba-space-3);
     border-radius: var(--akiba-radius);
     border: 1px solid rgba(224, 164, 88, .5);
@@ -414,7 +539,40 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 
 .akiba-signin-form-inner {
     width: 100%;
-    max-width: 22rem;
+    max-width: 25rem;
+}
+
+.akiba-signin-heading {
+    margin-bottom: .35rem;
+}
+
+.akiba-signin-heading .akiba-signin-eyebrow {
+    margin-bottom: .45rem;
+    color: var(--mud-palette-primary);
+}
+
+.akiba-signin-title {
+    margin: 0;
+    color: var(--mud-palette-text-primary);
+    font-size: 2rem;
+    font-weight: 650;
+    letter-spacing: -.04em;
+    line-height: 1.2;
+}
+
+.akiba-signin-content > .mud-typography-body2 {
+    margin-bottom: 1.75rem;
+    font-size: .9rem;
+}
+
+.akiba-signin-content .mud-input-control {
+    margin-bottom: .75rem;
+}
+
+.akiba-signin-content form .mud-button-root {
+    min-height: 3rem;
+    margin-top: .25rem;
+    box-shadow: none;
 }
 
 @media (max-width: 900px) {
@@ -424,6 +582,16 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 
     .akiba-signin-brand {
         display: none;
+    }
+
+    .akiba-signin-form {
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 2rem 1.25rem;
+    }
+
+    .akiba-signin-form-inner {
+        max-width: 28rem;
     }
 }
 
@@ -682,10 +850,6 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     .akiba-skeleton {
         animation: none;
     }
-
-    * {
-        transition-duration: 0.01ms !important;
-    }
 }
 
 /* Covers the content while an action is in flight, so nothing beneath it can
@@ -753,12 +917,6 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     filter: blur(6px);
     transition: filter var(--akiba-transition);
     user-select: none;
-}
-
-/* The official can still read one row by pointing at it, without turning the
-   whole screen back on. */
-.akiba-private .mud-table-body .mud-table-row:hover .mud-table-cell {
-    filter: none;
 }
 
 .akiba-privacy-banner {

@@ -155,36 +155,64 @@
 @* -------------------------------------------------------------- Disbursed *@
 <WorkPanel Open="@(_step == Step.Disburse)"
            OpenChanged="@(open => Close(open))"
-           Title="Record the cheque"
+           Title="Prepare loan payment"
            Subtitle="@Application?.BorrowerName"
            Consequence="This starts the loan. It posts to the ledger, the repayment schedule begins, and it cannot be undone by clicking again - a mistake is corrected by a reversal."
            ConfirmText="Disburse"
            ConfirmIcon="@Icons.Material.Filled.RequestQuote"
-           CanConfirm="@(!string.IsNullOrWhiteSpace(_loanNumber)
-                         && !string.IsNullOrWhiteSpace(_chequeNumber)
-                         && !string.IsNullOrWhiteSpace(_voucher))"
+           CanConfirm="@(!string.IsNullOrWhiteSpace(_preparedVoucher)
+                         && !string.IsNullOrWhiteSpace(_signatories))"
            Busy="_busy"
            Error="@_error"
            OnConfirm="DisburseAsync">
 
+    @if (string.IsNullOrWhiteSpace(_preparedVoucher))
+    {
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_loanNumber" Label="Loan number" Required="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_disbursedOn" Label="Cheque date"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_chequeBookId" Label="Cheque book"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var book in _chequeBooks.Where(item => !item.IsClosed))
+                    {
+                        <MudSelectItem T="Guid?" Value="@book.Id.Value">@book.BookReference — @book.BankAccountName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?" @bind-Value="_selectedLeafId" Label="Cheque leaf"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">Next available leaf</MudSelectItem>
+                    @foreach (var leaf in SelectedBook?.Leaves.Where(item => item.Status == ChequeLeafStatus.Available) ?? [])
+                    {
+                        <MudSelectItem T="Guid?" Value="@leaf.Id.Value">@leaf.Number</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(_busy || _chequeBookId is null || string.IsNullOrWhiteSpace(_loanNumber))"
+                   OnClick="PrepareVoucherAsync">Reserve cheque and generate voucher</MudButton>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Success" Class="mb-4">
+            Cheque @_chequeNumber is reserved. Voucher @_preparedVoucher is ready.
+            <MudLink Href="@VoucherUrl" Target="_blank">Download printable voucher</MudLink>
+        </MudAlert>
+        <MudTextField @bind-Value="_cancelReason" Label="Reason if this prepared cheque must be voided"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" />
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Disabled="@(_busy || string.IsNullOrWhiteSpace(_cancelReason))"
+                   OnClick="CancelPreparedVoucherAsync">Void reserved cheque and cancel voucher</MudButton>
+    }
+
     <MudGrid Spacing="2">
-        <MudItem xs="12" sm="6">
-            <MudTextField @bind-Value="_loanNumber" Label="Loan number" Required="true"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudDatePicker @bind-Date="_disbursedOn" Label="Cheque written on"
-                           DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
-                           Margin="Margin.Dense" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField @bind-Value="_chequeNumber" Label="Cheque number" Required="true"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" />
-        </MudItem>
-        <MudItem xs="12" sm="6">
-            <MudTextField @bind-Value="_voucher" Label="Voucher reference" Required="true"
-                          Variant="Variant.Outlined" Margin="Margin.Dense" />
-        </MudItem>
         <MudItem xs="12">
             @* Who signed the cheque. Recorded because a payment out of the society's account
                is the one thing an auditor will always ask to see two names against. *@
@@ -218,6 +246,14 @@
     private Step _step => Current;
 
     private IReadOnlyList<MemberSummary> _members = [];
+    private IReadOnlyList<ChequeBookSummary> _chequeBooks = [];
+    private Guid? _chequeBookId;
+    private Guid? _selectedLeafId;
+    private string? _preparedVoucher;
+    private string? _cancelReason;
+
+    private ChequeBookSummary? SelectedBook => _chequeBooks.FirstOrDefault(book => book.Id.Value == _chequeBookId);
+    private string? VoucherUrl => Application is null ? null : $"/reports/loan-applications/{Application.ApplicationId.Value}/payment-voucher";
 
     private Guid? _borrowerId;
     private LoanProduct _product = LoanProduct.Normal;
@@ -287,6 +323,35 @@
 
         // Only the receiving form needs the member list; the other three act on an
         // application that already names its borrower.
+        if (Current == Step.Disburse)
+        {
+            if (!_loaded)
+            {
+                _chequeBooks = await Mediator.Send(new ListChequeBooksQuery());
+                _loaded = true;
+
+                // Pick up a voucher prepared earlier, from the application itself rather than
+                // from whatever this panel last held. Without the first half, a clerk who
+                // prepared a voucher, took the cheque to be signed and came back to a closed
+                // panel was offered "prepare" again, refused, and left with a loan that could
+                // not be paid and a cheque that could not be voided. Without the second, the
+                // previous application's voucher stayed on screen for the next one.
+                if (Application?.PreparedVoucher is { } prepared)
+                {
+                    _preparedVoucher = prepared.VoucherReference;
+                    _chequeNumber = prepared.ChequeNumber;
+                    _loanNumber = prepared.LoanNumber;
+                    _disbursedOn = prepared.PreparedOn.ToDateTime(TimeOnly.MinValue);
+                }
+                else
+                {
+                    _preparedVoucher = null;
+                    _chequeNumber = string.Empty;
+                }
+            }
+            return;
+        }
+
         if (Current != Step.Receive)
         {
             _loaded = false;
@@ -339,9 +404,67 @@
             _loanNumber.Trim(),
             DateOnly.FromDateTime(_disbursedOn!.Value),
             _chequeNumber.Trim(),
-            _voucher.Trim(),
+            _preparedVoucher!.Trim(),
             signatories));
     });
+
+    private async Task PrepareVoucherAsync()
+    {
+        if (_busy || Application is null || _chequeBookId is null || _disbursedOn is null) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var prepared = await Mediator.Send(new PrepareLoanPaymentVoucherCommand(
+                Application.ApplicationId,
+                _loanNumber.Trim(),
+                new ChequeBookId(_chequeBookId.Value),
+                _selectedLeafId is { } leaf ? new ChequeLeafId(leaf) : null,
+                DateOnly.FromDateTime(_disbursedOn.Value)));
+            _preparedVoucher = prepared.VoucherReference;
+            _chequeNumber = prepared.ChequeNumber;
+            _cancelReason = string.Empty;
+            var book = await Mediator.Send(new ListChequeBooksQuery());
+            _chequeBooks = book;
+            var updated = book.First(item => item.Id.Value == _chequeBookId);
+            var reservedLeaf = updated.Leaves.Single(item => item.Number == prepared.ChequeNumber);
+            _selectedLeafId = reservedLeaf.Id.Value;
+
+            // The list behind has to learn about the voucher too. The panel reads a prepared
+            // voucher off the row it was opened from, so a list that is not reloaded hands a
+            // reopened panel a row with no voucher on it - the stuck state all over again.
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task CancelPreparedVoucherAsync()
+    {
+        if (_busy || Application is null || string.IsNullOrWhiteSpace(_cancelReason)) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Mediator.Send(new CancelPreparedPaymentVoucherCommand(
+                Application.ApplicationId, _cancelReason.Trim()));
+            _preparedVoucher = null;
+            _chequeNumber = string.Empty;
+            _selectedLeafId = null;
+            _cancelReason = null;
+            _chequeBooks = await Mediator.Send(new ListChequeBooksQuery());
+
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally { _busy = false; }
+    }
 
     /// <summary>
     /// Runs one of the four, and handles the three things they all need.
@@ -405,6 +528,8 @@
         _loanNumber = string.Empty;
         _chequeNumber = string.Empty;
         _voucher = string.Empty;
+        _preparedVoucher = null;
+        _cancelReason = string.Empty;
         _signatories = null;
         _error = null;
 

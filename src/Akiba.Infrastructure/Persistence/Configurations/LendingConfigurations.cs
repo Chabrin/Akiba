@@ -25,11 +25,20 @@ internal sealed class LoanApplicationConfiguration : IEntityTypeConfiguration<Lo
         builder.Property(application => application.RejectionReason).HasMaxLength(1000);
         builder.Property(application => application.PropertyName).HasMaxLength(200);
         builder.Property(application => application.PropertyLocation).HasMaxLength(300);
+        builder.Property(application => application.PreparedLoanNumber).HasMaxLength(40);
+        builder.Property(application => application.ReservedChequeNumber).HasMaxLength(60);
+        builder.Property(application => application.PaymentVoucherReference).HasMaxLength(50);
 
         // The queue the office actually watches: approved but not yet disbursed, often
         // because the form arrived after the 15th.
         builder.HasIndex(application => new { application.Status, application.ConsiderationMonth });
         builder.HasIndex(application => application.BorrowerId);
+        builder.HasIndex(application => application.PaymentVoucherReference).IsUnique()
+            .HasFilter("\"PaymentVoucherReference\" IS NOT NULL");
+        builder.HasOne<ChequeBookRow>().WithMany().HasForeignKey(application => application.ChequeBookId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ChequeLeafRow>().WithMany().HasForeignKey(application => application.ChequeLeafId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(application => application.Decisions)
             .WithOne()
@@ -141,6 +150,42 @@ internal sealed class LoanConfiguration : IEntityTypeConfiguration<LoanRow>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.Navigation(loan => loan.Guarantees).AutoInclude();
+    }
+}
+
+internal sealed class ChequeBookConfiguration : IEntityTypeConfiguration<ChequeBookRow>
+{
+    public void Configure(EntityTypeBuilder<ChequeBookRow> builder)
+    {
+        builder.ToTable("cheque_books");
+        builder.HasKey(book => book.Id);
+        builder.Property(book => book.BookReference).HasMaxLength(100).IsRequired();
+        builder.Property(book => book.Revision).IsConcurrencyToken();
+        builder.HasIndex(book => new { book.BankAccountId, book.BookReference }).IsUnique();
+        builder.HasOne<AccountRow>().WithMany().HasForeignKey(book => book.BankAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(book => book.Leaves).WithOne().HasForeignKey(leaf => leaf.ChequeBookId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(book => book.Leaves).AutoInclude();
+    }
+}
+
+internal sealed class ChequeLeafConfiguration : IEntityTypeConfiguration<ChequeLeafRow>
+{
+    public void Configure(EntityTypeBuilder<ChequeLeafRow> builder)
+    {
+        builder.ToTable("cheque_leaves");
+        builder.HasKey(leaf => leaf.Id);
+        builder.Property(leaf => leaf.Number).HasMaxLength(60).IsRequired();
+        builder.Property(leaf => leaf.VoidReason).HasMaxLength(500);
+        builder.HasIndex(leaf => new { leaf.BankAccountId, leaf.Number }).IsUnique();
+        builder.HasIndex(leaf => new { leaf.Status, leaf.ChequeBookId });
+        builder.HasOne<AccountRow>().WithMany().HasForeignKey(leaf => leaf.BankAccountId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<LoanApplicationRow>().WithMany().HasForeignKey(leaf => leaf.ReservedForApplicationId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<LoanRow>().WithMany().HasForeignKey(leaf => leaf.IssuedForLoanId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
 

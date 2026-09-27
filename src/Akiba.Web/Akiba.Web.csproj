@@ -29,6 +29,11 @@
     -->
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The role-by-command tests read the authorization map directly. -->
+    <InternalsVisibleTo Include="Akiba.Web.Tests" />
     <PackageReference Include="MudBlazor" />
   </ItemGroup>
 

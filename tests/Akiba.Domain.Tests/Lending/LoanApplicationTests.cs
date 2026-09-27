@@ -95,6 +95,21 @@ public sealed class LoanApplicationTests
     }
 
     [Fact]
+    public void Approval_cannot_exceed_the_amount_requested()
+    {
+        var application = ApplicationFixture.Submitted();
+        application.RecordDecision(ApplicationFixture.ZoneRep, ApprovalDecisionKind.Approve, LedgerFixture.Now);
+        application.RecordDecision(ApplicationFixture.OfficeRep, ApprovalDecisionKind.Approve, LedgerFixture.Now);
+        var termsAboveRequest = new LoanPricing().Price(
+            LoanProduct.Normal, Money.Kes(70_000m), membershipYears: null, requestedTermMonths: null);
+
+        var approve = () => application.Approve(termsAboveRequest, LedgerFixture.Now);
+
+        approve.Should().Throw<InvalidOperationException>()
+            .WithMessage("*cannot exceed the amount requested*");
+    }
+
+    [Fact]
     public void One_representative_rejecting_blocks_approval()
     {
         var application = ApplicationFixture.Submitted();
@@ -318,12 +333,12 @@ internal static class ApplicationFixture
     public static RentalIncomeSecurity RentalIncome { get; } = new(
         "Riverside Court", "Kileleshwa, Nairobi", Money.Kes(120_000m), 8, rentStatementsAttached: true);
 
-    public static LoanApplication Received(DateOnly? on = null) =>
+    public static LoanApplication Received(DateOnly? on = null, decimal principal = 60_000m) =>
         LoanApplication.Receive(
             BorrowerId.New(),
             ZoneId.New(),
             LoanProduct.Normal,
-            Money.Kes(60_000m),
+            Money.Kes(principal),
             on ?? new DateOnly(2026, 9, 20),
             ApplicationCutoff.Version1);
 

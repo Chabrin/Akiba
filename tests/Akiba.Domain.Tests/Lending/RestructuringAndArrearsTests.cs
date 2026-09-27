@@ -237,7 +237,7 @@ internal static class RestructureFixture
 {
     public static Loan Loan(decimal principal, bool withGuarantor = false)
     {
-        var application = ApplicationFixture.Received(new DateOnly(2026, 9, 10));
+        var application = ApplicationFixture.Received(new DateOnly(2026, 9, 10), principal);
 
         if (withGuarantor)
         {

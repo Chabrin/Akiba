@@ -25,10 +25,32 @@ public sealed class AkibaApplication : WebApplicationFactory<Program>
     private const string DefaultConnectionString =
         "Host=localhost;Port=5432;Database=akiba_tests;Username=postgres;Password=postgres";
 
-    public static string ConnectionString =>
-        Environment.GetEnvironmentVariable(ConnectionStringVariable) is { Length: > 0 } configured
-            ? configured
-            : DefaultConnectionString;
+    /// <summary>
+    /// The shared test server, but a database of its own.
+    /// </summary>
+    /// <remarks>
+    /// The web tests and the persistence tests run at the same time, and the persistence tests
+    /// TRUNCATE every table between tests. Sharing one database meant a web test could start
+    /// the host into a database being emptied under it - or both could race to apply a new
+    /// migration - and fail for reasons that had nothing to do with what it tested. It showed
+    /// up as a security test failing once, on the first run after a migration was added, and
+    /// passing every time after. A suffix keeps one setting for both suites while giving each
+    /// its own data. The host's startup creates and migrates it.
+    /// </remarks>
+    public static string ConnectionString
+    {
+        get
+        {
+            var shared = Environment.GetEnvironmentVariable(ConnectionStringVariable) is { Length: > 0 } configured
+                ? configured
+                : DefaultConnectionString;
+
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder(shared);
+            builder.Database = $"{builder.Database}_web";
+
+            return builder.ConnectionString;
+        }
+    }
 
     /// <summary>
     /// Settings that have to exist before the host is built.

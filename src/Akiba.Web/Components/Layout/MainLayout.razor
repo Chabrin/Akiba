@@ -10,6 +10,8 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
+<a class="akiba-skip-link" href="#main-content">Skip to main content</a>
+
 <MudLayout Class="@(_privacy ? "akiba-private" : null)">
     <MudAppBar Elevation="0" Class="akiba-no-print" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu"
@@ -40,7 +42,7 @@
             @* Every ledger entry records its author. Outside Production an entry made with
                nobody signed in is attributed to a placeholder, and nobody should be in any
                doubt which they are looking at. *@
-            <MudTooltip Text="Not Production. Nothing is sent, and unattributed entries get a placeholder author.">
+            <MudTooltip Text="Development environment. Verify the connected database before entering data; outbound notifications are suppressed.">
                 <MudChip T="string" Color="Color.Warning" Size="Size.Small"
                          Icon="@Icons.Material.Filled.Warning" Class="mr-3">
                     @Environment.EnvironmentName
@@ -57,7 +59,7 @@
         <MudTooltip Text="@(_privacy ? "Show figures (Ctrl+Shift+H)" : "Hide every figure and name (Ctrl+Shift+H)")">
             <MudIconButton Icon="@(_privacy ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
                            Color="Color.Inherit"
-                           aria-label="Hide figures"
+                           aria-label="@(_privacy ? "Show figures" : "Hide figures")"
                            OnClick="TogglePrivacy" />
         </MudTooltip>
 
@@ -96,7 +98,7 @@
 
     @* The top padding clears the dense app bar (56px). Losing it puts the page heading
        underneath the bar, which looks like a rendering fault rather than a layout one. *@
-    <MudMainContent Class="akiba-main">
+    <MudMainContent id="main-content" tabindex="-1" Class="akiba-main">
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6 px-4">
             @* Nothing below this line can take the whole panel down.
 
@@ -192,7 +194,7 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
-    private bool _privacy;
+    private bool _privacy = true;
     private string _actorName = "Not signed in";
     private ErrorBoundary? _errorBoundary;
     private IJSObjectReference? _session;
@@ -335,6 +337,9 @@
 
         return problem switch
         {
+            // Includes a refusal on role (NotPermittedException) and two officials saving the
+            // same thing at once (ChangeConflictException) - both InvalidOperationExceptions, so
+            // both read as what they are rather than as "an unexpected error".
             InvalidOperationException or ArgumentException => problem.Message,
             TimeoutException => "The database did not answer in time. It may be busy — try again in a moment.",
             _ => "An unexpected error occurred. The details are in the application log.",

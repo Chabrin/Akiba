@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using Akiba.Application;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Members;
@@ -11,6 +12,7 @@ using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Membership;
+using Akiba.Domain.Lending;
 using Akiba.Infrastructure;
 using Akiba.Infrastructure.Notifications;
 using Akiba.Infrastructure.Persistence;
@@ -82,6 +84,8 @@ var requireHttps = builder.Configuration.GetValue("Akiba:RequireHttps", true);
 builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
 
 builder.Services.AddAkibaApplication();
+// Enforce command policies in the server-side dispatch path as well as on pages and endpoints.
+builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(CommandAuthorizationBehaviour<,>));
 builder.Services.AddAkibaInfrastructure(connectionString);
 builder.Services.AddAkibaRateLimiting();
 
@@ -330,11 +334,24 @@ api.MapGet("/ledger/period-close/{year:int}/{month:int}", async (
 // whole stack. Never mapped in Production.
 if (!app.Environment.IsProduction())
 {
-    app.MapPost("/api/dev/seed-demo", async (IServiceProvider services, AkibaDbContext database) =>
+    app.MapPost("/api/dev/seed-demo", async (
+        HttpContext context, IServiceProvider services, AkibaDbContext database) =>
     {
-        // The same guard tools/seed-demo.ps1 has. This endpoint invents members, and the one
-        // mistake worth defending against is somebody running a development build against the
-        // society's own database - a mistake that is one stale environment variable away.
+        // This endpoint invents members. It is anonymous for the local seeding tool, so it must
+        // never be usable by another device if somebody accidentally binds a Development build
+        // to the office network.
+        var remoteAddress = context.Connection.RemoteIpAddress;
+        var normalizedAddress = remoteAddress is { IsIPv4MappedToIPv6: true } mappedAddress
+            ? mappedAddress.MapToIPv4()
+            : remoteAddress;
+
+        if (normalizedAddress is null || !IPAddress.IsLoopback(normalizedAddress))
+        {
+            return Results.NotFound();
+        }
+
+        // The database-name guard also protects against a stale connection string pointing at
+        // production while somebody runs the local development seeder.
         var name = database.Database.GetDbConnection().Database;
 
         if (string.Equals(name, "akiba", StringComparison.OrdinalIgnoreCase))
@@ -354,6 +371,46 @@ if (!app.Environment.IsProduction())
 // shareholding summary sums every member's ledger - so this group is rate limited as well as
 // authorised.
 var reports = app.MapGroup("/reports").RequireRateLimiting(RateLimiting.Reports);
+
+reports.MapGet("/loan-applications/{id:guid}/payment-voucher", async (
+    Guid id,
+    ILoanApplicationRepository applications,
+    IBorrowerRepository borrowers,
+    IChequeBookRepository chequeBooks,
+    IAccountRepository accounts,
+    ILoanPaymentVoucherWriter writer) =>
+{
+    var application = await applications.FindByIdAsync(new LoanApplicationId(id));
+    if (application is null || application.Status != LoanApplicationStatus.Approved
+        || application.PaymentVoucherReference is null || application.ApprovedTerms is null
+        || application.ChequeBookId is not { } bookId)
+    {
+        return Results.NotFound();
+    }
+
+    var borrower = await borrowers.FindByIdAsync(application.BorrowerId);
+    var book = await chequeBooks.FindByIdAsync(bookId);
+    var account = book is null ? null : await accounts.FindByIdAsync(book.BankAccountId);
+    if (borrower is null || book is null || account is null
+        || application.ReservedChequeNumber is null)
+    {
+        return Results.NotFound();
+    }
+
+    var terms = application.ApprovedTerms;
+    var file = writer.Write(new LoanPaymentVoucherData(
+        application.PaymentVoucherReference,
+        application.PreparedLoanNumber ?? string.Empty,
+        borrower.Name.Full,
+        account.Code.ToString(),
+        account.Name,
+        application.ReservedChequeNumber,
+        application.VoucherPreparedOn ?? application.ReceivedOn,
+        terms.Principal,
+        terms.Interest,
+        terms.TermMonths));
+    return Results.File(file.Content, file.ContentType, file.FileName);
+}).RequireAuthorization(AkibaPolicies.RecordsMoney);
 
 reports.MapGet("/deductions/{kind}/{year:int}/{month:int}", async (
     IMediator mediator,

@@ -349,6 +349,79 @@ internal sealed class LoanRepository : ILoanRepository
     }
 }
 
+internal sealed class ChequeBookRepository : IChequeBookRepository
+{
+    private readonly AkibaDbContext _context;
+
+    public ChequeBookRepository(AkibaDbContext context) => _context = context;
+
+    public async Task<ChequeBook?> FindByIdAsync(
+        ChequeBookId id, CancellationToken cancellationToken = default)
+    {
+        // Untracked, like every other repository here, and for a reason that matters more for
+        // this one. The context lives for the official's whole session, and Entity Framework
+        // will not overwrite an object it is already tracking - so a tracked read returned the
+        // book as it was the first time this session looked, however many cheques had gone
+        // out since. A clerk could be offered a leaf another clerk had already reserved.
+        var row = await _context.ChequeBooks
+            .AsNoTracking()
+            .Include(book => book.Leaves)
+            .FirstOrDefaultAsync(book => book.Id == id.Value, cancellationToken)
+            .ConfigureAwait(false);
+
+        return row is null ? null : ChequeBookMapper.ToDomain(row);
+    }
+
+    public async Task<IReadOnlyList<ChequeBook>> ListAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.ChequeBooks
+            .AsNoTracking()
+            .Include(book => book.Leaves)
+            .OrderByDescending(book => book.ReceivedOn)
+            .ThenBy(book => book.BookReference)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(ChequeBookMapper.ToDomain)];
+    }
+
+    public void Add(ChequeBook book) => _context.ChequeBooks.Add(ChequeBookMapper.ToRow(book));
+
+    public void Update(ChequeBook book)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+        var existing = _context.ChequeBooks.Local.FirstOrDefault(row => row.Id == book.Id.Value)
+            ?? _context.ChequeBooks.Include(row => row.Leaves)
+                .First(row => row.Id == book.Id.Value);
+        var updated = ChequeBookMapper.ToRow(book);
+        _context.Entry(existing).CurrentValues.SetValues(updated);
+
+        // The concurrency check compares against what this command read, not against whatever
+        // the row happens to hold at save time. Left to itself, the original value is the one
+        // loaded just above - which is the latest, so the check would always pass and two
+        // clerks could reserve the same cheque.
+        _context.Entry(existing).Property(row => row.Revision).OriginalValue = book.LoadedRevision;
+        var existingById = existing.Leaves.ToDictionary(leaf => leaf.Id);
+        foreach (var updatedLeaf in updated.Leaves)
+        {
+            if (existingById.Remove(updatedLeaf.Id, out var existingLeaf))
+            {
+                _context.Entry(existingLeaf).CurrentValues.SetValues(updatedLeaf);
+            }
+            else
+            {
+                _context.ChequeLeaves.Add(updatedLeaf);
+            }
+        }
+
+        if (existingById.Count > 0)
+        {
+            throw new InvalidOperationException("Cheque leaves are a permanent bank-issued inventory and cannot be deleted.");
+        }
+    }
+}
+
 internal sealed class ReceiptRepository : IReceiptRepository
 {
     private readonly AkibaDbContext _context;
