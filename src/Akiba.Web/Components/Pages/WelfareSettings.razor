@@ -1,0 +1,304 @@
+@page "/settings"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+
+<PageTitle>Akiba - Welfare Settings</PageTitle>
+
+<PageHeader Title="Welfare Settings"
+            Description="Member contribution amounts, loan products, and other society configuration.">
+</PageHeader>
+
+<ChangeContributionPanel @bind-Open="_changingContribution"
+                         Member="_editingMember"
+                         OnSaved="ReloadAsync" />
+
+@* ── Contribution amounts ── *@
+<MudPaper Elevation="1" Class="mb-6">
+    <div class="pa-4 pb-0">
+        <MudText Typo="Typo.h6">Monthly contribution amounts</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
+            The amount each member has instructed to be deducted from their salary each month.
+            Set this once from their enrolment letter; update it when they write to change it.
+            The deduction schedule uses this figure — without it, it guesses from history.
+        </MudText>
+    </div>
+
+    <MudToolBar Dense="true" Class="akiba-list-toolbar px-4">
+        <MudTextField T="string"
+                      Value="_search"
+                      ValueChanged="OnSearchChanged"
+                      Placeholder="Search by name, membership or payroll number"
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Immediate="true"
+                      Clearable="true"
+                      Class="akiba-toolbar-search" />
+
+        <MudSpacer />
+
+        <BorrowerFilter Value="_category"
+                        ValueChanged="OnCategoryChanged"
+                        Total="@(_contributions?.Count ?? 0)"
+                        Counts="CategoryCounts" />
+
+        @if (UnsetCount > 0)
+        {
+            <MudTooltip Text="These members have no recorded instruction yet — the schedule will guess for them">
+                <MudChip T="string" Color="Color.Warning" Size="Size.Small" Class="ml-2">
+                    @UnsetCount not set
+                </MudChip>
+            </MudTooltip>
+        }
+    </MudToolBar>
+
+    @if (_contributions is null)
+    {
+        <TableSkeleton Rows="8" Columns="4" />
+    }
+    else if (Filtered.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Savings"
+                    Title="No members match that"
+                    Description="Try a name or number." />
+    }
+    else
+    {
+        <MudTable Items="Filtered"
+                  Dense="true"
+                  Hover="true"
+                  Striped="true"
+                  Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh>Schedule</MudTh>
+                <MudTh Style="text-align: right">Monthly contribution</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member">
+                    @context.Name
+                    @if (!context.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">
+                            Left CAL
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Payroll no.">
+                    @(string.IsNullOrWhiteSpace(context.PayrollNumber) ? "—" : context.PayrollNumber)
+                </MudTd>
+                <MudTd DataLabel="Schedule">
+                    <BorrowerCategoryChip Category="context.Category" />
+                </MudTd>
+                <MudTd DataLabel="Monthly contribution" Class="akiba-money-cell">
+                    @if (context.MonthlyContribution.HasValue)
+                    {
+                        <MoneyText Amount="context.MonthlyContribution.Value" />
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Not set — the deduction schedule will infer from history until this is recorded">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Not set</MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <div class="akiba-row-actions">
+                        <MudTooltip Text="@(context.MonthlyContribution.HasValue ? "Change contribution amount" : "Set contribution amount")">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="@(context.MonthlyContribution.HasValue ? Color.Default : Color.Warning)"
+                                           aria-label="@($"Set contribution for {context.Name}")"
+                                           OnClick="@(() => StartEdit(context))" />
+                        </MudTooltip>
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            @Filtered.Count of @_contributions.Count member(s).
+            @if (UnsetCount > 0)
+            {
+                <span>
+                    <strong>@UnsetCount</strong> have no recorded instruction — set these so the deduction schedule is exact.
+                </span>
+            }
+        </MudText>
+    }
+</MudPaper>
+
+@* ── Loan products (read-only) ── *@
+<MudPaper Elevation="1" Class="mb-6">
+    <div class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-1">Loan products</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            The two products the society offers. Rates and terms are set by the committee.
+            Contact ICT to adjust them.
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.RequestQuote" Size="Size.Small" Class="mr-1" />
+                        Normal Loan
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Interest rate</MudText>
+                    <MudText Typo="Typo.h6">1% per month (flat)</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Maximum principal</MudText>
+                    <MudText>Twice the member's shareholding</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Repayment</MudText>
+                    <MudText>Up to 24 monthly instalments</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Emergency" Size="Size.Small" Class="mr-1" />
+                        Emergency Loan
+                    </MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Interest rate</MudText>
+                    <MudText Typo="Typo.h6">5% once (flat)</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Maximum principal</MudText>
+                    <MudText>Twice the member's shareholding</MudText>
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Repayment</MudText>
+                    <MudText>Up to 6 monthly instalments</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
+            Guarantors are required where the loan balance exceeds the borrower's own shareholding.
+            The affordability rule (two-thirds of net pay) is checked on every application.
+        </MudText>
+    </div>
+</MudPaper>
+
+@* ── M-Pesa payments guide ── *@
+<MudPaper Elevation="1" Class="mb-6">
+    <div class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-1">Recording M-Pesa payments</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Members may pay directly via M-Pesa instead of waiting for the payroll deduction.
+            Record these on the Receipts page using the steps below.
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Size="Size.Small" Class="mr-1" />
+                        Share contribution (top-up)
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Record receipt → Direct deposit, M-Pesa
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Enter the M-Pesa code as the reference
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Identify the member from the payer name
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Allocate → <strong>Share Top-Up</strong>
+                        </MudListItem>
+                    </MudList>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                        Share Top-Up appears on the member's statement separately from their regular
+                        monthly contribution, so the two are always distinguishable.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Payment" Size="Size.Small" Class="mr-1" />
+                        Loan repayment (manual)
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Record receipt → Direct deposit, M-Pesa
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Enter the M-Pesa code as the reference
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Identify the member from the payer name
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small">
+                            Allocate → <strong>Loan Instalment</strong>, select the loan
+                        </MudListItem>
+                    </MudList>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                        One receipt can cover both a share top-up and a loan repayment — allocate
+                        it in two steps, one for each.
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </div>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<ContributionSetting>? _contributions;
+    private string _search = string.Empty;
+    private BorrowerCategory? _category;
+    private bool _changingContribution;
+    private ContributionSetting? _editingMember;
+
+    private IReadOnlyList<ContributionSetting> Filtered =>
+        _contributions is null
+            ? []
+            : [.. _contributions
+                .Where(m => _category is null || m.Category == _category)
+                .Where(m => string.IsNullOrWhiteSpace(_search) || Matches(m))];
+
+    private IReadOnlyDictionary<BorrowerCategory, int> CategoryCounts =>
+        _contributions is null
+            ? new Dictionary<BorrowerCategory, int>()
+            : _contributions
+                .GroupBy(m => m.Category)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+    private int UnsetCount =>
+        _contributions?.Count(m => !m.MonthlyContribution.HasValue && m.IsActive) ?? 0;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private bool Matches(ContributionSetting m) =>
+        m.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || m.MembershipNumber.Contains(_search, StringComparison.OrdinalIgnoreCase)
+        || m.PayrollNumber.Contains(_search, StringComparison.OrdinalIgnoreCase);
+
+    private void OnSearchChanged(string search) => _search = search ?? string.Empty;
+
+    private void OnCategoryChanged(BorrowerCategory? cat) => _category = cat;
+
+    private async Task LoadAsync() =>
+        _contributions = await Mediator.Send(new ListContributionSettingsQuery());
+
+    private async Task ReloadAsync()
+    {
+        _contributions = null;
+        await LoadAsync();
+    }
+
+    private void StartEdit(ContributionSetting member)
+    {
+        _editingMember = member;
+        _changingContribution = true;
+    }
+}

@@ -1,3 +1,4 @@
+using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
 
 namespace Akiba.Domain.Membership;
@@ -86,6 +87,40 @@ public sealed class Member : Borrower
 
     public override bool HoldsShares => true;
 
+    /// <summary>
+    /// The amount the member has chosen to have deducted from their salary each month.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Null until the clerk records it — either on enrolment or when the member submits their
+    /// first deduction instruction letter. Until it is set the deduction schedule falls back to
+    /// reading the last contribution from the ledger.
+    /// </para>
+    /// <para>
+    /// This is the member's instruction to HR, not the amount that actually arrived in any
+    /// month. What arrived is always the ledger; this is only the standing order behind it.
+    /// </para>
+    /// </remarks>
+    public Money? MonthlyShareContribution { get; private set; }
+
+    /// <summary>
+    /// Records the member's chosen monthly share deduction.
+    /// </summary>
+    /// <remarks>
+    /// Members write to the chairman to change this amount. The clerk records the new figure
+    /// when the letter is approved, and it takes effect on the next deduction schedule.
+    /// </remarks>
+    public void SetMonthlyContribution(Money amount)
+    {
+        if (!amount.IsPositive)
+        {
+            throw new ArgumentException(
+                "A monthly contribution must be a positive amount.", nameof(amount));
+        }
+
+        MonthlyShareContribution = amount;
+    }
+
     public static Member Join(
         MembershipNumber membershipNumber,
         PayrollNumber payrollNumber,
@@ -139,12 +174,14 @@ public sealed class Member : Borrower
         AccountId sharesAccountId,
         EmploymentStatus employmentStatus,
         DateOnly? exitedOn,
-        bool isLandlord) =>
+        bool isLandlord,
+        Money? monthlyShareContribution = null) =>
         new(id, membershipNumber, payrollNumber, name, nationalId, phone, email, zoneId, sharesAccountId)
         {
             EmploymentStatus = employmentStatus,
             ExitedOn = exitedOn,
             IsLandlord = isLandlord,
+            MonthlyShareContribution = monthlyShareContribution,
         };
 
     /// <summary>

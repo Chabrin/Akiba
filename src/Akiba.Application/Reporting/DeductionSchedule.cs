@@ -211,13 +211,28 @@ internal sealed class GetDeductionScheduleHandler
     /// What this member contributes a month.
     /// </summary>
     /// <remarks>
-    /// Taken from their most recent contribution rather than from a fixed figure, because
-    /// contributions are member-chosen and there is no society-wide amount. A member who has
-    /// never contributed has nothing to go on, and appears with zero for the clerk to fill in.
+    /// <para>
+    /// Uses the stored standing instruction first. A member writes to the chairman to set the
+    /// amount, and the clerk records it; that figure is reliable because it is a deliberate
+    /// entry, not inferred from history.
+    /// </para>
+    /// <para>
+    /// Falls back to the most recent contribution in the ledger only when no standing
+    /// instruction has been recorded yet — which covers existing members who joined before the
+    /// field existed. A member who has never contributed has nothing to go on, and appears with
+    /// zero for the clerk to fill in manually.
+    /// </para>
     /// </remarks>
     private async Task<Money> MonthlyContributionAsync(
         Member member, DateOnly asAt, CancellationToken cancellationToken)
     {
+        // Stored standing instruction — the right answer.
+        if (member.MonthlyShareContribution.HasValue)
+        {
+            return member.MonthlyShareContribution.Value;
+        }
+
+        // Fallback: infer from the last "Share contribution" journal entry.
         var entries = await _journal
             .ForAccountAsOfAsync(member.SharesAccountId, asAt, cancellationToken)
             .ConfigureAwait(false);

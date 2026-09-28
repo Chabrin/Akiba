@@ -293,6 +293,70 @@ internal sealed class GetMemberStatementHandler
     }
 }
 
+/// <summary>
+/// One member's contribution setting, for the welfare settings page.
+/// </summary>
+/// <param name="MemberId">Their id — used by the change panel.</param>
+/// <param name="MembershipNumber">Their number.</param>
+/// <param name="PayrollNumber">What HR matches the schedule on.</param>
+/// <param name="Name">Their full name.</param>
+/// <param name="Category">Employee or landlord — which schedule they are on.</param>
+/// <param name="MonthlyContribution">
+/// The amount they have instructed, or null if it has never been set.
+/// </param>
+/// <param name="IsActive">False once they have left CAL.</param>
+public sealed record ContributionSetting(
+    BorrowerId MemberId,
+    string MembershipNumber,
+    string PayrollNumber,
+    string Name,
+    BorrowerCategory Category,
+    Money? MonthlyContribution,
+    bool IsActive);
+
+/// <summary>
+/// Lists all members with their stored monthly contribution amount.
+/// </summary>
+/// <remarks>
+/// Used by the welfare settings page so the clerk can see, at a glance, which members
+/// have a recorded amount and which still rely on the fallback. Exited members are included
+/// because their final deduction schedule lines still show.
+/// </remarks>
+public sealed record ListContributionSettingsQuery : IRequest<IReadOnlyList<ContributionSetting>>;
+
+internal sealed class ListContributionSettingsHandler
+    : IRequestHandler<ListContributionSettingsQuery, IReadOnlyList<ContributionSetting>>
+{
+    private readonly IBorrowerRepository _borrowers;
+
+    public ListContributionSettingsHandler(IBorrowerRepository borrowers) =>
+        _borrowers = borrowers;
+
+    public async Task<IReadOnlyList<ContributionSetting>> Handle(
+        ListContributionSettingsQuery query, CancellationToken cancellationToken)
+    {
+        var members = await _borrowers
+            .AllMembersAsync(includeExited: true, cancellationToken)
+            .ConfigureAwait(false);
+
+        return
+        [
+            .. members
+                .OrderBy(member => member.IsLandlord ? 1 : 0)
+                .ThenBy(member => member.PayrollNumber.Value, StringComparer.Ordinal)
+                .ThenBy(member => member.Name.Full, StringComparer.Ordinal)
+                .Select(member => new ContributionSetting(
+                    member.Id,
+                    member.MembershipNumber.Value,
+                    member.PayrollNumber.Value,
+                    member.Name.Full,
+                    BorrowerCategories.Of(member),
+                    member.MonthlyShareContribution,
+                    member.IsActive)),
+        ];
+    }
+}
+
 /// <summary>A zone, as the enrolment form lists them.</summary>
 /// <param name="Id">The zone.</param>
 /// <param name="Code">Its short code, which is what the office says out loud.</param>

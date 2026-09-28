@@ -1,4 +1,5 @@
 using Akiba.Application.Abstractions;
+using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
 using Akiba.Domain.Membership;
 using FluentValidation;
@@ -125,6 +126,65 @@ internal sealed class EnrolMemberHandler : IRequestHandler<EnrolMemberCommand, B
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return member.Id;
+    }
+}
+
+/// <summary>
+/// Records the monthly share deduction amount a member has instructed.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A member writes to the chairman to set or change the amount deducted from their salary
+/// each month. The accounts clerk records the new figure here once it is approved.
+/// </para>
+/// <para>
+/// Until this is set the deduction schedule falls back to inferring the amount from the
+/// member's last journal entry, which is error-prone when top-ups and contributions arrive
+/// separately. Setting it once makes every future schedule reliable.
+/// </para>
+/// </remarks>
+public sealed record SetMemberContributionCommand(BorrowerId MemberId, decimal AmountKes)
+    : IRequest;
+
+public sealed class SetMemberContributionValidator : AbstractValidator<SetMemberContributionCommand>
+{
+    public SetMemberContributionValidator()
+    {
+        RuleFor(command => command.MemberId)
+            .Must(id => id.IsSpecified)
+            .WithMessage("A member must be identified.");
+
+        RuleFor(command => command.AmountKes)
+            .GreaterThan(0)
+            .WithMessage("The monthly contribution must be a positive amount.")
+            .LessThanOrEqualTo(500_000)
+            .WithMessage("That amount looks too large for a monthly contribution. Please check.");
+    }
+}
+
+internal sealed class SetMemberContributionHandler : IRequestHandler<SetMemberContributionCommand>
+{
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SetMemberContributionHandler(IBorrowerRepository borrowers, IUnitOfWork unitOfWork)
+    {
+        _borrowers = borrowers;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(SetMemberContributionCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var member = await _borrowers.FindMemberAsync(command.MemberId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
+
+        member.SetMonthlyContribution(new Money(command.AmountKes, Currency.Kes));
+        _borrowers.Update(member);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
 

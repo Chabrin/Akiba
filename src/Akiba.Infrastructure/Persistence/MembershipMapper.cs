@@ -1,3 +1,4 @@
+using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
 using Akiba.Domain.Membership;
 using Akiba.Infrastructure.Persistence.Rows;
@@ -40,6 +41,7 @@ internal static class MembershipMapper
             EmploymentStatus = (int)member.EmploymentStatus,
             ExitedOn = member.ExitedOn,
             IsLandlord = member.IsLandlord,
+            MonthlyContributionKes = member.MonthlyShareContribution?.Amount,
             Documents = [.. member.Documents.Select(document => ToRow(document, member.Id.Value, null))],
         },
         ClientBorrower client => new BorrowerRow
@@ -83,6 +85,10 @@ internal static class MembershipMapper
             return client;
         }
 
+        var monthlyContribution = row.MonthlyContributionKes.HasValue
+            ? new Money(row.MonthlyContributionKes.Value, Currency.Kes)
+            : (Money?)null;
+
         var member = Member.Rehydrate(
             new BorrowerId(row.Id),
             MembershipNumber.Of(Required(row.MembershipNumber, row.Id, "membership number")),
@@ -95,7 +101,8 @@ internal static class MembershipMapper
             new AccountId(row.SharesAccountId ?? throw Missing(row.Id, "share account")),
             (EmploymentStatus)(row.EmploymentStatus ?? (int)EmploymentStatus.Employed),
             row.ExitedOn,
-            row.IsLandlord);
+            row.IsLandlord,
+            monthlyContribution);
 
         Attach(member, row);
 

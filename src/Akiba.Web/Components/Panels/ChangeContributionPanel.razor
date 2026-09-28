@@ -1,0 +1,96 @@
+@using Akiba.Application.Members
+@inject IMediator Mediator
+
+<WorkPanel @bind-Open="Open" Title="@Title" Width="380px">
+    @if (_member is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Record the amount @_member.Name deducts from their salary each month.
+            This is their standing instruction to HR — it does not record an actual payment.
+        </MudText>
+
+        @if (_member.MonthlyContribution.HasValue)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                Current instruction: <strong>
+                    <MoneyText Amount="_member.MonthlyContribution.Value" />
+                </strong> per month
+            </MudAlert>
+        }
+
+        <MudNumericField T="decimal"
+                         @bind-Value="_amount"
+                         Label="Monthly contribution (KES)"
+                         Variant="Variant.Outlined"
+                         Min="1"
+                         Max="500000"
+                         Format="N2"
+                         Adornment="Adornment.Start"
+                         AdornmentText="KES"
+                         Class="mb-4"
+                         autofocus />
+
+        @if (_error is not null)
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Disabled="_saving"
+                   OnClick="SaveAsync">
+            @(_saving ? "Saving…" : "Save contribution amount")
+        </MudButton>
+    }
+</WorkPanel>
+
+@code {
+    private ContributionSetting? _member;
+    private decimal _amount;
+    private bool _saving;
+    private string? _error;
+
+    private string Title => _member is null
+        ? "Contribution"
+        : $"{_member.Name.Split(' ')[0]} — monthly contribution";
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public ContributionSetting? Member { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Member != _member)
+        {
+            _member = Member;
+            _amount = _member?.MonthlyContribution?.Amount ?? 0;
+            _error = null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_member is null) return;
+
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new SetMemberContributionCommand(_member.MemberId, _amount));
+            await OpenChanged.InvokeAsync(false);
+        Open = false;
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

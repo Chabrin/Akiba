@@ -48,6 +48,12 @@ internal sealed class BorrowerRow
 
     public bool IsLandlord { get; set; }
 
+    /// <summary>
+    /// The amount the member has chosen to have deducted from their salary each month, in KES.
+    /// Null means the clerk has not yet recorded a standing instruction.
+    /// </summary>
+    public decimal? MonthlyContributionKes { get; set; }
+
     // --- Client only -------------------------------------------------
     public string? IntroducedBy { get; set; }
 

@@ -38,6 +38,11 @@ internal sealed class BorrowerConfiguration : IEntityTypeConfiguration<BorrowerR
 
         builder.HasIndex(borrower => borrower.NationalId);
 
+        // Two decimal places, matching Money.Round(). Nullable — absent until the clerk records
+        // the member's standing deduction instruction.
+        builder.Property(borrower => borrower.MonthlyContributionKes)
+            .HasColumnType("numeric(14,2)");
+
         builder.HasMany(borrower => borrower.Documents)
             .WithOne()
             .HasForeignKey(document => document.BorrowerId)
