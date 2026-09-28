@@ -17,9 +17,10 @@
     <div class="pa-4 pb-0">
         <MudText Typo="Typo.h6">Monthly contribution amounts</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
-            The amount each member has instructed to be deducted from their salary each month.
-            Set this once from their enrolment letter; update it when they write to change it.
-            The deduction schedule uses this figure — without it, it guesses from history.
+            The amount each <strong>employee</strong> member has instructed to be deducted from
+            their salary each month. Set this from their enrolment letter; update it when they
+            write to change it. Landlords are not listed here — they receive loans against rental
+            income and have no monthly share deduction.
         </MudText>
     </div>
 
@@ -37,11 +38,6 @@
                       Class="akiba-toolbar-search" />
 
         <MudSpacer />
-
-        <BorrowerFilter Value="_category"
-                        ValueChanged="OnCategoryChanged"
-                        Total="@(_contributions?.Count ?? 0)"
-                        Counts="CategoryCounts" />
 
         @if (UnsetCount > 0)
         {
@@ -140,48 +136,108 @@
     <div class="pa-4">
         <MudText Typo="Typo.h6" Class="mb-1">Loan products</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-            The two products the society offers. Rates and terms are set by the committee.
-            Contact ICT to adjust them.
+            Rates and terms as set by the committee (minutes of 6 September 2026).
+            Contact ICT to record a change the committee has approved.
         </MudText>
 
         <MudGrid Spacing="3">
+            @* Normal loan *@
             <MudItem xs="12" sm="6">
                 <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
                         <MudIcon Icon="@Icons.Material.Filled.RequestQuote" Size="Size.Small" Class="mr-1" />
                         Normal Loan
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Interest rate</MudText>
-                    <MudText Typo="Typo.h6">1% per month (flat)</MudText>
-                    <MudDivider Class="my-2" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Maximum principal</MudText>
-                    <MudText>Twice the member's shareholding</MudText>
-                    <MudDivider Class="my-2" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Repayment</MudText>
-                    <MudText>Up to 24 monthly instalments</MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
+                    <MudText Class="mb-2">
+                        <strong>10% flat of principal</strong>, charged once at disbursement —
+                        not per month. A loan of KES 100,000 attracts KES 10,000 regardless of
+                        how quickly it is repaid.
+                    </MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum principal</MudText>
+                    <MudText Class="mb-2">Twice the member's shareholding (no fixed ceiling)</MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment — graduated scale (v1, Sep 2026)</MudText>
+                    <MudSimpleTable Dense="true" Class="mt-1 mb-2">
+                        <thead>
+                            <tr>
+                                <th>Principal range (KES)</th>
+                                <th style="text-align:right">Max months</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>30,000 – 50,000</td><td style="text-align:right">8</td></tr>
+                            <tr><td>50,001 – 100,000</td><td style="text-align:right">12</td></tr>
+                            <tr><td>100,001 – 150,000</td><td style="text-align:right">16</td></tr>
+                            <tr><td>150,001 – 200,000</td><td style="text-align:right">20</td></tr>
+                            <tr><td>200,001 – 400,000</td><td style="text-align:right">24</td></tr>
+                            <tr><td>Above 400,000</td><td style="text-align:right">30</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        The scale gives the <em>maximum</em>. A member may ask for a shorter term;
+                        they may not ask for a longer one. Loans below KES 30,000 have no defined
+                        term — the committee has not set one (open question 5).
+                    </MudText>
                 </MudPaper>
             </MudItem>
+
+            @* Emergency loan *@
             <MudItem xs="12" sm="6">
                 <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
                         <MudIcon Icon="@Icons.Material.Filled.Emergency" Size="Size.Small" Class="mr-1" />
                         Emergency Loan
                     </MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Interest rate</MudText>
-                    <MudText Typo="Typo.h6">5% once (flat)</MudText>
-                    <MudDivider Class="my-2" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Maximum principal</MudText>
-                    <MudText>Twice the member's shareholding</MudText>
-                    <MudDivider Class="my-2" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Repayment</MudText>
-                    <MudText>Up to 6 monthly instalments</MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
+                    <MudText Class="mb-2">
+                        <strong>10% flat of principal</strong>, same rate as a normal loan,
+                        charged once. A KES 25,000 emergency loan: 25,000 + 2,500 interest =
+                        KES 27,500 total, repaid at KES 5,500 × 5 months.
+                    </MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum principal</MudText>
+                    <MudText Class="mb-2"><strong>KES 25,000</strong></MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment</MudText>
+                    <MudText Class="mb-2"><strong>Always 5 months</strong> — fixed, not a maximum</MudText>
+
+                    <MudDivider Class="my-3" />
+
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Small" Class="mr-1" />
+                        Client Loan (non-member)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
+                    <MudText Class="mb-2"><strong>3% per month on principal</strong> — up to 5 months, so up to 15% total</MudText>
+
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum term</MudText>
+                    <MudText Class="mb-2">5 months</MudText>
+
+                    <MudDivider Class="my-3" />
+
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" Class="mr-1" />
+                        Rental Income Loan
+                    </MudText>
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        The committee has <strong>not yet set</strong> the interest rate or term
+                        for this product. Applications cannot be priced until they do.
+                        See open question 7.
+                    </MudAlert>
                 </MudPaper>
             </MudItem>
         </MudGrid>
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
-            Guarantors are required where the loan balance exceeds the borrower's own shareholding.
-            The affordability rule (two-thirds of net pay) is checked on every application.
+            Employee member loans: borrowing limit is twice shareholding; max two loans at once;
+            guarantors required where outstanding balance exceeds the borrower's own shares;
+            affordability checked at two-thirds of net pay.
+            Landlord (rental income) loans are secured against rental income — the committee sets
+            limits case by case, not by shareholding.
         </MudText>
     </div>
 </MudPaper>
@@ -255,7 +311,6 @@
 @code {
     private IReadOnlyList<ContributionSetting>? _contributions;
     private string _search = string.Empty;
-    private BorrowerCategory? _category;
     private bool _changingContribution;
     private ContributionSetting? _editingMember;
 
@@ -263,15 +318,7 @@
         _contributions is null
             ? []
             : [.. _contributions
-                .Where(m => _category is null || m.Category == _category)
                 .Where(m => string.IsNullOrWhiteSpace(_search) || Matches(m))];
-
-    private IReadOnlyDictionary<BorrowerCategory, int> CategoryCounts =>
-        _contributions is null
-            ? new Dictionary<BorrowerCategory, int>()
-            : _contributions
-                .GroupBy(m => m.Category)
-                .ToDictionary(g => g.Key, g => g.Count());
 
     private int UnsetCount =>
         _contributions?.Count(m => !m.MonthlyContribution.HasValue && m.IsActive) ?? 0;
@@ -284,8 +331,6 @@
         || m.PayrollNumber.Contains(_search, StringComparison.OrdinalIgnoreCase);
 
     private void OnSearchChanged(string search) => _search = search ?? string.Empty;
-
-    private void OnCategoryChanged(BorrowerCategory? cat) => _category = cat;
 
     private async Task LoadAsync() =>
         _contributions = await Mediator.Send(new ListContributionSettingsQuery());

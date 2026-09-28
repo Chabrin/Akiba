@@ -342,8 +342,8 @@ internal sealed class ListContributionSettingsHandler
         return
         [
             .. members
-                .OrderBy(member => member.IsLandlord ? 1 : 0)
-                .ThenBy(member => member.PayrollNumber.Value, StringComparer.Ordinal)
+                .Where(member => !member.IsLandlord)
+                .OrderBy(member => member.PayrollNumber.Value, StringComparer.Ordinal)
                 .ThenBy(member => member.Name.Full, StringComparer.Ordinal)
                 .Select(member => new ContributionSetting(
                     member.Id,
