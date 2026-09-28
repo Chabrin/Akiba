@@ -452,14 +452,20 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     right: -24rem;
     top: 50%;
     z-index: -1;
-    border: 1px solid rgba(232, 237, 233, .1);
+    border: 1px solid rgba(232, 237, 233, .2);
     border-radius: 50%;
     box-shadow:
-        0 0 0 2.25rem rgba(232, 237, 233, .025),
-        0 0 0 5rem rgba(232, 237, 233, .018),
-        0 0 0 9rem rgba(232, 237, 233, .012);
+        0 0 0 2.25rem rgba(232, 237, 233, .05),
+        0 0 0 5rem rgba(232, 237, 233, .035),
+        0 0 0 9rem rgba(232, 237, 233, .025);
     transform: translateY(-50%);
-    animation: akiba-orbit 18s ease-in-out infinite alternate;
+
+    /* The rings glide in from the right and settle, once. They used to rotate a few degrees
+       back and forth forever - and a rotating circle looks exactly like a still one, so the
+       motion was invisible while still never stopping. Now it is something you see, it is
+       over in under five seconds (so there is nothing an official needs a way to pause),
+       and it ends on a composition that holds still while they sign in. */
+    animation: akiba-drift-large 4.6s cubic-bezier(.16, 1, .3, 1) both;
 }
 
 .akiba-signin-brand::after {
@@ -469,11 +475,14 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     height: 20rem;
     right: -11rem;
     top: 0;
-    border: 1px solid rgba(232, 237, 233, .12);
+    border: 1px solid rgba(232, 237, 233, .22);
     border-radius: 50%;
-    box-shadow: 0 0 0 2rem rgba(232, 237, 233, .025), 0 0 0 4rem rgba(232, 237, 233, .02);
+    box-shadow: 0 0 0 2rem rgba(232, 237, 233, .05), 0 0 0 4rem rgba(232, 237, 233, .035);
     pointer-events: none;
-    animation: akiba-orbit 14s ease-in-out infinite alternate-reverse;
+
+    /* A beat behind the large ring and from a different direction, so the two read as
+       arriving rather than as one shape moving. */
+    animation: akiba-drift-small 4.2s cubic-bezier(.16, 1, .3, 1) .35s both;
 }
 
 .akiba-signin-mark {
@@ -650,9 +659,16 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes akiba-orbit {
-    from { transform: translateY(-50%) rotate(-3deg) scale(.98); }
-    to { transform: translateY(-50%) rotate(3deg) scale(1.02); }
+/* Both drifts end exactly where the rings are placed at rest, so with reduced motion - where
+   every animation is cut to a hundredth of a millisecond - the rings simply appear in place. */
+@keyframes akiba-drift-large {
+    from { opacity: 0; transform: translate(7rem, -44%) scale(.94); }
+    to { opacity: 1; transform: translate(0, -50%) scale(1); }
+}
+
+@keyframes akiba-drift-small {
+    from { opacity: 0; transform: translate(4rem, -4rem) scale(.9); }
+    to { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 
 @keyframes akiba-code-focus {
