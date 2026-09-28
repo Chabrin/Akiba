@@ -26,6 +26,11 @@
     <Routes @rendermode="RenderMode.InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+
+    @* The authenticator-code boxes. Here rather than on the page because a script inside a
+       Blazor-rendered component does not run when Blazor renders it, and loaded for every page
+       because it does nothing unless the code field is on screen. *@
+    <script src="js/akiba-otp.js"></script>
 </body>
 
 </html>

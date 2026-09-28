@@ -11,7 +11,7 @@
         <span class="akiba-signin-eyebrow">Step 2 of 2</span>
         <h1 class="akiba-signin-title">Verify your identity</h1>
     </div>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
+    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6" id="akiba-otp-help">
         Enter the 6-digit code from your authenticator app.
     </MudText>
 
@@ -23,17 +23,50 @@
         </MudAlert>
     }
 
-    <form method="post" action="/auth/code">
+    <form method="post" action="/auth/code" data-akiba-otp-form>
         @* Proves this post came from Akiba's own page. Without it another site could
            post here and sign an official into an account somebody else controls. *@
         <AntiforgeryToken />
 
-        <MudTextField T="string"
-                      Label="Code"
-                      Variant="Variant.Outlined"
-                      Margin="Margin.Dense"
-                      UserAttributes="@(new() { ["name"] = "code", ["inputmode"] = "numeric", ["autocomplete"] = "one-time-code", ["required"] = true, ["autofocus"] = true, ["maxlength"] = "7" })"
-                      Class="mb-5 akiba-otp-field" />
+        @* One real input, drawn as six boxes by js/akiba-otp.js.
+
+           One input rather than six, so everything that already works on a code field keeps
+           working: pasting a code, a phone offering the code from its authenticator, a password
+           manager filling it, and a screen reader hearing one field called "Authentication
+           code" instead of six unlabelled boxes. The boxes are decoration over it.
+
+           Without the script this is simply a text field, and the Continue button posts it. *@
+        <div class="akiba-otp" data-akiba-otp>
+            <label for="akiba-otp-input" class="akiba-visually-hidden">Authentication code</label>
+            <input id="akiba-otp-input"
+                   class="akiba-otp-input"
+                   name="code"
+                   type="text"
+                   inputmode="numeric"
+                   autocomplete="one-time-code"
+                   maxlength="7"
+                   required
+                   autofocus
+                   aria-describedby="akiba-otp-help" />
+
+            <div class="akiba-otp-ring" aria-hidden="true">
+                @for (var index = 0; index < 6; index++)
+                {
+                    <span class="akiba-otp-box" style="--i: @index"></span>
+                }
+            </div>
+
+            <div class="akiba-otp-check" aria-hidden="true">
+                <svg viewBox="0 0 72 72" fill="none" stroke="currentColor" stroke-width="3"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="36" cy="36" r="33" />
+                    <path d="M23 37 L32 46 L50 27" />
+                </svg>
+            </div>
+        </div>
+
+        @* Read out as it changes: checking, accepted, or not accepted. *@
+        <div class="akiba-otp-status" role="status" aria-live="polite" data-akiba-otp-status></div>
 
         <MudButton ButtonType="ButtonType.Submit"
                    Variant="Variant.Filled"

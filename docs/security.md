@@ -39,14 +39,30 @@ on a public site matter a great deal on a shared office network.
 encodes everything it renders, and nothing bypasses it. That — not the Content Security
 Policy — is what actually stops a member's name being turned into a script.
 
-There is exactly **one** JavaScript file, `wwwroot/js/akiba-shortcuts.js`, and one call site,
-`MainLayout`. It registers a `keydown` handler for Ctrl+Shift+H and calls back into .NET to
-toggle the privacy blur. It reads no data, writes nothing into the DOM, and takes no argument
-from the page. It exists because a keyboard shortcut cannot be done any other way in Blazor
-Server, and it is worth having because an official reaching for the mouse while somebody walks
-up to the desk is the case the blur is for.
+There are exactly **two** JavaScript files of Akiba's own. Each is argued for below, and each
+stays inside Razor's guarantee: neither writes HTML.
 
-**If you add a second one, this section stops being true.** Anything that writes to the DOM
+**`wwwroot/js/akiba-session.js`**, loaded by `MainLayout`. It registers a `keydown` handler for
+Ctrl+Shift+H, which calls back into .NET to toggle the privacy blur, and runs the idle clock that
+warns and then signs an official out after five minutes without a keystroke or click. It reads
+no data, writes nothing into the DOM, and takes no argument from the page; signing out is done by
+submitting the sign-out form the layout already renders, antiforgery token and all. Both jobs
+need the browser - only it can see a key pressed or an official who has walked away.
+
+**`wwwroot/js/akiba-otp.js`**, loaded once by `App.razor`, acting only when the authenticator-code
+field is on screen. It draws the one real code input as six boxes, submits on the sixth digit,
+and shows the code being checked and accepted. What it may touch is narrow on purpose:
+
+- It **reads** only the code field, and keeps only digits.
+- It **writes** only those digits into its own boxes, with `textContent`, plus a status message
+  and the button's label, both fixed strings of its own. No `innerHTML`, nothing from the server.
+- It **posts** the form to the form's own `action` with the form's own fields - the code and the
+  antiforgery token - so `/auth/code` sees the request the Continue button would have sent, and
+  applies the same antiforgery check, rate limit and lockout. It follows the server's redirect
+  and moves the browser to wherever that redirect pointed; it never decides the outcome itself.
+- Without it, the page is an ordinary field and button and still signs an official in.
+
+**If you add a third one, this section stops being true.** Anything that writes to the DOM
 from JavaScript is outside Razor's encoding and has to be argued for on its own terms.
 
 The policy is the second line, for the day somebody adds the first one of those. It allows
@@ -145,7 +161,8 @@ to be written.
 - **No vulnerable packages**, direct or transitive (`dotnet list package --vulnerable`).
 - **No API keys of any kind.** Akiba integrates with nothing. If SMS or email is added in
   milestone 14, those credentials belong in environment variables, never in `appsettings.json`.
-- **Nothing served that should not be.** `wwwroot` contains `app.css` and `favicon.svg`.
+- **Nothing served that should not be.** `wwwroot` contains `app.css`, `favicon.svg` and the
+  two scripts described above.
 - **Input validation** is FluentValidation at the application boundary, plus the domain's own
   invariants — a `JournalEntry` whose lines do not sum to zero cannot be constructed at all.
 

@@ -635,18 +635,261 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     background-color: var(--mud-palette-surface);
 }
 
-.akiba-otp-field input {
-    text-align: center;
+/* ---------------------------------------------------------------------------
+   The authenticator code
+
+   One real input, drawn as six boxes by js/akiba-otp.js. Without the script
+   the input is shown as an ordinary field and the page still works; with it,
+   the input sits invisibly over the boxes, so a click anywhere on them lands
+   in the field and paste, autofill and the screen reader all keep working.
+
+   Three states after the sixth digit:
+     verifying - the boxes swing out into a ring and turn while the server checks
+     verified  - they spiral into the centre and a tick draws itself
+     rejected  - they drop back into the row with a small shake
+   --------------------------------------------------------------------------- */
+
+.akiba-otp {
+    /* Box size shrinks to fit a narrow phone: six boxes and five gaps never wider than the
+       form. Container units, so the boxes and their positions both follow the form width. */
+    --otp-gap: .55rem;
+    --otp-w: min(2.9rem, calc((100cqw - 5 * var(--otp-gap)) / 6));
+    --otp-h: 3.4rem;
+    --otp-r: 4.6rem;
+
+    position: relative;
+    container-type: inline-size;
+    margin-bottom: var(--akiba-space-2);
+}
+
+.akiba-otp-input {
+    display: block;
+    width: 100%;
+    height: 3rem;
+    padding: 0 1rem;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: var(--akiba-radius);
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
+    font-family: var(--akiba-font-numeric);
+    font-size: 1.25rem;
+    letter-spacing: .4em;
+}
+
+.akiba-otp-ring,
+.akiba-otp-check {
+    display: none;
+}
+
+/* ----- With the script ----- */
+
+.akiba-otp.is-enhanced {
+    height: var(--otp-h);
+    transition: height 420ms cubic-bezier(.2, .75, .25, 1);
+}
+
+/* Over the boxes and invisible: the boxes show what it holds and where the caret is. */
+.akiba-otp.is-enhanced .akiba-otp-input {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
+    caret-color: transparent;
+    letter-spacing: 0;
+    cursor: text;
+}
+
+.akiba-otp.is-enhanced .akiba-otp-input::selection {
+    background: transparent;
+}
+
+/* The active box is the focus indicator here - a ring round the whole invisible field would
+   just outline the row twice. */
+.akiba-otp.is-enhanced .akiba-otp-input:focus-visible {
+    outline: none;
+}
+
+.akiba-otp.is-enhanced .akiba-otp-ring {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.akiba-otp-box {
+    --a: calc(var(--i) * 60deg);
+
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: var(--otp-w);
+    height: var(--otp-h);
+    margin: calc(var(--otp-h) / -2) 0 0 calc(var(--otp-w) / -2);
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: 10px;
+    background-color: var(--mud-palette-surface);
+    color: var(--mud-palette-text-primary);
     font-family: var(--akiba-font-numeric);
     font-size: 1.4rem;
     font-weight: 600;
-    letter-spacing: .55em;
-    padding-left: .55em;
     font-variant-numeric: tabular-nums;
+
+    /* Every state uses the same four transforms in the same order, so a box moving between
+       the row and the ring swings through an arc instead of cutting straight across. */
+    transform: rotate(0deg) translate(calc((var(--i) - 2.5) * (var(--otp-w) + var(--otp-gap))), 0) rotate(0deg) scale(1);
+    transition:
+        transform 560ms cubic-bezier(.2, .75, .25, 1),
+        opacity 320ms ease,
+        border-color var(--akiba-transition),
+        box-shadow var(--akiba-transition);
 }
 
-.akiba-otp-field .mud-input-outlined:focus-within {
-    animation: akiba-code-focus 420ms ease-out;
+.akiba-otp-box.is-filled {
+    border-color: var(--mud-palette-text-secondary);
+}
+
+.akiba-otp-box.is-active {
+    border: 2px solid var(--mud-palette-primary);
+    box-shadow: 0 0 0 4px rgba(27, 94, 32, .12);
+}
+
+/* A caret in the empty active box, so it reads as the place the next digit goes. */
+.akiba-otp-box.is-active:empty::after {
+    content: "";
+    width: 2px;
+    height: 1.4rem;
+    background-color: var(--mud-palette-primary);
+    animation: akiba-otp-caret 1s steps(1) infinite;
+}
+
+/* ----- Verifying: out into a ring, turning ----- */
+
+.akiba-otp.is-verifying,
+.akiba-otp.is-verified {
+    height: calc(var(--otp-r) * 2 + var(--otp-h) + 1rem);
+}
+
+.akiba-otp.is-verifying .akiba-otp-ring,
+.akiba-otp.is-verified .akiba-otp-ring {
+    animation: akiba-otp-spin 2.6s linear infinite;
+}
+
+.akiba-otp.is-verifying .akiba-otp-box {
+    transform: rotate(var(--a)) translate(0, calc(var(--otp-r) * -1)) rotate(calc(var(--a) * -1)) scale(1);
+    border-color: var(--mud-palette-primary);
+}
+
+/* ----- Verified: into the centre, then the tick ----- */
+
+.akiba-otp.is-verified .akiba-otp-box {
+    transform: rotate(var(--a)) translate(0, 0) rotate(calc(var(--a) * -1)) scale(.35);
+    opacity: 0;
+    border-color: var(--mud-palette-success);
+}
+
+.akiba-otp.is-enhanced .akiba-otp-check {
+    display: grid;
+    position: absolute;
+    inset: 0;
+    place-items: center;
+    pointer-events: none;
+    opacity: 0;
+    color: var(--mud-palette-success);
+}
+
+.akiba-otp.is-verified .akiba-otp-check {
+    opacity: 1;
+    transition: opacity 200ms ease 240ms;
+}
+
+.akiba-otp-check svg {
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
+.akiba-otp-check circle {
+    stroke-dasharray: 208;
+    stroke-dashoffset: 208;
+}
+
+.akiba-otp-check path {
+    stroke-dasharray: 40;
+    stroke-dashoffset: 40;
+}
+
+.akiba-otp.is-verified .akiba-otp-check circle {
+    animation: akiba-otp-draw 560ms ease-out 240ms forwards;
+}
+
+.akiba-otp.is-verified .akiba-otp-check path {
+    animation: akiba-otp-draw 320ms ease-out 640ms forwards;
+}
+
+/* ----- Rejected: back into the row, a small shake ----- */
+
+.akiba-otp.is-rejected {
+    animation: akiba-otp-shake 380ms ease-in-out;
+}
+
+.akiba-otp.is-rejected .akiba-otp-box {
+    border-color: var(--mud-palette-error);
+}
+
+/* What is happening, in words. Also what the screen reader announces. */
+.akiba-otp-status {
+    min-height: 1.25rem;
+    margin-bottom: var(--akiba-space-4);
+    color: var(--mud-palette-text-secondary);
+    font-size: .8125rem;
+    text-align: center;
+}
+
+.akiba-otp-status[data-tone="error"] {
+    color: var(--mud-palette-error);
+}
+
+/* Somebody who has asked for less motion gets the same states without the travel: the
+   boxes stay in their row, the tick is simply there, and the caret stops blinking. */
+@media (prefers-reduced-motion: reduce) {
+    .akiba-otp.is-verifying,
+    .akiba-otp.is-verified {
+        height: var(--otp-h);
+    }
+
+    .akiba-otp.is-verifying .akiba-otp-box {
+        transform: rotate(0deg) translate(calc((var(--i) - 2.5) * (var(--otp-w) + var(--otp-gap))), 0) rotate(0deg) scale(1);
+    }
+
+    .akiba-otp.is-verifying .akiba-otp-ring,
+    .akiba-otp.is-verified .akiba-otp-ring,
+    .akiba-otp-box.is-active:empty::after {
+        animation: none;
+    }
+
+    .akiba-otp-check circle,
+    .akiba-otp-check path {
+        stroke-dashoffset: 0;
+    }
+}
+
+/* Hidden from sight, still read out - for the code field's label, which the boxes make
+   visually redundant but a screen reader still needs. */
+.akiba-visually-hidden {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 @keyframes akiba-brand-enter {
@@ -671,10 +914,22 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     to { opacity: 1; transform: translate(0, 0) scale(1); }
 }
 
-@keyframes akiba-code-focus {
-    0% { box-shadow: 0 0 0 0 rgba(27, 94, 32, 0); }
-    45% { box-shadow: 0 0 0 4px rgba(27, 94, 32, .11); }
-    100% { box-shadow: 0 0 0 0 rgba(27, 94, 32, 0); }
+@keyframes akiba-otp-caret {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+@keyframes akiba-otp-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes akiba-otp-draw {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes akiba-otp-shake {
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
 }
 
 @media (max-width: 900px) {
