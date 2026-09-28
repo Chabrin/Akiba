@@ -8,11 +8,11 @@
    rather than two different screens. *@
 <div class="akiba-signin-content">
     <div class="akiba-signin-heading">
-        <span class="akiba-signin-eyebrow">Official access · Step 2 of 2</span>
-        <h1 class="akiba-signin-title">Authentication code</h1>
+        <span class="akiba-signin-eyebrow">Step 2 of 2</span>
+        <h1 class="akiba-signin-title">Verify your identity</h1>
     </div>
     <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-        Enter the six-digit code from your authenticator app.
+        Enter the 6-digit code from your authenticator app.
     </MudText>
 
     @if (Error is not null)
@@ -33,7 +33,7 @@
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       UserAttributes="@(new() { ["name"] = "code", ["inputmode"] = "numeric", ["autocomplete"] = "one-time-code", ["required"] = true, ["autofocus"] = true, ["maxlength"] = "7" })"
-                      Class="mb-5" />
+                      Class="mb-5 akiba-otp-field" />
 
         <MudButton ButtonType="ButtonType.Submit"
                    Variant="Variant.Filled"

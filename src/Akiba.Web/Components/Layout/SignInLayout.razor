@@ -1,18 +1,7 @@
 @inherits LayoutComponentBase
 @inject IWebHostEnvironment Environment
 
-@* Sign-in has no navigation, no user chip and no theme toggle - there is nobody signed in to
-   have a preference, and nothing to navigate to.
-
-   It is a two-panel screen rather than a card floating in the middle of an empty page. The
-   left panel is the society: its name, and the one sentence that says what this system is for.
-   The right is the form and nothing else.
-
-   That is not decoration. This screen is the first thing anybody sees of Akiba - a committee
-   member being shown it, an auditor being handed a laptop - and a lone box in a grey field
-   says nothing about whose books these are. The panel also gives the environment warning
-   somewhere to live that is impossible to miss, which on a machine holding a restored copy of
-   the real register matters more than it looks. *@
+@* Private sign-in for officials. Keep the identity visible and the actual task immediate. *@
 
 <MudThemeProvider Theme="AkibaTheme.Instance" />
 <MudPopoverProvider />
@@ -31,38 +20,28 @@
         </div>
 
         <div class="akiba-signin-statement">
-            <span class="akiba-signin-eyebrow">Staff welfare · Financial operations</span>
-            <h2>Clear records.<br />Accountable decisions.</h2>
-            <p>
-                A private workspace for authorised society officials to manage member records,
-                lending and the ledger.
-            </p>
-            <p>
-                Financial entries are retained in an auditable journal. Corrections are recorded
-                as new reversing entries.
-            </p>
+            <span class="akiba-signin-eyebrow">CAL Staff Welfare Society</span>
+            <h2>Your society.<br />Clearly accounted.</h2>
+            <p>Private access for authorised officials.</p>
         </div>
 
         <div class="akiba-signin-access">
             <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" />
-            <span>Restricted to authorised officials</span>
+            <span>Secure staff workspace</span>
         </div>
-        @if (!Environment.IsProduction())
-        {
-            <div class="akiba-signin-environment">
-                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
-                <span>
-                    <b>@Environment.EnvironmentName environment.</b>
-                    Verify the connected database before entering data. Changes may be saved;
-                    outbound notifications are disabled here.
-                </span>
-            </div>
-        }
     </aside>
 
     <main class="akiba-signin-form">
+        @if (!Environment.IsProduction())
+        {
+            <div class="akiba-signin-environment" role="status">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                <span><b>@Environment.EnvironmentName</b> · Confirm the database before entering records.</span>
+            </div>
+        }
         <div class="akiba-signin-form-inner">
             @Body
         </div>
+        <div class="akiba-signin-footer">Akiba · Staff welfare operations</div>
     </main>
 </div>

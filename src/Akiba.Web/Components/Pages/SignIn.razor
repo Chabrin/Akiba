@@ -6,15 +6,10 @@
 <PageTitle>Akiba - Sign in</PageTitle>
 
 <div class="akiba-signin-content">
-    @* The society's name is on the panel beside this, so it is not repeated here. What this
-       needs is a heading that says which of the two steps you are on. *@
     <div class="akiba-signin-heading">
-        <span class="akiba-signin-eyebrow">Official access · Step 1 of 2</span>
         <h1 class="akiba-signin-title">Sign in</h1>
+        <p class="akiba-signin-subtitle">Use your society account to continue.</p>
     </div>
-    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-6">
-        Access is provisioned by an administrator. Self-registration is disabled.
-    </MudText>
 
     @if (Error is not null)
     {
@@ -34,7 +29,7 @@
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       UserAttributes="@(new() { ["name"] = "userName", ["autocomplete"] = "username", ["required"] = true, ["autofocus"] = true })"
-                      Class="mb-3" />
+                      Class="mb-3 akiba-auth-field" />
 
         <MudTextField T="string"
                       Label="Password"
@@ -42,7 +37,7 @@
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       UserAttributes="@(new() { ["name"] = "password", ["autocomplete"] = "current-password", ["required"] = true })"
-                      Class="mb-5" />
+                      Class="mb-5 akiba-auth-field" />
 
         <MudButton ButtonType="ButtonType.Submit"
                    Variant="Variant.Filled"
@@ -53,10 +48,6 @@
         </MudButton>
     </form>
 
-    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-6 d-block">
-        Every account uses an authenticator app. After your password you will be asked for a
-        six-digit code.
-    </MudText>
 </div>
 
 @code {
@@ -76,9 +67,7 @@
 
         // Being cleared for being away is not a failure, and saying so in red teaches
         // officials to read every red bar on this screen as somebody getting it wrong.
-        "timeout" =>
-            "This screen was left for a few minutes, so Akiba signed you out and cleared it. "
-            + "Anything you had already saved is saved.",
+        "timeout" => "You were signed out after inactivity. Your saved work is safe.",
         _ => "That user name and password do not match.",
     };
 

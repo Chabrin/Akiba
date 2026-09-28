@@ -23,6 +23,7 @@
 
     --akiba-radius: 8px;
     --akiba-radius-sm: 6px;
+    --akiba-radius-lg: 14px;
 
     /* Money and anything else that must line up column-wise.
 
@@ -53,6 +54,7 @@
 
     --akiba-row-height: 38px;
     --akiba-transition: 120ms cubic-bezier(.4, 0, .2, 1);
+    --akiba-transition-enter: 260ms cubic-bezier(.2, .75, .25, 1);
 }
 
 /* ---------------------------------------------------------------------------
@@ -416,38 +418,62 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 
 .akiba-signin {
     display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+    grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
     min-height: 100vh;
     min-height: 100dvh;
     background: var(--mud-palette-background);
+    overflow: hidden;
 }
 
 .akiba-signin-brand {
     display: flex;
     flex-direction: column;
-    gap: clamp(2rem, 5vh, 3.5rem);
-    padding: clamp(2rem, 7vw, 7rem);
+    gap: clamp(2rem, 5vh, 3rem);
+    padding: clamp(2rem, 6vw, 6.5rem);
     justify-content: center;
     position: relative;
     overflow: hidden;
 
     /* The society's colour, and the only place in the application it covers a
        whole surface. Everywhere else green is reserved for meaning. */
-    background: radial-gradient(ellipse at 14% 82%, rgba(91, 153, 104, .2), transparent 48%), #123A20;
+    background:
+        radial-gradient(ellipse at 18% 88%, rgba(91, 153, 104, .23), transparent 45%),
+        linear-gradient(145deg, #10351D 0%, #164626 58%, #0E2E19 100%);
     color: #E8EDE9;
+    isolation: isolate;
+    animation: akiba-brand-enter var(--akiba-transition-enter) both;
+}
+
+.akiba-signin-brand::before {
+    content: "";
+    position: absolute;
+    width: min(52vw, 48rem);
+    aspect-ratio: 1;
+    right: -24rem;
+    top: 50%;
+    z-index: -1;
+    border: 1px solid rgba(232, 237, 233, .1);
+    border-radius: 50%;
+    box-shadow:
+        0 0 0 2.25rem rgba(232, 237, 233, .025),
+        0 0 0 5rem rgba(232, 237, 233, .018),
+        0 0 0 9rem rgba(232, 237, 233, .012);
+    transform: translateY(-50%);
+    animation: akiba-orbit 18s ease-in-out infinite alternate;
 }
 
 .akiba-signin-brand::after {
     content: "";
     position: absolute;
-    width: 22rem;
-    height: 22rem;
-    right: -10rem;
-    top: -10rem;
+    width: 20rem;
+    height: 20rem;
+    right: -11rem;
+    top: 0;
     border: 1px solid rgba(232, 237, 233, .12);
     border-radius: 50%;
     box-shadow: 0 0 0 2rem rgba(232, 237, 233, .025), 0 0 0 4rem rgba(232, 237, 233, .02);
     pointer-events: none;
+    animation: akiba-orbit 14s ease-in-out infinite alternate-reverse;
 }
 
 .akiba-signin-mark {
@@ -469,7 +495,7 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-statement {
-    max-width: 40rem;
+    max-width: 35rem;
     position: relative;
     z-index: 1;
 }
@@ -488,8 +514,8 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-statement h2 {
-    max-width: 12ch;
-    margin: 0 0 1.5rem;
+    max-width: 11ch;
+    margin: 0 0 1.1rem;
     color: #F4F7F4;
     font-size: clamp(2.5rem, 4.3vw, 4.25rem);
     font-weight: 650;
@@ -498,8 +524,8 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-statement p {
-    max-width: 43ch;
-    margin: 0 0 1rem;
+    max-width: 36ch;
+    margin: 0;
     color: rgba(232, 237, 233, .78);
     font-size: 1rem;
     line-height: 1.7;
@@ -519,14 +545,18 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     display: flex;
     align-items: flex-start;
     gap: var(--akiba-space-2);
-    max-width: 30rem;
-    padding: var(--akiba-space-3);
+    max-width: 27rem;
+    padding: 10px 14px;
     border-radius: var(--akiba-radius);
-    border: 1px solid rgba(224, 164, 88, .5);
-    background-color: rgba(224, 164, 88, .12);
-    color: #E0A458;
-    font-size: 0.8125rem;
+    border: 1px solid #E4A44D;
+    background-color: #FFF6E8;
+    color: #75410A;
+    font-size: 0.75rem;
     line-height: 1.5;
+    position: absolute;
+    top: 1.25rem;
+    right: 1.5rem;
+    z-index: 2;
 }
 
 .akiba-signin-form {
@@ -535,6 +565,8 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     justify-content: center;
     padding: var(--akiba-space-6) var(--akiba-space-4);
     background-color: var(--mud-palette-background);
+    position: relative;
+    animation: akiba-form-enter 360ms 70ms cubic-bezier(.2, .75, .25, 1) both;
 }
 
 .akiba-signin-form-inner {
@@ -543,7 +575,7 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 .akiba-signin-heading {
-    margin-bottom: .35rem;
+    margin-bottom: 1.75rem;
 }
 
 .akiba-signin-heading .akiba-signin-eyebrow {
@@ -554,14 +586,20 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 .akiba-signin-title {
     margin: 0;
     color: var(--mud-palette-text-primary);
-    font-size: 2rem;
+    font-size: clamp(2rem, 3vw, 2.4rem);
     font-weight: 650;
     letter-spacing: -.04em;
     line-height: 1.2;
 }
 
+.akiba-signin-subtitle {
+    margin: .45rem 0 0;
+    color: var(--mud-palette-text-secondary);
+    font-size: .9rem;
+}
+
 .akiba-signin-content > .mud-typography-body2 {
-    margin-bottom: 1.75rem;
+    margin-bottom: 1.5rem;
     font-size: .9rem;
 }
 
@@ -575,23 +613,93 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     box-shadow: none;
 }
 
+.akiba-signin-footer {
+    position: absolute;
+    right: 1.5rem;
+    bottom: 1.15rem;
+    color: var(--mud-palette-text-secondary);
+    font-size: .7rem;
+    opacity: .75;
+}
+
+.akiba-auth-field .mud-input-outlined {
+    background-color: var(--mud-palette-surface);
+}
+
+.akiba-otp-field input {
+    text-align: center;
+    font-family: var(--akiba-font-numeric);
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: .55em;
+    padding-left: .55em;
+    font-variant-numeric: tabular-nums;
+}
+
+.akiba-otp-field .mud-input-outlined:focus-within {
+    animation: akiba-code-focus 420ms ease-out;
+}
+
+@keyframes akiba-brand-enter {
+    from { opacity: .65; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes akiba-form-enter {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes akiba-orbit {
+    from { transform: translateY(-50%) rotate(-3deg) scale(.98); }
+    to { transform: translateY(-50%) rotate(3deg) scale(1.02); }
+}
+
+@keyframes akiba-code-focus {
+    0% { box-shadow: 0 0 0 0 rgba(27, 94, 32, 0); }
+    45% { box-shadow: 0 0 0 4px rgba(27, 94, 32, .11); }
+    100% { box-shadow: 0 0 0 0 rgba(27, 94, 32, 0); }
+}
+
 @media (max-width: 900px) {
     .akiba-signin {
         grid-template-columns: 1fr;
     }
 
     .akiba-signin-brand {
+        min-height: auto;
+        padding: 1.1rem 1.25rem;
+        background: linear-gradient(125deg, #10351D, #164626);
+    }
+
+    .akiba-signin-brand::before,
+    .akiba-signin-brand::after,
+    .akiba-signin-statement,
+    .akiba-signin-access {
         display: none;
     }
 
     .akiba-signin-form {
-        min-height: 100vh;
-        min-height: 100dvh;
-        padding: 2rem 1.25rem;
+        min-height: calc(100vh - 4.5rem);
+        min-height: calc(100dvh - 4.5rem);
+        padding: 3.5rem 1.25rem;
+        align-items: flex-start;
     }
 
     .akiba-signin-form-inner {
         max-width: 28rem;
+    }
+
+    .akiba-signin-environment {
+        top: .75rem;
+        right: .75rem;
+        left: .75rem;
+        max-width: none;
+    }
+
+    .akiba-signin-footer {
+        right: 1rem;
+        bottom: .75rem;
     }
 }
 
@@ -954,6 +1062,160 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 
 .akiba-message-preview {
     white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared application finish
+
+   Pages can have different workflows without looking like different products.
+   These rules give navigation, controls and common surfaces one quiet Akiba
+   treatment. Dense ledger data stays flat and readable; motion is reserved for
+   state changes and focus.
+   --------------------------------------------------------------------------- */
+
+.mud-appbar {
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+}
+
+.mud-drawer {
+    border-right: 1px solid var(--mud-palette-divider);
+}
+
+.mud-nav-menu {
+    padding: var(--akiba-space-2) var(--akiba-space-1);
+}
+
+.mud-nav-menu .mud-nav-link {
+    min-height: 42px;
+    margin: 2px var(--akiba-space-2);
+    padding-inline: 12px;
+    border: 1px solid transparent;
+    border-radius: var(--akiba-radius);
+    transition:
+        background-color var(--akiba-transition),
+        border-color var(--akiba-transition),
+        color var(--akiba-transition);
+}
+
+.mud-nav-menu .mud-nav-link:hover {
+    background-color: var(--mud-palette-table-hover);
+}
+
+.mud-nav-menu .mud-nav-link.active {
+    background-color: var(--mud-palette-table-hover);
+    border-color: var(--mud-palette-divider);
+    color: var(--mud-palette-primary);
+    font-weight: 600;
+}
+
+.mud-nav-menu > .mud-typography-caption {
+    padding-top: var(--akiba-space-4) !important;
+    color: var(--mud-palette-text-secondary);
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+}
+
+.mud-main-content {
+    background:
+        radial-gradient(ellipse at 92% 0%, rgba(22, 70, 38, .035), transparent 32rem),
+        var(--mud-palette-background);
+}
+
+.akiba-main > .mud-container {
+    animation: akiba-page-enter 220ms ease-out both;
+}
+
+.akiba-page-header {
+    align-items: center;
+    padding-bottom: var(--akiba-space-5);
+    border-bottom-color: var(--mud-palette-divider);
+}
+
+.akiba-page-header h1 {
+    font-size: clamp(1.65rem, 2.2vw, 2rem);
+    letter-spacing: -.035em;
+}
+
+.akiba-page-description {
+    margin-top: 5px !important;
+    color: var(--mud-palette-text-secondary);
+}
+
+.mud-button-root {
+    min-height: 38px;
+    border-radius: var(--akiba-radius-sm);
+    transition:
+        background-color var(--akiba-transition),
+        border-color var(--akiba-transition),
+        box-shadow var(--akiba-transition),
+        transform var(--akiba-transition);
+}
+
+.mud-button-filled:hover:not(:disabled) {
+    box-shadow: 0 3px 10px rgba(16, 24, 32, .12);
+    transform: translateY(-1px);
+}
+
+.mud-input-control .mud-input-outlined {
+    border-radius: var(--akiba-radius-sm);
+}
+
+.mud-input-control .mud-input-outlined-border {
+    transition: border-color var(--akiba-transition), box-shadow var(--akiba-transition);
+}
+
+.mud-input-control .mud-input-outlined:focus-within .mud-input-outlined-border {
+    box-shadow: 0 0 0 3px rgba(27, 94, 32, .09);
+}
+
+.mud-alert {
+    border-radius: var(--akiba-radius) !important;
+}
+
+.mud-table-container {
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: var(--akiba-radius-lg);
+    background-color: var(--mud-palette-surface);
+}
+
+.mud-table-head .mud-table-cell:first-child {
+    border-top-left-radius: var(--akiba-radius-lg);
+}
+
+.mud-table-head .mud-table-cell:last-child {
+    border-top-right-radius: var(--akiba-radius-lg);
+}
+
+.mud-dialog {
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: var(--akiba-radius-lg) !important;
+    overflow: hidden;
+}
+
+.akiba-stat,
+.akiba-report {
+    border-radius: var(--akiba-radius-lg);
+    transition:
+        border-color var(--akiba-transition),
+        box-shadow var(--akiba-transition),
+        transform var(--akiba-transition);
+}
+
+.akiba-stat:hover,
+.akiba-report:hover {
+    box-shadow: 0 5px 16px rgba(16, 24, 32, .055);
+    transform: translateY(-1px);
+}
+
+.akiba-panel {
+    border-top-left-radius: var(--akiba-radius-lg);
+    border-bottom-left-radius: var(--akiba-radius-lg);
+}
+
+@keyframes akiba-page-enter {
+    from { opacity: .75; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------------------------------------------------------------------------
