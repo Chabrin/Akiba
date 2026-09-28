@@ -132,19 +132,31 @@ public static class LoanProductCatalogue
 /// </summary>
 public sealed class LoanPricing
 {
+    private readonly Dictionary<LoanProduct, LoanProductDefinition>? _definitions;
     private readonly GraduatedTermScale _termScale;
     private readonly TenureBasedTerms _tenureTerms;
 
     /// <summary>
-    /// Creates a pricer.
+    /// Creates a pricer using product definitions loaded from the database.
     /// </summary>
+    /// <param name="definitions">
+    /// The product definitions to use. When supplied, the hardcoded catalogue is ignored. Pass
+    /// null to fall back to the catalogue — used by tests and by code that has not yet been
+    /// updated to load from the database.
+    /// </param>
     /// <param name="termScale">The version of the graduated scale in force.</param>
     /// <param name="tenureTerms">
     /// The tenure-based extension. Pass <see cref="TenureBasedTerms.Disabled"/> unless the
     /// committee has confirmed the rule.
     /// </param>
-    public LoanPricing(GraduatedTermScale? termScale = null, TenureBasedTerms? tenureTerms = null)
+    public LoanPricing(
+        IReadOnlyList<LoanProductDefinition>? definitions = null,
+        GraduatedTermScale? termScale = null,
+        TenureBasedTerms? tenureTerms = null)
     {
+        _definitions = definitions is { Count: > 0 }
+            ? definitions.ToDictionary(d => d.Product)
+            : null;
         _termScale = termScale ?? GraduatedTermScale.Version1;
         _tenureTerms = tenureTerms ?? TenureBasedTerms.Disabled;
     }
@@ -174,7 +186,10 @@ public sealed class LoanPricing
         int? membershipYears = null,
         int? requestedTermMonths = null)
     {
-        var definition = LoanProductCatalogue.For(product);
+        var definition = _definitions is not null
+            ? (_definitions.TryGetValue(product, out var loaded) ? loaded
+               : throw new InvalidOperationException($"No definition loaded for {product}."))
+            : LoanProductCatalogue.For(product);
 
         // Checked first so that an unpriced product reports its missing rate rather than
         // whatever other rule it also happens to be missing.

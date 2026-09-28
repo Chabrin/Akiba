@@ -253,19 +253,22 @@ internal sealed class AssessLoanApplicationHandler
     private readonly ILoanRepository _loans;
     private readonly IJournalRepository _journal;
     private readonly IBalanceQueries _balances;
+    private readonly ILoanProductConfigRepository _loanProductConfigs;
 
     public AssessLoanApplicationHandler(
         ILoanApplicationRepository applications,
         IBorrowerRepository borrowers,
         ILoanRepository loans,
         IJournalRepository journal,
-        IBalanceQueries balances)
+        IBalanceQueries balances,
+        ILoanProductConfigRepository loanProductConfigs)
     {
         _applications = applications;
         _borrowers = borrowers;
         _loans = loans;
         _journal = journal;
         _balances = balances;
+        _loanProductConfigs = loanProductConfigs;
     }
 
     public async Task<LoanAssessment> Handle(
@@ -295,7 +298,17 @@ internal sealed class AssessLoanApplicationHandler
                 member.SharesAccountId,
                 query.AsAt);
 
-        var terms = new LoanPricing().Price(
+        var definitions = await _loanProductConfigs
+            .AllDefinitionsAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var scale = await _loanProductConfigs
+            .CurrentScaleAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var terms = new LoanPricing(
+            definitions.Select(d => d.Definition).ToList(),
+            scale).Price(
             application.Product,
             application.RequestedPrincipal,
             membershipYears,
@@ -364,17 +377,20 @@ internal sealed class ApproveLoanApplicationHandler
     private readonly IMediator _mediator;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILoanProductConfigRepository _loanProductConfigs;
 
     public ApproveLoanApplicationHandler(
         ILoanApplicationRepository applications,
         IMediator mediator,
         IClock clock,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILoanProductConfigRepository loanProductConfigs)
     {
         _applications = applications;
         _mediator = mediator;
         _clock = clock;
         _unitOfWork = unitOfWork;
+        _loanProductConfigs = loanProductConfigs;
     }
 
     public async Task<LoanTerms> Handle(
@@ -401,9 +417,25 @@ internal sealed class ApproveLoanApplicationHandler
 
         // Approving a reduced amount re-prices it, because the term band may change with the
         // principal - a 60,000 loan runs twelve months and a 45,000 one runs eight.
-        var terms = command.ApprovedPrincipal is { } reduced && reduced != application.RequestedPrincipal
-            ? new LoanPricing().Price(application.Product, reduced, null, application.RequestedTermMonths)
-            : assessment.Terms;
+        LoanTerms terms;
+        if (command.ApprovedPrincipal is { } reduced && reduced != application.RequestedPrincipal)
+        {
+            var definitions = await _loanProductConfigs
+                .AllDefinitionsAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var scale = await _loanProductConfigs
+                .CurrentScaleAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            terms = new LoanPricing(
+                definitions.Select(d => d.Definition).ToList(),
+                scale).Price(application.Product, reduced, null, application.RequestedTermMonths);
+        }
+        else
+        {
+            terms = assessment.Terms;
+        }
 
         application.Approve(terms, _clock.UtcNow);
 

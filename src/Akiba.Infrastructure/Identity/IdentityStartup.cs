@@ -171,14 +171,16 @@ public static class AkibaStartup
 {
     public static async Task PrepareAsync(
         AkibaDbContext context,
-        ChartOfAccountsSeeder seeder,
+        ChartOfAccountsSeeder accountsSeeder,
+        LoanProductConfigSeeder loanConfigSeeder,
         RoleManager<AkibaRole> roles,
         UserManager<AkibaUser> users,
         ILogger logger,
         string? setupPassword,
         CancellationToken cancellationToken = default)
     {
-        await DatabaseStartup.MigrateAndSeedAsync(context, seeder, logger, cancellationToken)
+        await DatabaseStartup.MigrateAndSeedAsync(
+                context, accountsSeeder, loanConfigSeeder, logger, cancellationToken)
             .ConfigureAwait(false);
 
         await EnsureRolesAsync(roles, logger, cancellationToken).ConfigureAwait(false);

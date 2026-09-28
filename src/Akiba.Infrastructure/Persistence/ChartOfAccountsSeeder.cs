@@ -61,7 +61,7 @@ public sealed class ChartOfAccountsSeeder
     }
 }
 
-/// <summary>Applies migrations and seeds the chart of accounts at startup.</summary>
+/// <summary>Applies migrations and seeds reference data at startup.</summary>
 public static class DatabaseStartup
 {
     /// <summary>
@@ -74,12 +74,14 @@ public static class DatabaseStartup
     /// </remarks>
     public static async Task MigrateAndSeedAsync(
         AkibaDbContext context,
-        ChartOfAccountsSeeder seeder,
+        ChartOfAccountsSeeder accountsSeeder,
+        LoanProductConfigSeeder loanConfigSeeder,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(seeder);
+        ArgumentNullException.ThrowIfNull(accountsSeeder);
+        ArgumentNullException.ThrowIfNull(loanConfigSeeder);
         ArgumentNullException.ThrowIfNull(logger);
 
         var pending = await context.Database
@@ -98,9 +100,12 @@ public static class DatabaseStartup
             await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var seeded = await seeder.SeedAsync(cancellationToken).ConfigureAwait(false);
+        var accountsSeeded = await accountsSeeder.SeedAsync(cancellationToken).ConfigureAwait(false);
+        var loanConfigSeeded = await loanConfigSeeder.SeedAsync(cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
-            "Database ready. {Seeded} ledger account(s) seeded.", seeded);
+            "Database ready. {AccountsSeeded} ledger account(s) seeded, {LoanConfigSeeded} loan product config row(s) seeded.",
+            accountsSeeded,
+            loanConfigSeeded);
     }
 }

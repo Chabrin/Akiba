@@ -84,6 +84,8 @@ public static class DependencyInjection
         services.AddSingleton<IBankStatementReader, BankStatementReader>();
 
         services.AddScoped<ChartOfAccountsSeeder>();
+        services.AddScoped<LoanProductConfigSeeder>();
+        services.AddScoped<ILoanProductConfigRepository, LoanProductConfigRepository>();
 
         services.AddSingleton<IDeductionScheduleWriter, DeductionScheduleWriter>();
         services.AddSingleton<IMemberStatementWriter, MemberStatementWriter>();

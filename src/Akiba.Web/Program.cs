@@ -169,6 +169,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     await AkibaStartup.PrepareAsync(
         scope.ServiceProvider.GetRequiredService<AkibaDbContext>(),
         scope.ServiceProvider.GetRequiredService<ChartOfAccountsSeeder>(),
+        scope.ServiceProvider.GetRequiredService<LoanProductConfigSeeder>(),
         scope.ServiceProvider.GetRequiredService<RoleManager<AkibaRole>>(),
         scope.ServiceProvider.GetRequiredService<UserManager<AkibaUser>>(),
         startupLogger,

@@ -133,6 +133,10 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
 
     internal DbSet<DividendLineRow> DividendLines => Set<DividendLineRow>();
 
+    internal DbSet<LoanProductConfigRow> LoanProductConfigs => Set<LoanProductConfigRow>();
+
+    internal DbSet<TermScaleBandRow> TermScaleBands => Set<TermScaleBandRow>();
+
     /// <summary>
     /// The outbox: every message Akiba has queued, and what became of it.
     /// </summary>
