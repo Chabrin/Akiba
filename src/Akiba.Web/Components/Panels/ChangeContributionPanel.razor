@@ -1,7 +1,7 @@
 @using Akiba.Application.Members
 @inject IMediator Mediator
 
-<WorkPanel @bind-Open="Open" Title="@Title" Width="380px">
+<WorkPanel @bind-Open="Open" Title="@Title">
     @if (_member is not null)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
