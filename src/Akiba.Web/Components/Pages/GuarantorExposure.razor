@@ -1,0 +1,134 @@
+@page "/guarantors"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@using Akiba.Application.Reporting
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Guarantor exposure</PageTitle>
+
+<PageHeader Title="Guarantor exposure"
+            Description="Who has guaranteed what, and what each guarantee is currently worth. At-risk is the guarantor's share of the outstanding balance on loans where the borrower's own shares do not cover the debt.">
+    <Actions>
+        <AsAtPicker AsAt="_asAt" AsAtChanged="OnAsAtChanged" />
+    </Actions>
+</PageHeader>
+
+@if (_report is null)
+{
+    <TableSkeleton Rows="8" Columns="5" />
+}
+else
+{
+    @if (_report.Lines.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Shield"
+                    Title="No active guarantees"
+                    Description="No member is currently guaranteeing a running loan." />
+    }
+    else
+    {
+        <MudGrid Spacing="3" Class="mb-4">
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Guarantors</MudText>
+                    <MudText Typo="Typo.h5">@_report.Lines.Count</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Members guaranteeing at least one loan</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Total guaranteed</MudText>
+                    <MudText Typo="Typo.h5"><MoneyText Amount="_report.TotalGuaranteed" /></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Sum of principal on guaranteed loans</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudPaper Class="pa-4" Elevation="1">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Total at risk</MudText>
+                    <MudText Typo="Typo.h5"><MoneyText Amount="_report.TotalAtRisk" /></MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Guarantors' share of outstanding balances above borrowers' own shares</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Elevation="1">
+            <MudTable Items="_report.Lines" Dense="true" Hover="true" Striped="true" Elevation="0"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Guarantor</MudTh>
+                    <MudTh Style="text-align: right">Loans guaranteed</MudTh>
+                    <MudTh Style="text-align: right">Total guaranteed</MudTh>
+                    <MudTh Style="text-align: right">At risk</MudTh>
+                    <MudTh>Funds releasable</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Guarantor">@context.GuarantorName</MudTd>
+                    <MudTd DataLabel="Loans guaranteed" Style="text-align: right">
+                        @context.LoansGuaranteed
+                    </MudTd>
+                    <MudTd DataLabel="Total guaranteed" Class="akiba-money-cell">
+                        <MoneyText Amount="context.TotalGuaranteed" />
+                    </MudTd>
+                    <MudTd DataLabel="At risk" Class="akiba-money-cell">
+                        @if (context.TotalAtRisk.IsPositive)
+                        {
+                            <MudText Color="Color.Warning">
+                                <MoneyText Amount="context.TotalAtRisk" />
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Class="mud-text-secondary">Covered</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Funds releasable">
+                        @if (context.FundsMayBeReleased)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Yes</MudChip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="@($"Guaranteeing {context.LoansBlockingRelease} loan(s) where the borrower's shares do not cover the balance")">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                                    @context.LoansBlockingRelease loan(s) blocking
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager Class="akiba-no-print" />
+                </PagerContent>
+            </MudTable>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+                At-risk uses pro-rata allocation per the current default. A guarantor is
+                blocking release when the borrower's own shares are less than the outstanding
+                balance on a loan they cover. This date: @_report.AsAt.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture).
+            </MudText>
+        </MudPaper>
+    }
+}
+
+@code {
+    private GuarantorExposureReportView? _report;
+    private DateOnly _asAt;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _asAt = DateOnly.FromDateTime(Clock.UtcNow.DateTime);
+        await LoadAsync();
+    }
+
+    private async Task OnAsAtChanged(DateOnly asAt)
+    {
+        _asAt = asAt;
+        _report = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _report = await Mediator.Send(new GetGuarantorExposureQuery(_asAt));
+    }
+}

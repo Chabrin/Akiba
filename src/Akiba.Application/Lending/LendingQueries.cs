@@ -399,3 +399,86 @@ internal sealed class GetDashboardHandler : IRequestHandler<GetDashboardQuery, D
             .Where(account => account.Code.StartsWith(prefix, StringComparison.Ordinal))
             .Sum(account => account.Balance, Currency.Kes);
 }
+
+/// <summary>One row of a loan's expected repayment schedule, as displayed to the clerk.</summary>
+public sealed record ScheduledInstalmentView(
+    int Number,
+    DateOnly DueDate,
+    Money Amount,
+    Money PrincipalPortion,
+    Money InterestPortion);
+
+/// <summary>A single loan's repayment schedule and current position.</summary>
+public sealed record LoanScheduleView(
+    string LoanNumber,
+    string BorrowerName,
+    LoanProduct Product,
+    Money Principal,
+    Money Interest,
+    Money TotalRepayable,
+    Money OutstandingBalance,
+    DateOnly DisbursedOn,
+    DateOnly FinalDueDate,
+    LoanStatus Status,
+    IReadOnlyList<ScheduledInstalmentView> Instalments)
+{
+    public Money Repaid => TotalRepayable - OutstandingBalance;
+}
+
+/// <summary>Returns the full repayment schedule for one loan.</summary>
+public sealed record GetLoanScheduleQuery(LoanId LoanId, DateOnly AsAt) : IRequest<LoanScheduleView?>;
+
+internal sealed class GetLoanScheduleHandler : IRequestHandler<GetLoanScheduleQuery, LoanScheduleView?>
+{
+    private readonly ILoanRepository _loans;
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IBalanceQueries _balances;
+
+    public GetLoanScheduleHandler(
+        ILoanRepository loans, IBorrowerRepository borrowers, IBalanceQueries balances)
+    {
+        _loans = loans;
+        _borrowers = borrowers;
+        _balances = balances;
+    }
+
+    public async Task<LoanScheduleView?> Handle(
+        GetLoanScheduleQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var loan = await _loans.FindByIdAsync(query.LoanId, cancellationToken).ConfigureAwait(false);
+        if (loan is null)
+        {
+            return null;
+        }
+
+        var borrower = await _borrowers
+            .FindByIdAsync(loan.BorrowerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var outstanding = await _balances
+            .NaturalBalanceAsAtAsync(loan.ReceivableAccountId, query.AsAt, cancellationToken)
+            .ConfigureAwait(false);
+
+        var schedule = loan.Schedule;
+
+        return new LoanScheduleView(
+            loan.LoanNumber,
+            borrower?.Name.Full ?? "(unknown borrower)",
+            loan.Terms.Product,
+            loan.Terms.Principal,
+            loan.Terms.Interest,
+            loan.Terms.TotalRepayable,
+            outstanding,
+            loan.DisbursedOn,
+            schedule.FinalDueDate,
+            loan.Status,
+            [.. schedule.Instalments.Select(i => new ScheduledInstalmentView(
+                i.Number,
+                i.DueDate,
+                i.Amount,
+                i.PrincipalPortion,
+                i.InterestPortion))]);
+    }
+}

@@ -1,0 +1,123 @@
+@using Akiba.Application.Lending
+@inject IMediator Mediator
+@inject IClock Clock
+
+<WorkPanel @bind-Open="Open"
+           Title="@(_schedule is null ? "Repayment schedule" : _schedule.LoanNumber)"
+           Subtitle="@_schedule?.BorrowerName"
+           ConfirmText="Close"
+           ConfirmIcon="@Icons.Material.Filled.Check"
+           ConfirmColour="Color.Default"
+           OnConfirm="CloseAsync">
+    @if (_loading)
+    {
+        <TableSkeleton Rows="6" Columns="4" />
+    }
+    else if (_schedule is not null)
+    {
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Principal</MudText>
+                <MudText Typo="Typo.body2"><strong><MoneyText Amount="_schedule.Principal" /></strong></MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
+                <MudText Typo="Typo.body2"><strong><MoneyText Amount="_schedule.Interest" /></strong></MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Total repayable</MudText>
+                <MudText Typo="Typo.body2"><strong><MoneyText Amount="_schedule.TotalRepayable" /></strong></MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Outstanding</MudText>
+                <MudText Typo="Typo.body2"><strong><MoneyText Amount="_schedule.OutstandingBalance" /></strong></MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Disbursed</MudText>
+                <MudText Typo="Typo.body2">@_schedule.DisbursedOn.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</MudText>
+            </MudItem>
+            <MudItem xs="6">
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">Final instalment</MudText>
+                <MudText Typo="Typo.body2">@_schedule.FinalDueDate.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</MudText>
+            </MudItem>
+        </MudGrid>
+
+        @* Progress bar showing how much has been repaid *@
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-1">
+            Repaid <MoneyText Amount="_schedule.Repaid" /> of <MoneyText Amount="_schedule.TotalRepayable" />
+            (@((_schedule.TotalRepayable.IsZero ? 0d : (double)(_schedule.Repaid.Amount / _schedule.TotalRepayable.Amount) * 100d).ToString("0", System.Globalization.CultureInfo.InvariantCulture))%)
+        </MudText>
+        <MudProgressLinear Value="@(_schedule.TotalRepayable.IsZero ? 0d : (double)(_schedule.Repaid.Amount / _schedule.TotalRepayable.Amount) * 100d)" Color="Color.Primary" Class="mb-4" />
+
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Due</th>
+                    <th style="text-align:right">Instalment</th>
+                    <th style="text-align:right">Principal</th>
+                    <th style="text-align:right">Interest</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _schedule.Instalments)
+                {
+                    var isPast = row.DueDate < _today;
+                    <tr class="@(isPast ? "mud-text-secondary" : "")">
+                        <td>@row.Number</td>
+                        <td>@row.DueDate.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</td>
+                        <td style="text-align:right"><MoneyText Amount="row.Amount" /></td>
+                        <td style="text-align:right"><MoneyText Amount="row.PrincipalPortion" /></td>
+                        <td style="text-align:right"><MoneyText Amount="row.InterestPortion" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+            @_schedule.Instalments.Count instalments. Each is due on the last day of the month
+            and must reach HR by the 25th for payroll deduction that month.
+        </MudText>
+    }
+</WorkPanel>
+
+@code {
+    private LoanScheduleView? _schedule;
+    private bool _loading;
+    private DateOnly _today;
+    private LoanId? _loadedFor;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public LoanId? LoanId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _today = DateOnly.FromDateTime(Clock.UtcNow.DateTime);
+
+        if (!Open || LoanId is not { } id)
+        {
+            _schedule = null;
+            _loadedFor = null;
+            return;
+        }
+
+        if (_loadedFor == id)
+        {
+            return;
+        }
+
+        _loadedFor = id;
+        _loading = true;
+        _schedule = await Mediator.Send(new GetLoanScheduleQuery(id, _today));
+        _loading = false;
+    }
+
+    private async Task CloseAsync()
+    {
+        await OpenChanged.InvokeAsync(false);
+        Open = false;
+        _schedule = null;
+        _loadedFor = null;
+    }
+}

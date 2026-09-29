@@ -1,9 +1,12 @@
 @page "/loans"
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@using Akiba.Application.Lending
 @inject IMediator Mediator
 @inject IClock Clock
 
 <PageTitle>Akiba - Loans</PageTitle>
+
+<LoanSchedulePanel @bind-Open="_showSchedule" LoanId="_scheduleForLoan" />
 
 <PageHeader Title="Loan portfolio"
             Description="Outstanding balances derived from each loan's receivable account; arrears from comparing the schedule with what was actually paid.">
@@ -142,6 +145,12 @@ else
                            Hidden until the pointer is on the row, like every other row action
                            in Akiba - a portfolio of running loans should read as balances. *@
                         <div class="akiba-row-actions">
+                            <MudTooltip Text="View repayment schedule">
+                                <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth"
+                                               Size="Size.Small"
+                                               aria-label="@($"View schedule for {context.LoanNumber}")"
+                                               OnClick="@(() => ViewSchedule(context.LoanId))" />
+                            </MudTooltip>
                             <MudTooltip Text="Restructure this loan">
                                 <MudIconButton Icon="@Icons.Material.Filled.ChangeCircle"
                                                Size="Size.Small"
@@ -161,6 +170,14 @@ else
 
 @code {
     private BorrowerCategory? _category;
+    private bool _showSchedule;
+    private LoanId? _scheduleForLoan;
+
+    private void ViewSchedule(LoanId id)
+    {
+        _scheduleForLoan = id;
+        _showSchedule = true;
+    }
 
     private static readonly BorrowerCategory[] AllCategories =
         [BorrowerCategory.Employee, BorrowerCategory.Landlord, BorrowerCategory.Client];
