@@ -1,7 +1,12 @@
 @using Akiba.Application.Members
 @inject IMediator Mediator
 
-<WorkPanel @bind-Open="Open" Title="@Title">
+<WorkPanel @bind-Open="Open"
+           Title="@Title"
+           ConfirmText="Save amount"
+           Busy="_saving"
+           Error="@_error"
+           OnConfirm="SaveAsync">
     @if (_member is not null)
     {
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
@@ -27,21 +32,7 @@
                          Format="N2"
                          Adornment="Adornment.Start"
                          AdornmentText="KES"
-                         Class="mb-4"
                          autofocus />
-
-        @if (_error is not null)
-        {
-            <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
-        }
-
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   FullWidth="true"
-                   Disabled="_saving"
-                   OnClick="SaveAsync">
-            @(_saving ? "Saving…" : "Save contribution amount")
-        </MudButton>
     }
 </WorkPanel>
 

@@ -1,0 +1,164 @@
+@using Akiba.Application.Lending
+@using Akiba.Domain.Lending
+@inject IMediator Mediator
+
+<WorkPanel @bind-Open="Open"
+           Title="@Title"
+           Subtitle="@Subtitle"
+           ConfirmText="Save rate"
+           Busy="_saving"
+           Error="@_error"
+           OnConfirm="SaveAsync">
+    @if (_config is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+            Record the rate and limits the committee approved. Enter the minute date as the
+            <strong>effective from</strong> date so the change is traceable.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_rate"
+                                 Label="Interest rate (%)"
+                                 Variant="Variant.Outlined"
+                                 Min="0.01m"
+                                 Max="100m"
+                                 Format="N2"
+                                 Adornment="Adornment.End"
+                                 AdornmentText="%"
+                                 HelperText="@RateHelperText"
+                                 autofocus />
+            </MudItem>
+            <MudItem xs="12">
+                <MudSwitch T="bool"
+                           @bind-Value="_rateIsMonthly"
+                           Label="@(_rateIsMonthly ? "Per month on principal" : "Flat — charged once at disbursement")"
+                           Color="Color.Primary" />
+            </MudItem>
+            @if (_config.Product != LoanProduct.Normal)
+            {
+                <MudItem xs="12">
+                    <MudNumericField T="decimal?"
+                                     @bind-Value="_maxPrincipalKes"
+                                     Label="Maximum principal (KES, blank = no cap)"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Format="N2" />
+                </MudItem>
+            }
+            @if (_config.Product == LoanProduct.Emergency)
+            {
+                <MudItem xs="12">
+                    <MudNumericField T="int?"
+                                     @bind-Value="_fixedTermMonths"
+                                     Label="Fixed term (months, blank = variable)"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="360" />
+                </MudItem>
+            }
+            @if (_config.Product != LoanProduct.Normal && _config.Product != LoanProduct.Emergency)
+            {
+                <MudItem xs="12">
+                    <MudNumericField T="int?"
+                                     @bind-Value="_maximumTermMonths"
+                                     Label="Maximum term (months)"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="360" />
+                </MudItem>
+            }
+            <MudItem xs="12">
+                <MudDatePicker @bind-Date="_effectiveFrom"
+                               Label="Effective from (committee minute date)"
+                               Variant="Variant.Outlined"
+                               MaxDate="DateTime.Today"
+                               DateFormat="dd/MM/yyyy" />
+            </MudItem>
+        </MudGrid>
+    }
+</WorkPanel>
+
+@code {
+    private LoanProductConfig? _config;
+    private decimal _rate;
+    private bool _rateIsMonthly;
+    private decimal? _maxPrincipalKes;
+    private int? _fixedTermMonths;
+    private int? _maximumTermMonths;
+    private DateTime? _effectiveFrom;
+    private bool _saving;
+    private string? _error;
+
+    private string Title => _config is null ? "Loan product" : _config.ProductName;
+
+    private string Subtitle => _config is null
+        ? string.Empty
+        : _config.RateIsMonthly
+            ? $"Currently {_config.InterestRate:P0}/month"
+            : $"Currently {_config.InterestRate:P0} flat";
+
+    private string RateHelperText => _rateIsMonthly
+        ? "Applied each month to the principal for the full term"
+        : "Applied once at disbursement, regardless of how long the loan runs";
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public LoanProductConfig? Config { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Config != _config)
+        {
+            _config = Config;
+            if (_config is not null)
+            {
+                _rate = _config.InterestRate * 100m;
+                _rateIsMonthly = _config.RateIsMonthly;
+                _maxPrincipalKes = _config.MaxPrincipal?.Amount;
+                _fixedTermMonths = _config.FixedTermMonths;
+                _maximumTermMonths = _config.MaximumTermMonths;
+                _effectiveFrom = _config.EffectiveFrom.ToDateTime(TimeOnly.MinValue);
+                _error = null;
+            }
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_config is null) return;
+
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            var effectiveDate = _effectiveFrom.HasValue
+                ? DateOnly.FromDateTime(_effectiveFrom.Value)
+                : _config.EffectiveFrom;
+
+            await Mediator.Send(new UpdateLoanProductConfigCommand(
+                _config.Product,
+                _rate / 100m,
+                _rateIsMonthly,
+                _maxPrincipalKes,
+                _fixedTermMonths,
+                _maximumTermMonths,
+                effectiveDate));
+
+            await OpenChanged.InvokeAsync(false);
+            Open = false;
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

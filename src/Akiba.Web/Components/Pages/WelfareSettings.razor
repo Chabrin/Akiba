@@ -1,5 +1,6 @@
 @page "/settings"
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@using Akiba.Application.Lending
 @inject IMediator Mediator
 
 <PageTitle>Akiba - Welfare Settings</PageTitle>
@@ -11,6 +12,10 @@
 <ChangeContributionPanel @bind-Open="_changingContribution"
                          Member="_editingMember"
                          OnSaved="ReloadAsync" />
+
+<ChangeLoanProductPanel @bind-Open="_editingLoanProduct"
+                        Config="_editingConfig"
+                        OnSaved="ReloadLoanProductsAsync" />
 
 @* ── Contribution amounts ── *@
 <MudPaper Elevation="1" Class="mb-6">
@@ -131,102 +136,139 @@
     }
 </MudPaper>
 
-@* ── Loan products (read-only) ── *@
+@* ── Loan products ── *@
 <MudPaper Elevation="1" Class="mb-6">
     <div class="pa-4">
         <MudText Typo="Typo.h6" Class="mb-1">Loan products</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
-            Rates and terms as set by the committee (minutes of 6 September 2026).
-            Contact ICT to record a change the committee has approved.
+            Rates and terms as approved by the committee. Use the edit button to record a change
+            the committee has approved — enter the minute date as the effective from date.
         </MudText>
 
-        <MudGrid Spacing="3">
-            @* Normal loan *@
-            <MudItem xs="12" sm="6">
-                <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.subtitle1" Class="mb-3">
-                        <MudIcon Icon="@Icons.Material.Filled.RequestQuote" Size="Size.Small" Class="mr-1" />
-                        Normal Loan
-                    </MudText>
+        @if (_loanProducts is null)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mb-4" />
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @foreach (var product in _loanProducts)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudPaper Outlined="true" Class="pa-4 d-flex flex-column" Style="height:100%">
+                            <div class="d-flex align-center justify-space-between mb-2">
+                                <MudText Typo="Typo.subtitle1">
+                                    <MudIcon Icon="@ProductIcon(product.Product)" Size="Size.Small" Class="mr-1" />
+                                    @product.ProductName
+                                </MudText>
+                                <MudTooltip Text="@($"Edit {product.ProductName} rate")">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   Color="Color.Default"
+                                                   aria-label="@($"Edit {product.ProductName}")"
+                                                   OnClick="@(() => StartEditProduct(product))" />
+                                </MudTooltip>
+                            </div>
 
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
-                    <MudText Class="mb-2">
-                        <strong>10% flat of principal</strong>, charged once at disbursement —
-                        not per month. A loan of KES 100,000 attracts KES 10,000 regardless of
-                        how quickly it is repaid.
-                    </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
+                            @if (product.IsConfigured)
+                            {
+                                <MudText Class="mb-2">
+                                    <strong>
+                                        @if (product.RateIsMonthly)
+                                        {
+                                            @($"{product.InterestRate:P0} per month on principal")
+                                        }
+                                        else
+                                        {
+                                            @($"{product.InterestRate:P0} flat of principal, charged once")
+                                        }
+                                    </strong>
+                                </MudText>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                                    Rate not yet approved by the committee
+                                </MudAlert>
+                            }
 
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum principal</MudText>
-                    <MudText Class="mb-2">Twice the member's shareholding (no fixed ceiling)</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Principal limit</MudText>
+                            <MudText Class="mb-2">
+                                @if (product.MaxPrincipal.HasValue)
+                                {
+                                    <strong><MoneyText Amount="product.MaxPrincipal.Value" /></strong>
+                                }
+                                else
+                                {
+                                    <text>No fixed ceiling</text>
+                                }
+                            </MudText>
 
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment — graduated scale (v1, Sep 2026)</MudText>
-                    <MudSimpleTable Dense="true" Class="mt-1 mb-2">
-                        <thead>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment</MudText>
+                            <MudText Class="mb-2">
+                                @if (product.FixedTermMonths.HasValue)
+                                {
+                                    <strong>Fixed @product.FixedTermMonths months</strong>
+                                }
+                                else if (product.UsesGraduatedScale)
+                                {
+                                    <text>Graduated scale (see below)</text>
+                                }
+                                else if (product.MaximumTermMonths.HasValue)
+                                {
+                                    <text>Up to <strong>@product.MaximumTermMonths months</strong></text>
+                                }
+                                else
+                                {
+                                    <text>—</text>
+                                }
+                            </MudText>
+
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-auto">
+                                Effective from @product.EffectiveFrom.ToShortDateString()
+                            </MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            @if (_termScale is not null && _termScale.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2">Graduated term scale</MudText>
+                <MudSimpleTable Dense="true" Class="mb-2">
+                    <thead>
+                        <tr>
+                            <th>Principal range (KES)</th>
+                            <th style="text-align:right">Max months</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var band in _termScale)
+                        {
                             <tr>
-                                <th>Principal range (KES)</th>
-                                <th style="text-align:right">Max months</th>
+                                <td>
+                                    @band.From.Amount.ToString("N0")
+                                    @if (band.To.HasValue)
+                                    {
+                                        @($" – {band.To.Value.Amount:N0}")
+                                    }
+                                    else
+                                    {
+                                        @(" and above")
+                                    }
+                                </td>
+                                <td style="text-align:right">@band.MaxTermMonths</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td>30,000 – 50,000</td><td style="text-align:right">8</td></tr>
-                            <tr><td>50,001 – 100,000</td><td style="text-align:right">12</td></tr>
-                            <tr><td>100,001 – 150,000</td><td style="text-align:right">16</td></tr>
-                            <tr><td>150,001 – 200,000</td><td style="text-align:right">20</td></tr>
-                            <tr><td>200,001 – 400,000</td><td style="text-align:right">24</td></tr>
-                            <tr><td>Above 400,000</td><td style="text-align:right">30</td></tr>
-                        </tbody>
-                    </MudSimpleTable>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                        The scale gives the <em>maximum</em>. A member may ask for a shorter term;
-                        they may not ask for a longer one. Loans below KES 30,000 have no defined
-                        term — the committee has not set one (open question 5).
-                    </MudText>
-                </MudPaper>
-            </MudItem>
-
-            @* Emergency loan *@
-            <MudItem xs="12" sm="6">
-                <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.subtitle1" Class="mb-3">
-                        <MudIcon Icon="@Icons.Material.Filled.Emergency" Size="Size.Small" Class="mr-1" />
-                        Emergency Loan
-                    </MudText>
-
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
-                    <MudText Class="mb-2">
-                        <strong>10% flat of principal</strong>, same rate as a normal loan,
-                        charged once. A KES 25,000 emergency loan: 25,000 + 2,500 interest =
-                        KES 27,500 total, repaid at KES 5,500 × 5 months.
-                    </MudText>
-
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum principal</MudText>
-                    <MudText Class="mb-2"><strong>KES 25,000</strong></MudText>
-
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment</MudText>
-                    <MudText Class="mb-2"><strong>Always 5 months</strong> — fixed, not a maximum</MudText>
-
-                    <MudDivider Class="my-3" />
-
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">
-                        <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" Class="mr-1" />
-                        Rental Income / Client Loan (landlords)
-                    </MudText>
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Interest</MudText>
-                    <MudText Class="mb-2">
-                        <strong>3% per month on principal</strong> — up to 5 months, so up to 15% total.
-                    </MudText>
-
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Repayment</MudText>
-                    <MudText Class="mb-2">
-                        Deducted from the landlord's rental income each month, not from a payroll.
-                        Maximum 5 months.
-                    </MudText>
-
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Maximum principal</MudText>
-                    <MudText Class="mb-2">Set by the committee per application (based on rental income)</MudText>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    The scale gives the <em>maximum</em>. A member may request a shorter term.
+                    Loans below KES 30,000 have no defined term (open question 5).
+                </MudText>
+            }
+        }
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">
             Employee member loans: borrowing limit is twice shareholding; max two loans at once;
@@ -306,9 +348,13 @@
 
 @code {
     private IReadOnlyList<ContributionSetting>? _contributions;
+    private IReadOnlyList<LoanProductConfig>? _loanProducts;
+    private IReadOnlyList<TermScaleBandSetting>? _termScale;
     private string _search = string.Empty;
     private bool _changingContribution;
     private ContributionSetting? _editingMember;
+    private bool _editingLoanProduct;
+    private LoanProductConfig? _editingConfig;
 
     private IReadOnlyList<ContributionSetting> Filtered =>
         _contributions is null
@@ -319,7 +365,10 @@
     private int UnsetCount =>
         _contributions?.Count(m => !m.MonthlyContribution.HasValue && m.IsActive) ?? 0;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadAsync(), LoadLoanProductsAsync());
+    }
 
     private bool Matches(ContributionSetting m) =>
         m.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
@@ -331,10 +380,24 @@
     private async Task LoadAsync() =>
         _contributions = await Mediator.Send(new ListContributionSettingsQuery());
 
+    private async Task LoadLoanProductsAsync()
+    {
+        var (products, scale) = await Mediator.Send(new ListLoanProductConfigsQuery());
+        _loanProducts = products;
+        _termScale = scale;
+    }
+
     private async Task ReloadAsync()
     {
         _contributions = null;
         await LoadAsync();
+    }
+
+    private async Task ReloadLoanProductsAsync()
+    {
+        _loanProducts = null;
+        _termScale = null;
+        await LoadLoanProductsAsync();
     }
 
     private void StartEdit(ContributionSetting member)
@@ -342,4 +405,18 @@
         _editingMember = member;
         _changingContribution = true;
     }
+
+    private void StartEditProduct(LoanProductConfig config)
+    {
+        _editingConfig = config;
+        _editingLoanProduct = true;
+    }
+
+    private static string ProductIcon(LoanProduct product) => product switch
+    {
+        LoanProduct.Emergency => Icons.Material.Filled.Emergency,
+        LoanProduct.RentalIncome => Icons.Material.Filled.Home,
+        LoanProduct.Client => Icons.Material.Filled.Person,
+        _ => Icons.Material.Filled.RequestQuote,
+    };
 }
