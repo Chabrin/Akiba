@@ -1,85 +1,83 @@
 <MudNavMenu>
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">LEDGER</MudText>
-
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
         Dashboard
     </MudNavLink>
-    <MudNavLink Href="/ledger" Icon="@Icons.Material.Filled.AccountBalance">
-        Chart of accounts
-    </MudNavLink>
-    <MudNavLink Href="/ledger/journal" Icon="@Icons.Material.Filled.MenuBook">
-        Journal
-    </MudNavLink>
-    <MudNavLink Href="/ledger/period-close" Icon="@Icons.Material.Filled.Lock">
-        Closing a month
-    </MudNavLink>
-    <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.History">
-        Audit trail
-    </MudNavLink>
 
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">MEMBERS</MudText>
+    <MudNavGroup Title="Members" Icon="@Icons.Material.Filled.People" @bind-Expanded="_membersOpen">
+        <MudNavLink Href="/members" Icon="@Icons.Material.Filled.PersonSearch">
+            Members
+        </MudNavLink>
+        <MudNavLink Href="/guarantors" Icon="@Icons.Material.Filled.Shield">
+            Guarantor exposure
+        </MudNavLink>
+    </MudNavGroup>
 
-    <MudNavLink Href="/members" Icon="@Icons.Material.Filled.People">
-        Members
-    </MudNavLink>
-    <MudNavLink Href="/guarantors" Icon="@Icons.Material.Filled.Shield">
-        Guarantor exposure
-    </MudNavLink>
+    <MudNavGroup Title="Lending" Icon="@Icons.Material.Filled.RequestQuote" @bind-Expanded="_lendingOpen">
+        <MudNavLink Href="/applications" Icon="@Icons.Material.Filled.Assignment">
+            Applications
+        </MudNavLink>
+        <MudNavLink Href="/loans" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+            Running loans
+        </MudNavLink>
+        <MudNavLink Href="/cheque-books" Icon="@Icons.Material.Filled.ConfirmationNumber">
+            Cheque books
+        </MudNavLink>
+    </MudNavGroup>
 
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">LENDING</MudText>
+    <MudNavGroup Title="Transactions" Icon="@Icons.Material.Filled.SwapHoriz" @bind-Expanded="_transactionsOpen">
+        <MudNavLink Href="/receipts" Icon="@Icons.Material.Filled.Receipt">
+            Receipts
+        </MudNavLink>
+        <MudNavLink Href="/reconciliation" Icon="@Icons.Material.Filled.AccountBalance">
+            Bank reconciliation
+        </MudNavLink>
+        <MudNavLink Href="/dividends" Icon="@Icons.Material.Filled.Savings">
+            Dividends
+        </MudNavLink>
+    </MudNavGroup>
 
-    <MudNavLink Href="/applications" Icon="@Icons.Material.Filled.Assignment">
-        Applications
-    </MudNavLink>
-    <MudNavLink Href="/loans" Icon="@Icons.Material.Filled.RequestQuote">
-        Loans
-    </MudNavLink>
-    <MudNavLink Href="/cheque-books" Icon="@Icons.Material.Filled.ConfirmationNumber">
-        Cheque books
-    </MudNavLink>
+    <MudNavGroup Title="Accounting" Icon="@Icons.Material.Filled.MenuBook" @bind-Expanded="_accountingOpen">
+        <MudNavLink Href="/ledger" Icon="@Icons.Material.Filled.AccountTree">
+            Chart of accounts
+        </MudNavLink>
+        <MudNavLink Href="/ledger/journal" Icon="@Icons.Material.Filled.MenuBook">
+            Journal
+        </MudNavLink>
+        <MudNavLink Href="/ledger/period-close" Icon="@Icons.Material.Filled.Lock">
+            Closing a month
+        </MudNavLink>
+        <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.History">
+            Audit trail
+        </MudNavLink>
+    </MudNavGroup>
 
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">MONEY IN</MudText>
+    <MudNavGroup Title="Communications" Icon="@Icons.Material.Filled.Forum" @bind-Expanded="_commsOpen">
+        <MudNavLink Href="/notifications" Icon="@Icons.Material.Filled.Email">
+            Messages
+        </MudNavLink>
+        <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Description">
+            Reports
+        </MudNavLink>
+    </MudNavGroup>
 
-    <MudNavLink Href="/receipts" Icon="@Icons.Material.Filled.Receipt">
-        Receipts
-    </MudNavLink>
-    <MudNavLink Href="/reconciliation" Icon="@Icons.Material.Filled.AccountBalance">
-        Bank reconciliation
-    </MudNavLink>
-
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">MONEY OUT</MudText>
-
-    <MudNavLink Href="/dividends" Icon="@Icons.Material.Filled.Savings">
-        Dividends
-    </MudNavLink>
-    <MudNavLink Href="/notifications" Icon="@Icons.Material.Filled.Email">
-        Messages
-    </MudNavLink>
-
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">PAPER</MudText>
-
-    <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Description">
-        Reports
-    </MudNavLink>
-
-    <MudDivider Class="my-2" />
-    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">SOCIETY</MudText>
-
-    <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Tune">
-        Welfare settings
-    </MudNavLink>
-
-    @* Last, and on its own. This runs a handful of times when the society first moves onto
-       Akiba and then never again, so it sits at the bottom where a daily user stops looking
-       rather than among the screens they work in. *@
-    <MudDivider Class="my-2" />
-
-    <MudNavLink Href="/setup/opening-balances" Icon="@Icons.Material.Filled.Start">
-        Opening balances
-    </MudNavLink>
+    @* Administration sits at the bottom collapsed — used during initial setup and
+       then almost never again. Opening balances is one-time; welfare settings change
+       only when the committee amends the rules. *@
+    <MudNavGroup Title="Administration" Icon="@Icons.Material.Filled.Tune" @bind-Expanded="_adminOpen">
+        <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Tune">
+            Welfare settings
+        </MudNavLink>
+        <MudNavLink Href="/setup/opening-balances" Icon="@Icons.Material.Filled.Start">
+            Opening balances
+        </MudNavLink>
+    </MudNavGroup>
 </MudNavMenu>
+
+@code {
+    private bool _membersOpen = true;
+    private bool _lendingOpen = true;
+    private bool _transactionsOpen = true;
+    private bool _accountingOpen = false;
+    private bool _commsOpen = false;
+    private bool _adminOpen = false;
+}
