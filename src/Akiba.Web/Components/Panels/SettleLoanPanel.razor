@@ -1,0 +1,173 @@
+@using Akiba.Application.Lending
+@using Akiba.Domain.Ledger
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Records a lump-sum settlement: a member pays the entire outstanding loan balance via
+    M-Pesa, bank transfer, or cheque in one payment and the loan is closed.
+
+    Opens from the running-loans row action. The amount is pre-filled from the summary so
+    the clerk can confirm or type over it. The panel does not stay open after posting —
+    a settled loan disappears from the portfolio and there is nothing more to do.
+*@
+<WorkPanel Open="@Open"
+           OpenChanged="@(async open => { if (!open) await CloseAsync(); })"
+           Title="Settle loan"
+           Subtitle="@Loan?.LoanNumber"
+           Consequence="This posts to the ledger immediately and marks the loan as settled. It cannot be undone — a mistake must be corrected with a journal adjustment."
+           ConfirmText="Record settlement"
+           ConfirmIcon="@Icons.Material.Filled.CheckCircle"
+           ConfirmColour="Color.Success"
+           CanConfirm="@(_amount > 0 && !string.IsNullOrWhiteSpace(_reference))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ConfirmAsync">
+
+    @if (Loan is not null)
+    {
+        <div class="akiba-field-group mb-3">
+            <span class="akiba-field-group-label">Current position</span>
+
+            <MudGrid Spacing="2">
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Borrower</MudText>
+                    <MudText Typo="Typo.body2">@Loan.BorrowerName</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Product</MudText>
+                    <MudText Typo="Typo.body2">@Loan.Product.DisplayName()</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Total repayable</MudText>
+                    <MudText Typo="Typo.body2"><strong><MoneyText Amount="Loan.TotalRepayable" /></strong></MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Outstanding balance</MudText>
+                    <MudText Typo="Typo.body2"><strong><MoneyText Amount="Loan.OutstandingBalance" /></strong></MudText>
+                </MudItem>
+            </MudGrid>
+        </div>
+    }
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Settlement payment</span>
+
+        <MudNumericField T="decimal" @bind-Value="_amount"
+                         Label="Settlement amount (KES)"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Min="0" Format="N2" HideSpinButtons="true"
+                         HelperText="Must equal the outstanding balance exactly" />
+
+        <MudDatePicker @bind-Date="_settledOn"
+                       Label="Date received"
+                       DateFormat="dd MMM yyyy"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+
+        <MudSelect T="SourceDocumentKind" @bind-Value="_paymentMethod"
+                   Label="Payment method"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2">
+            <MudSelectItem Value="@SourceDocumentKind.MpesaReceipt">M-Pesa</MudSelectItem>
+            <MudSelectItem Value="@SourceDocumentKind.BankDeposit">Bank deposit / EFT</MudSelectItem>
+            <MudSelectItem Value="@SourceDocumentKind.Cheque">Cheque</MudSelectItem>
+        </MudSelect>
+
+        <MudTextField @bind-Value="_reference"
+                      Label="@ReferenceLabel"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                      HelperText="@ReferenceHint" />
+    </div>
+</WorkPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public LoanSummary? Loan { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private decimal _amount;
+    private DateTime? _settledOn;
+    private SourceDocumentKind _paymentMethod = SourceDocumentKind.MpesaReceipt;
+    private string _reference = string.Empty;
+
+    private bool _busy;
+    private string? _error;
+
+    private LoanId? _previousLoanId;
+    private bool _previousOpen;
+
+    private string ReferenceLabel => _paymentMethod switch
+    {
+        SourceDocumentKind.MpesaReceipt => "M-Pesa code",
+        SourceDocumentKind.BankDeposit => "Bank reference / deposit slip no.",
+        SourceDocumentKind.Cheque => "Cheque number",
+        _ => "Reference",
+    };
+
+    private string ReferenceHint => _paymentMethod switch
+    {
+        SourceDocumentKind.MpesaReceipt => "The transaction code from the M-Pesa SMS confirmation",
+        SourceDocumentKind.BankDeposit => "The reference on the bank deposit slip or EFT notification",
+        SourceDocumentKind.Cheque => "The number printed on the cheque",
+        _ => string.Empty,
+    };
+
+    protected override void OnParametersSet()
+    {
+        var opened = Open && !_previousOpen;
+        var loanChanged = Loan?.LoanId != _previousLoanId;
+
+        _previousOpen = Open;
+        _previousLoanId = Loan?.LoanId;
+
+        if (Open && (opened || loanChanged))
+        {
+            _settledOn ??= DateTime.Today;
+            _amount = Loan?.OutstandingBalance.Amount ?? 0m;
+            _reference = string.Empty;
+            _paymentMethod = SourceDocumentKind.MpesaReceipt;
+            _error = null;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (Loan is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new SettleLoanCommand(
+                Loan.LoanId,
+                Money.Kes(_amount),
+                DateOnly.FromDateTime(_settledOn ?? DateTime.Today),
+                _paymentMethod,
+                _reference));
+
+            await OnChanged.InvokeAsync();
+            await CloseAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _amount = 0;
+        _settledOn = null;
+        _reference = string.Empty;
+        _error = null;
+        await OpenChanged.InvokeAsync(false);
+    }
+}

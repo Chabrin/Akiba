@@ -1,0 +1,200 @@
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Manages guarantors on a draft loan application.
+
+    Opens from the Draft row action. Guarantors are added one at a time — the panel stays open
+    after each addition so the clerk can add all of them without reopening it. The member
+    selector excludes the borrower (who cannot guarantee their own loan) and anyone already
+    added.
+*@
+<WorkPanel Open="@Open"
+           OpenChanged="@(async open => { if (!open) await CloseAsync(); })"
+           Title="Guarantors"
+           Subtitle="@Application?.BorrowerName"
+           ConfirmText="Add guarantor"
+           ConfirmIcon="@Icons.Material.Filled.PersonAdd"
+           CanConfirm="@(_guarantorId.HasValue && _guaranteedAmount > 0)"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="AddAsync">
+
+    @if (_guarantors.Count > 0)
+    {
+        <MudText Typo="Typo.subtitle2" GutterBottom="true">Added so far</MudText>
+
+        @foreach (var g in _guarantors)
+        {
+            <MudPaper Elevation="0" Class="pa-2 mb-2"
+                      Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 4px;">
+                <div class="d-flex justify-space-between align-center">
+                    <div>
+                        <MudText Typo="Typo.body2">@g.GuarantorName</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@g.PayrollNumber</MudText>
+                    </div>
+                    <div class="text-right">
+                        <MoneyText Amount="g.GuaranteedAmount" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            Shares at signing: <MoneyText Amount="g.ShareValueAtSigning" />
+                        </MudText>
+                    </div>
+                </div>
+            </MudPaper>
+        }
+
+        <MudDivider Class="my-3" />
+    }
+    else if (_loaded)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+            No guarantors added yet. Add them below.
+        </MudText>
+    }
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Add a guarantor</span>
+
+        <MudSelect T="Guid?" Value="_guarantorId" ValueChanged="OnGuarantorChanged"
+                   Label="Member" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+            @foreach (var member in EligibleMembers)
+            {
+                <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
+                    @member.MembershipNumber — @member.Name
+                    (shares <MoneyText Amount="member.Shareholding" />)
+                </MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudNumericField T="decimal" @bind-Value="_guaranteedAmount"
+                         Label="Guaranteed amount (KES)"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Min="0" Format="N2" HideSpinButtons="true" Class="mt-2" />
+
+        <MudNumericField T="decimal" @bind-Value="_shareValueAtSigning"
+                         Label="Share value at signing (KES)"
+                         Variant="Variant.Outlined" Margin="Margin.Dense"
+                         Min="0" Format="N2" HideSpinButtons="true" Class="mt-2"
+                         HelperText="Auto-filled from the member's current shareholding" />
+
+        <MudDatePicker Date="_signedOn" DateChanged="d => _signedOn = d"
+                       Label="Signed on" DateFormat="dd MMM yyyy"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+    </div>
+</WorkPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter] public ApplicationSummary? Application { get; set; }
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private IReadOnlyList<GuarantorView> _guarantors = [];
+    private IReadOnlyList<MemberSummary> _allMembers = [];
+
+    private Guid? _guarantorId;
+    private decimal _guaranteedAmount;
+    private decimal _shareValueAtSigning;
+    private DateTime? _signedOn;
+
+    private bool _busy;
+    private bool _loaded;
+    private string? _error;
+
+    private bool _previousOpen;
+    private LoanApplicationId? _previousApplicationId;
+
+    private IEnumerable<MemberSummary> EligibleMembers => _allMembers
+        .Where(m => Application is null || m.MemberId.Value != Application.BorrowerId.Value)
+        .Where(m => !_guarantors.Any(g => g.GuarantorId.Value == m.MemberId.Value));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var opened = Open && !_previousOpen;
+        var applicationChanged = Application?.ApplicationId != _previousApplicationId;
+
+        _previousOpen = Open;
+        _previousApplicationId = Application?.ApplicationId;
+
+        if (Open && (opened || applicationChanged))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var today = Clock.TodayInNairobi;
+        _allMembers = await Mediator.Send(new ListMembersQuery(today));
+
+        if (Application is not null)
+        {
+            _guarantors = await Mediator.Send(new ListApplicationGuaranteesQuery(Application.ApplicationId));
+        }
+
+        _signedOn ??= DateTime.Today;
+        _loaded = true;
+    }
+
+    private void OnGuarantorChanged(Guid? id)
+    {
+        _guarantorId = id;
+        var member = _allMembers.FirstOrDefault(m => m.MemberId.Value == id);
+        if (member is not null)
+        {
+            _shareValueAtSigning = member.Shareholding.Amount;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_guarantorId is null || Application is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new AddGuaranteeCommand(
+                Application.ApplicationId,
+                new BorrowerId(_guarantorId.Value),
+                Money.Kes(_guaranteedAmount),
+                Money.Kes(_shareValueAtSigning),
+                DateOnly.FromDateTime(_signedOn ?? DateTime.Today)));
+
+            _guarantors = await Mediator.Send(new ListApplicationGuaranteesQuery(Application.ApplicationId));
+
+            _guarantorId = null;
+            _guaranteedAmount = 0;
+            _shareValueAtSigning = 0;
+            _signedOn = DateTime.Today;
+
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _loaded = false;
+        _guarantorId = null;
+        _guaranteedAmount = 0;
+        _shareValueAtSigning = 0;
+        _signedOn = null;
+        _error = null;
+        await OpenChanged.InvokeAsync(false);
+    }
+}

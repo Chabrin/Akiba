@@ -7,6 +7,7 @@
 <PageTitle>Akiba - Loans</PageTitle>
 
 <LoanSchedulePanel @bind-Open="_showSchedule" LoanId="_scheduleForLoan" />
+<SettleLoanPanel @bind-Open="_showSettle" Loan="_settleForLoan" OnChanged="ReloadAsync" />
 
 <PageHeader Title="Loan portfolio"
             Description="Outstanding balances derived from each loan's receivable account; arrears from comparing the schedule with what was actually paid.">
@@ -138,18 +139,18 @@ else
                         }
                     </MudTd>
                     <MudTd Class="akiba-no-print">
-                        @* Offered on every running loan. Whether this one may actually be
-                           restructured is the domain's answer, and the screen behind this
-                           gives it rather than guessing here.
-
-                           Hidden until the pointer is on the row, like every other row action
-                           in Akiba - a portfolio of running loans should read as balances. *@
                         <div class="akiba-row-actions">
                             <MudTooltip Text="View repayment schedule">
                                 <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth"
                                                Size="Size.Small"
                                                aria-label="@($"View schedule for {context.LoanNumber}")"
                                                OnClick="@(() => ViewSchedule(context.LoanId))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Settle loan (M-Pesa / bank transfer / cheque)">
+                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                               Size="Size.Small" Color="Color.Success"
+                                               aria-label="@($"Settle {context.LoanNumber}")"
+                                               OnClick="@(() => OpenSettle(context))" />
                             </MudTooltip>
                             <MudTooltip Text="Restructure this loan">
                                 <MudIconButton Icon="@Icons.Material.Filled.ChangeCircle"
@@ -172,11 +173,25 @@ else
     private BorrowerCategory? _category;
     private bool _showSchedule;
     private LoanId? _scheduleForLoan;
+    private bool _showSettle;
+    private LoanSummary? _settleForLoan;
 
     private void ViewSchedule(LoanId id)
     {
         _scheduleForLoan = id;
         _showSchedule = true;
+    }
+
+    private void OpenSettle(LoanSummary loan)
+    {
+        _settleForLoan = loan;
+        _showSettle = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loans = null;
+        await LoadAsync();
     }
 
     private static readonly BorrowerCategory[] AllCategories =

@@ -161,6 +161,7 @@ internal sealed class GetArrearsReportHandler : IRequestHandler<GetArrearsReport
 /// <summary>An application as the applications list shows it.</summary>
 public sealed record ApplicationSummary(
     LoanApplicationId ApplicationId,
+    BorrowerId BorrowerId,
     string BorrowerName,
     LoanProduct Product,
     Money RequestedPrincipal,
@@ -245,6 +246,7 @@ internal sealed class ListApplicationsHandler
 
             summaries.Add(new ApplicationSummary(
                 application.Id,
+                application.BorrowerId,
                 borrower?.Name.Full ?? "(unknown applicant)",
                 application.Product,
                 application.RequestedPrincipal,
@@ -398,6 +400,48 @@ internal sealed class GetDashboardHandler : IRequestHandler<GetDashboardQuery, D
         trial.Accounts
             .Where(account => account.Code.StartsWith(prefix, StringComparison.Ordinal))
             .Sum(account => account.Balance, Currency.Kes);
+}
+
+/// <summary>A guarantor as listed on a loan application.</summary>
+public sealed record GuarantorView(
+    BorrowerId GuarantorId,
+    string GuarantorName,
+    string PayrollNumber,
+    Money GuaranteedAmount,
+    Money ShareValueAtSigning,
+    DateOnly SignedOn);
+
+/// <summary>Returns every guarantor on a loan application.</summary>
+public sealed record ListApplicationGuaranteesQuery(LoanApplicationId ApplicationId)
+    : IRequest<IReadOnlyList<GuarantorView>>;
+
+internal sealed class ListApplicationGuaranteesHandler
+    : IRequestHandler<ListApplicationGuaranteesQuery, IReadOnlyList<GuarantorView>>
+{
+    private readonly ILoanApplicationRepository _applications;
+
+    public ListApplicationGuaranteesHandler(ILoanApplicationRepository applications)
+        => _applications = applications;
+
+    public async Task<IReadOnlyList<GuarantorView>> Handle(
+        ListApplicationGuaranteesQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var application = await _applications.FindByIdAsync(query.ApplicationId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No application with id {query.ApplicationId}.");
+
+        return [.. application.Guarantees
+            .Where(g => !g.IsReleased)
+            .Select(g => new GuarantorView(
+                g.GuarantorId,
+                g.GuarantorName,
+                g.GuarantorPayrollNumber.Value,
+                g.GuaranteedAmount,
+                g.ShareValueAtSigning,
+                g.SignedOn))];
+    }
 }
 
 /// <summary>One row of a loan's expected repayment schedule, as displayed to the clerk.</summary>

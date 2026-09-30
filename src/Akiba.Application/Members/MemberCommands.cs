@@ -1,4 +1,5 @@
 using Akiba.Application.Abstractions;
+using Akiba.Application.Posting;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
 using Akiba.Domain.Membership;
@@ -126,6 +127,105 @@ internal sealed class EnrolMemberHandler : IRequestHandler<EnrolMemberCommand, B
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return member.Id;
+    }
+}
+
+/// <summary>Processes a member's share withdrawal.</summary>
+/// <param name="MemberId">Who is withdrawing.</param>
+/// <param name="Amount">How much they want back.</param>
+/// <param name="ProcessedOn">The date the withdrawal is processed.</param>
+/// <param name="VoucherReference">The withdrawal voucher number for the paper trail.</param>
+public sealed record WithdrawSharesCommand(
+    BorrowerId MemberId,
+    Money Amount,
+    DateOnly ProcessedOn,
+    string VoucherReference) : IRequest;
+
+public sealed class WithdrawSharesValidator : AbstractValidator<WithdrawSharesCommand>
+{
+    public WithdrawSharesValidator()
+    {
+        RuleFor(command => command.MemberId).Must(id => id.IsSpecified);
+        RuleFor(command => command.Amount.Amount).GreaterThan(0m);
+        RuleFor(command => command.VoucherReference).NotEmpty();
+    }
+}
+
+internal sealed class WithdrawSharesHandler : IRequestHandler<WithdrawSharesCommand>
+{
+    private readonly IBorrowerRepository _borrowers;
+    private readonly ILoanRepository _loans;
+    private readonly IJournalRepository _journal;
+    private readonly IBalanceQueries _balances;
+    private readonly IAkibaAccounts _accounts;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public WithdrawSharesHandler(
+        IBorrowerRepository borrowers,
+        ILoanRepository loans,
+        IJournalRepository journal,
+        IBalanceQueries balances,
+        IAkibaAccounts accounts,
+        ICurrentUser currentUser,
+        IClock clock,
+        IUnitOfWork unitOfWork)
+    {
+        _borrowers = borrowers;
+        _loans = loans;
+        _journal = journal;
+        _balances = balances;
+        _accounts = accounts;
+        _currentUser = currentUser;
+        _clock = clock;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(WithdrawSharesCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var member = await _borrowers.FindMemberAsync(command.MemberId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
+
+        var running = await _loans.RunningForBorrowerAsync(command.MemberId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (running.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"{member.Name.Full} holds {running.Count} running loan(s) " +
+                $"({string.Join(", ", running.Select(l => l.LoanNumber))}). " +
+                "Share withdrawals are not permitted while a loan is running.");
+        }
+
+        var sharesBalance = await _balances
+            .NaturalBalanceAsAtAsync(member.SharesAccountId, command.ProcessedOn, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (command.Amount > sharesBalance)
+        {
+            throw new InvalidOperationException(
+                $"Cannot withdraw {command.Amount}: the available shareholding as at " +
+                $"{command.ProcessedOn:d MMM yyyy} is {sharesBalance}.");
+        }
+
+        var bank = await _accounts.BankAsync(cancellationToken).ConfigureAwait(false);
+
+        var entry = AkibaPostings.ShareWithdrawal(
+            member.SharesAccountId,
+            bank,
+            command.Amount,
+            command.ProcessedOn,
+            member.Name.Full,
+            SourceDocument.WithdrawalVoucher(command.VoucherReference),
+            _currentUser.Actor,
+            _clock.UtcNow);
+
+        await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
 

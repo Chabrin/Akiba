@@ -357,6 +357,63 @@ public static class AkibaPostings
     }
 
     /// <summary>
+    /// A member's shares are withdrawn.
+    /// </summary>
+    /// <remarks>
+    /// Debit the member's share account (the liability falls — Akiba owes them less), credit
+    /// Bank (the money leaves). The handler validates that no loan is running and that the
+    /// balance covers the amount; the entry itself just records the movement.
+    /// </remarks>
+    public static JournalEntry ShareWithdrawal(
+        AccountId memberShares,
+        AccountId bank,
+        Money amount,
+        DateOnly processedOn,
+        string memberName,
+        SourceDocument sourceDocument,
+        Actor postedBy,
+        DateTimeOffset postedAtUtc) =>
+        JournalEntry.Post(
+            processedOn,
+            $"Share withdrawal - {memberName}",
+            sourceDocument,
+            postedBy,
+            postedAtUtc,
+            [
+                JournalLine.Debit(memberShares, amount),
+                JournalLine.Credit(bank, amount),
+            ]);
+
+    /// <summary>
+    /// A member settles an outstanding loan balance directly — via M-Pesa, bank transfer, or
+    /// cheque — in one lump sum rather than through the monthly receipt flow.
+    /// </summary>
+    /// <remarks>
+    /// Debit Bank (money arrives), credit the loan's receivable (the debt is extinguished).
+    /// This bypasses the unallocated-receipts step because the purpose of the payment is known
+    /// at the point of posting — there is no allocation decision to make.
+    /// </remarks>
+    public static JournalEntry LoanSettlement(
+        AccountId loanReceivable,
+        AccountId bank,
+        Money amount,
+        DateOnly settledOn,
+        string loanNumber,
+        SourceDocument sourceDocument,
+        Actor postedBy,
+        DateTimeOffset postedAtUtc) =>
+        JournalEntry.Post(
+            settledOn,
+            $"Loan settlement - {loanNumber}",
+            sourceDocument,
+            postedBy,
+            postedAtUtc,
+            [
+                JournalLine.Debit(bank, amount),
+                JournalLine.Credit(loanReceivable, amount),
+            ]);
+
+    /// <summary>
     /// An opening balance at go-live.
     /// </summary>
     /// <remarks>

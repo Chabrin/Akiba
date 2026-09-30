@@ -1,0 +1,173 @@
+@page "/withdrawals"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Withdrawals</PageTitle>
+
+<PageHeader Title="Share withdrawals"
+            Description="A member who holds no running loans may withdraw their shares. The withdrawal posts to the ledger immediately and cannot be undone — a mistake is corrected by re-contributing.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.ArrowCircleDown"
+                   OnClick="@(() => _panelOpen = true)">
+            Process withdrawal
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@* ---------------------------------------------------------------- Withdrawal panel *@
+<WorkPanel @bind-Open="_panelOpen"
+           Title="Process a share withdrawal"
+           Consequence="This posts to the ledger immediately. A member may only withdraw if they hold no running loans."
+           ConfirmText="Process withdrawal"
+           ConfirmIcon="@Icons.Material.Filled.ArrowCircleDown"
+           CanConfirm="@(_memberId.HasValue && _amount > 0 && !string.IsNullOrWhiteSpace(_voucherReference))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="ProcessAsync">
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Who is withdrawing</span>
+
+        <MudSelect T="Guid?" @bind-Value="_memberId" Label="Member"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+            @foreach (var member in _members)
+            {
+                <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
+                    @member.MembershipNumber — @member.Name
+                    (shares <MoneyText Amount="member.Shareholding" />)
+                    @if (member.RunningLoans > 0)
+                    {
+                        <text> — @member.RunningLoans loan(s) running</text>
+                    }
+                </MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Withdrawal details</span>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal" @bind-Value="_amount" Label="Amount (KES)"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 Min="0" Format="N2" HideSpinButtons="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_processedOn" Label="Processed on"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_voucherReference" Label="Voucher reference"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="The reference on the withdrawal voucher" />
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@* ---------------------------------------------------------------- List *@
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_withdrawals is null)
+    {
+        <TableSkeleton Rows="6" Columns="4" />
+    }
+    else if (_withdrawals.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.ArrowCircleDown"
+                    Title="No withdrawals yet"
+                    Description="When a member withdraws their shares, it will appear here. A member must hold no running loans to be eligible." />
+    }
+    else
+    {
+        <MudTable Items="_withdrawals" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh Style="text-align: right">Amount</MudTh>
+                <MudTh>Voucher</MudTh>
+                <MudTh>Processed on</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member">@context.MemberName</MudTd>
+                <MudTd DataLabel="Amount" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Amount" />
+                </MudTd>
+                <MudTd DataLabel="Voucher">@context.VoucherReference</MudTd>
+                <MudTd DataLabel="Processed on">
+                    @context.ProcessedOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private bool _panelOpen;
+    private IReadOnlyList<WithdrawalView>? _withdrawals;
+    private IReadOnlyList<MemberSummary> _members = [];
+
+    private Guid? _memberId;
+    private decimal _amount;
+    private DateTime? _processedOn;
+    private string _voucherReference = string.Empty;
+
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _processedOn = DateTime.Today;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var today = Clock.TodayInNairobi;
+        _members = await Mediator.Send(new ListMembersQuery(today));
+        _withdrawals = await Mediator.Send(new ListWithdrawalsQuery(today));
+    }
+
+    private async Task ProcessAsync()
+    {
+        if (_memberId is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new WithdrawSharesCommand(
+                new BorrowerId(_memberId.Value),
+                Money.Kes(_amount),
+                DateOnly.FromDateTime(_processedOn ?? DateTime.Today),
+                _voucherReference));
+
+            _panelOpen = false;
+            _memberId = null;
+            _amount = 0;
+            _processedOn = DateTime.Today;
+            _voucherReference = string.Empty;
+
+            _withdrawals = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

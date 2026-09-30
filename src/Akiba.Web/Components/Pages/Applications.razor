@@ -16,6 +16,7 @@
 </PageHeader>
 
 <LoanApplicationPanels @bind-Current="_step" Application="_working" OnChanged="ReloadAsync" />
+<GuarantorPanel @bind-Open="_guarantorsOpen" Application="_working" OnChanged="ReloadAsync" />
 
 <MudPaper Elevation="1" Class="pa-2">
     <MudToolBar Dense="true" Class="akiba-list-toolbar akiba-no-print">
@@ -141,6 +142,12 @@
                         @switch (context.Status)
                         {
                             case LoanApplicationStatus.Draft:
+                                <MudTooltip Text="Add or review guarantors">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Shield"
+                                                   Size="Size.Small" Color="Color.Secondary"
+                                                   aria-label="Manage guarantors"
+                                                   OnClick="@(() => OpenGuarantors(context))" />
+                                </MudTooltip>
                                 <MudTooltip Text="Submit the completed form for representative decisions">
                                     <MudIconButton Icon="@Icons.Material.Filled.Send"
                                                    Size="Size.Small" Color="Color.Primary"
@@ -207,12 +214,19 @@
     private void OnCategoryChanged(BorrowerCategory? category) => _category = category;
 
     private LoanApplicationPanels.Step _step = LoanApplicationPanels.Step.None;
+    private bool _guarantorsOpen;
     private ApplicationSummary? _working;
 
     private void Start(ApplicationSummary application, LoanApplicationPanels.Step step)
     {
         _working = application;
         _step = step;
+    }
+
+    private void OpenGuarantors(ApplicationSummary application)
+    {
+        _working = application;
+        _guarantorsOpen = true;
     }
 
     private async Task SubmitAsync(ApplicationSummary application)

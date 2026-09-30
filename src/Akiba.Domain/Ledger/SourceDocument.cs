@@ -16,6 +16,7 @@ public enum SourceDocumentKind
     DividendSchedule = 9,
     OpeningBalance = 10,
     Correction = 11,
+    WithdrawalVoucher = 12,
 }
 
 /// <summary>
@@ -63,6 +64,9 @@ public readonly record struct SourceDocument
 
     public static SourceDocument PayrollSchedule(int year, int month) =>
         Of(SourceDocumentKind.PayrollSchedule, $"{year:D4}-{month:D2}");
+
+    public static SourceDocument WithdrawalVoucher(string voucherReference) =>
+        Of(SourceDocumentKind.WithdrawalVoucher, voucherReference);
 
     public override string ToString() =>
         Kind == SourceDocumentKind.None ? "(no document)" : $"{Kind} {Reference}";

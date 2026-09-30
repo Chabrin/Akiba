@@ -105,6 +105,164 @@ internal sealed class ReceiveLoanApplicationHandler
     }
 }
 
+/// <summary>Adds a guarantor to a draft loan application.</summary>
+/// <param name="ApplicationId">The draft application.</param>
+/// <param name="GuarantorId">Who is guaranteeing.</param>
+/// <param name="GuaranteedAmount">The amount they are covering.</param>
+/// <param name="ShareValueAtSigning">Their shareholding at the time they signed (snapshot).</param>
+/// <param name="SignedOn">The date they signed the guarantee form.</param>
+public sealed record AddGuaranteeCommand(
+    LoanApplicationId ApplicationId,
+    BorrowerId GuarantorId,
+    Money GuaranteedAmount,
+    Money ShareValueAtSigning,
+    DateOnly SignedOn) : IRequest;
+
+internal sealed class AddGuaranteeHandler : IRequestHandler<AddGuaranteeCommand>
+{
+    private readonly ILoanApplicationRepository _applications;
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public AddGuaranteeHandler(
+        ILoanApplicationRepository applications,
+        IBorrowerRepository borrowers,
+        IUnitOfWork unitOfWork)
+    {
+        _applications = applications;
+        _borrowers = borrowers;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(AddGuaranteeCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var application = await _applications.FindByIdAsync(command.ApplicationId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No application with id {command.ApplicationId}.");
+
+        var guarantor = await _borrowers.FindMemberAsync(command.GuarantorId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No member with id {command.GuarantorId}.");
+
+        var guarantee = new Guarantee(
+            command.GuarantorId,
+            guarantor.Name.Full,
+            guarantor.PayrollNumber,
+            command.GuaranteedAmount,
+            command.ShareValueAtSigning,
+            command.SignedOn);
+
+        application.AddGuarantee(guarantee);
+        _applications.Update(application);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
+/// Records a lump-sum settlement: a member pays off their entire outstanding balance via
+/// M-Pesa, bank transfer, or cheque and the loan is closed.
+/// </summary>
+/// <param name="LoanId">The running loan being settled.</param>
+/// <param name="Amount">
+/// Must equal the outstanding balance at <paramref name="SettledOn"/>. The handler enforces
+/// this — a partial payment goes through the ordinary receipt and allocation flow instead.
+/// </param>
+/// <param name="SettledOn">The date the payment was received.</param>
+/// <param name="PaymentMethod">
+/// The payment channel, which determines the source-document kind carried in the journal.
+/// </param>
+/// <param name="Reference">The M-Pesa code, cheque number, or bank reference.</param>
+public sealed record SettleLoanCommand(
+    LoanId LoanId,
+    Money Amount,
+    DateOnly SettledOn,
+    SourceDocumentKind PaymentMethod,
+    string Reference) : IRequest;
+
+public sealed class SettleLoanValidator : AbstractValidator<SettleLoanCommand>
+{
+    public SettleLoanValidator()
+    {
+        RuleFor(c => c.Amount.Amount).GreaterThan(0m);
+        RuleFor(c => c.Reference).NotEmpty();
+        RuleFor(c => c.PaymentMethod).Must(k =>
+            k is SourceDocumentKind.MpesaReceipt
+            or SourceDocumentKind.BankDeposit
+            or SourceDocumentKind.Cheque)
+            .WithMessage("Payment method must be M-Pesa, bank deposit, or cheque.");
+    }
+}
+
+internal sealed class SettleLoanHandler : IRequestHandler<SettleLoanCommand>
+{
+    private readonly ILoanRepository _loans;
+    private readonly IJournalRepository _journal;
+    private readonly IBalanceQueries _balances;
+    private readonly IAkibaAccounts _accounts;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SettleLoanHandler(
+        ILoanRepository loans,
+        IJournalRepository journal,
+        IBalanceQueries balances,
+        IAkibaAccounts accounts,
+        ICurrentUser currentUser,
+        IClock clock,
+        IUnitOfWork unitOfWork)
+    {
+        _loans = loans;
+        _journal = journal;
+        _balances = balances;
+        _accounts = accounts;
+        _currentUser = currentUser;
+        _clock = clock;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(SettleLoanCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var loan = await _loans.FindByIdAsync(command.LoanId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No loan with id {command.LoanId}.");
+
+        var outstanding = await _balances
+            .NaturalBalanceAsAtAsync(loan.ReceivableAccountId, command.SettledOn, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (command.Amount != outstanding)
+        {
+            throw new InvalidOperationException(
+                $"Settlement amount {command.Amount} does not match the outstanding balance of " +
+                $"{outstanding}. Settlement must clear the entire balance. " +
+                "For a partial repayment, use the receipt and allocation flow instead.");
+        }
+
+        var bank = await _accounts.BankAsync(cancellationToken).ConfigureAwait(false);
+
+        var entry = AkibaPostings.LoanSettlement(
+            loan.ReceivableAccountId,
+            bank,
+            command.Amount,
+            command.SettledOn,
+            loan.LoanNumber,
+            SourceDocument.Of(command.PaymentMethod, command.Reference),
+            _currentUser.Actor,
+            _clock.UtcNow);
+
+        await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
+
+        loan.Settle(command.SettledOn);
+        _loans.Update(loan);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+}
+
 /// <summary>Moves a complete draft application into the representative decision queue.</summary>
 public sealed record SubmitLoanApplicationCommand(LoanApplicationId ApplicationId) : IRequest;
 

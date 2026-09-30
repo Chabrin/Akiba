@@ -1,5 +1,6 @@
 using Akiba.Application.Abstractions;
 using Akiba.Domain.Financial;
+using Akiba.Domain.Ledger;
 using Akiba.Domain.Lending;
 using Akiba.Domain.Membership;
 using MediatR;
@@ -354,6 +355,51 @@ internal sealed class ListContributionSettingsHandler
                     member.MonthlyShareContribution,
                     member.IsActive)),
         ];
+    }
+}
+
+/// <summary>One share withdrawal as listed on the withdrawals page.</summary>
+public sealed record WithdrawalView(
+    string MemberName,
+    Money Amount,
+    DateOnly ProcessedOn,
+    string VoucherReference);
+
+/// <summary>
+/// Lists share withdrawals up to and including a date.
+/// </summary>
+/// <remarks>
+/// Rebuilds from the journal: every entry whose source document is a withdrawal voucher is
+/// a withdrawal. There is no separate table — the ledger is the record.
+/// </remarks>
+public sealed record ListWithdrawalsQuery(DateOnly AsAt) : IRequest<IReadOnlyList<WithdrawalView>>;
+
+internal sealed class ListWithdrawalsHandler
+    : IRequestHandler<ListWithdrawalsQuery, IReadOnlyList<WithdrawalView>>
+{
+    private readonly IJournalRepository _journal;
+
+    public ListWithdrawalsHandler(IJournalRepository journal) => _journal = journal;
+
+    public async Task<IReadOnlyList<WithdrawalView>> Handle(
+        ListWithdrawalsQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var entries = await _journal.AsOfAsync(query.AsAt, cancellationToken).ConfigureAwait(false);
+
+        const string prefix = "Share withdrawal - ";
+
+        return [.. entries
+            .Where(e => e.SourceDocument.Kind == SourceDocumentKind.WithdrawalVoucher)
+            .Select(e => new WithdrawalView(
+                e.Narration.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    ? e.Narration[prefix.Length..]
+                    : e.Narration,
+                e.Total,
+                e.EntryDate,
+                e.SourceDocument.Reference))
+            .OrderByDescending(w => w.ProcessedOn)];
     }
 }
 
