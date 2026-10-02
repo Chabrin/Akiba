@@ -1,3 +1,4 @@
+using System.Globalization;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Posting;
 using Akiba.Domain.Common;
@@ -41,17 +42,20 @@ internal sealed class ReceiveLoanApplicationHandler
     private readonly IBorrowerRepository _borrowers;
     private readonly ILoanRepository _loans;
     private readonly ILoanApplicationRepository _applications;
+    private readonly IJournalRepository _journal;
     private readonly IUnitOfWork _unitOfWork;
 
     public ReceiveLoanApplicationHandler(
         IBorrowerRepository borrowers,
         ILoanRepository loans,
         ILoanApplicationRepository applications,
+        IJournalRepository journal,
         IUnitOfWork unitOfWork)
     {
         _borrowers = borrowers;
         _loans = loans;
         _applications = applications;
+        _journal = journal;
         _unitOfWork = unitOfWork;
     }
 
@@ -80,6 +84,31 @@ internal sealed class ReceiveLoanApplicationHandler
                 $"{borrower.Name} already holds {running.Count} running loans " +
                 $"({string.Join(", ", running.Select(loan => loan.LoanNumber))}). A member may " +
                 $"hold {LoanProductCatalogue.MaximumConcurrentLoansPerMember} and no more.");
+        }
+
+        if (command.Product.RequiresMembership() && borrower is Member memberForTenure)
+        {
+            var shareEntries = await _journal
+                .ForAccountAsOfAsync(memberForTenure.SharesAccountId, command.ReceivedOn, cancellationToken)
+                .ConfigureAwait(false);
+
+            var membershipStart = Shareholding.MembershipStartDate(shareEntries, memberForTenure.SharesAccountId);
+
+            if (membershipStart is null)
+            {
+                throw new InvalidOperationException(
+                    $"{borrower.Name} has not yet made a share contribution. " +
+                    "Membership begins at the first contribution, and a loan application requires at least six months of contributions.");
+            }
+
+            var eligibleFrom = membershipStart.Value.AddMonths(6);
+            if (command.ReceivedOn < eligibleFrom)
+            {
+                throw new InvalidOperationException(
+                    $"{borrower.Name} joined on {membershipStart.Value.ToString("d MMM yyyy", CultureInfo.InvariantCulture)} " +
+                    $"and may apply from {eligibleFrom.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}. " +
+                    "A member must have been contributing for at least six months before their first loan application.");
+            }
         }
 
         var zoneId = borrower is Member member ? member.ZoneId : default;

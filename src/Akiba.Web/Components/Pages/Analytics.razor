@@ -1,0 +1,458 @@
+@page "/analytics"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Analytics</PageTitle>
+
+<PageHeader Title="Analytics"
+            Description="Lending performance at a glance — top borrowers, interest earned, guarantor exposure and members not yet eligible to borrow. Every figure is derived from the ledger." />
+
+@* ── Section 1: Interest income ────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Interest income</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Total interest credited to the society in the period you choose.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <AsAtPicker Label="From" AsAt="_interestFrom" AsAtChanged="OnInterestFromChanged" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <AsAtPicker Label="To" AsAt="_interestTo" AsAtChanged="OnInterestToChanged" Class="ml-2" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            @if (_interestIncome is null)
+            {
+                <MudSkeleton Width="140px" Height="40px" />
+            }
+            else
+            {
+                <div class="d-flex flex-column">
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Interest earned</MudText>
+                    <MudText Typo="Typo.h5"><MoneyText Amount="_interestIncome.Value" /></MudText>
+                </div>
+            }
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@* ── Section 2: Per-member interest ────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Interest contributed by a member</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        How much interest the society has earned from a particular member's loans.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            @if (_members is null)
+            {
+                <MudSkeleton Width="200px" Height="56px" />
+            }
+            else
+            {
+                <MudSelect T="BorrowerId?" Value="_selectedMemberId"
+                           Label="Member" Variant="Variant.Outlined" Margin="Margin.Dense"
+                           ValueChanged="OnMemberChanged"
+                           ToStringFunc="@(id => _members.FirstOrDefault(m => m.MemberId == id)?.Name ?? string.Empty)">
+                    <MudSelectItem T="BorrowerId?" Value="null">— select a member —</MudSelectItem>
+                    @foreach (var m in _members)
+                    {
+                        <MudSelectItem T="BorrowerId?" Value="@((BorrowerId?)m.MemberId)">
+                            @m.Name (@m.PayrollNumber)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </MudItem>
+        <MudItem xs="12" sm="2" Class="d-flex align-center">
+            <MudCheckBox T="bool" @bind-Value="_memberInterestAllTime" Label="All-time"
+                         Color="Color.Primary" />
+        </MudItem>
+        @if (!_memberInterestAllTime)
+        {
+            <MudItem xs="12" sm="3">
+                <AsAtPicker Label="From" AsAt="_memberInterestFrom" AsAtChanged="OnMemberInterestFromChanged" />
+            </MudItem>
+        }
+        <MudItem xs="12" sm="3">
+            <AsAtPicker Label="To" AsAt="_memberInterestTo" AsAtChanged="OnMemberInterestToChanged" />
+        </MudItem>
+    </MudGrid>
+
+    @if (_selectedMemberId is not null)
+    {
+        <MudDivider Class="my-3" />
+        @if (_memberInterest is null)
+        {
+            <MudSkeleton Width="180px" Height="40px" />
+        }
+        else
+        {
+            <div class="d-flex align-center gap-4">
+                <div>
+                    <MudText Typo="Typo.overline" Class="mud-text-secondary">Total interest from this member's loans</MudText>
+                    <MudText Typo="Typo.h5"><MoneyText Amount="_memberInterest.Value" /></MudText>
+                </div>
+            </div>
+        }
+    }
+</MudPaper>
+
+@* ── Section 3: Top borrowers ───────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Top borrowers</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Ranked by total principal borrowed across all loans ever taken.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-2 mb-4">
+    @if (_topBorrowers is null)
+    {
+        <TableSkeleton Rows="5" Columns="4" />
+    }
+    else if (_topBorrowers.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.AccountBalanceWallet"
+                    Title="No borrowing history yet"
+                    Description="Once loans are disbursed, the top borrowers will appear here." />
+    }
+    else
+    {
+        <MudTable Items="_topBorrowers" Dense="true" Hover="true" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Rank</MudTh>
+                <MudTh>Member</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh>Loans taken</MudTh>
+                <MudTh Style="text-align:right">Total borrowed</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Rank">@(_topBorrowers.IndexOf(context) + 1)</MudTd>
+                <MudTd DataLabel="Member">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Payroll no.">@context.PayrollNumber</MudTd>
+                <MudTd DataLabel="Loans taken">@context.LoanCount</MudTd>
+                <MudTd DataLabel="Total borrowed" Class="akiba-money-cell">
+                    <MoneyText Amount="context.TotalBorrowed" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@* ── Section 4: By product type ─────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">By loan product</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Who borrowed most on each product type.
+    </MudText>
+</div>
+
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="1" Class="pa-2">
+            <MudText Typo="Typo.subtitle1" Class="pa-2">Normal loans</MudText>
+            @if (_topNormalBorrowers is null)
+            {
+                <TableSkeleton Rows="3" Columns="3" />
+            }
+            else if (_topNormalBorrowers.Count == 0)
+            {
+                <MudText Class="pa-2 mud-text-secondary" Typo="Typo.body2">No normal loan history yet.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_topNormalBorrowers" Dense="true" Hover="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Member</MudTh>
+                        <MudTh>Count</MudTh>
+                        <MudTh Style="text-align:right">Total</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Member">@context.BorrowerName</MudTd>
+                        <MudTd DataLabel="Count">@context.LoanCount</MudTd>
+                        <MudTd DataLabel="Total" Class="akiba-money-cell">
+                            <MoneyText Amount="context.TotalBorrowed" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="1" Class="pa-2">
+            <MudText Typo="Typo.subtitle1" Class="pa-2">Emergency loans</MudText>
+            @if (_topEmergencyBorrowers is null)
+            {
+                <TableSkeleton Rows="3" Columns="3" />
+            }
+            else if (_topEmergencyBorrowers.Count == 0)
+            {
+                <MudText Class="pa-2 mud-text-secondary" Typo="Typo.body2">No emergency loan history yet.</MudText>
+            }
+            else
+            {
+                <MudTable Items="_topEmergencyBorrowers" Dense="true" Hover="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Member</MudTh>
+                        <MudTh>Count</MudTh>
+                        <MudTh Style="text-align:right">Total</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Member">@context.BorrowerName</MudTd>
+                        <MudTd DataLabel="Count">@context.LoanCount</MudTd>
+                        <MudTd DataLabel="Total" Class="akiba-money-cell">
+                            <MoneyText Amount="context.TotalBorrowed" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* ── Section 5: Top offsetters ──────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Top offsetters</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Members who have used the new-loan offset feature to clear an old loan with the proceeds of a new one.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-2 mb-4">
+    @if (_topOffsets is null)
+    {
+        <TableSkeleton Rows="3" Columns="4" />
+    }
+    else if (_topOffsets.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.SwapHoriz"
+                    Title="No offsets recorded yet"
+                    Description="When a member uses a new loan to clear an existing one, they will appear here." />
+    }
+    else
+    {
+        <MudTable Items="_topOffsets" Dense="true" Hover="true" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh>Offsets</MudTh>
+                <MudTh Style="text-align:right">Total offset</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Payroll no.">@context.PayrollNumber</MudTd>
+                <MudTd DataLabel="Offsets">@context.OffsetCount</MudTd>
+                <MudTd DataLabel="Total offset" Class="akiba-money-cell">
+                    <MoneyText Amount="context.TotalOffset" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@* ── Section 6: Not eligible ────────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Members not eligible to borrow</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Active members who cannot take out a loan right now — maxed on concurrent loans or too new to the sacco.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-2 mb-4">
+    @if (_ineligible is null)
+    {
+        <TableSkeleton Rows="4" Columns="3" />
+    }
+    else if (_ineligible.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.CheckCircle"
+                    Title="Everyone is eligible"
+                    Description="All active members can currently apply for a loan." />
+    }
+    else
+    {
+        <MudTable Items="_ineligible" Dense="true" Hover="true" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Member</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh>Reason(s)</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Member">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Payroll no.">@context.PayrollNumber</MudTd>
+                <MudTd DataLabel="Reason(s)">
+                    @foreach (var reason in context.Reasons)
+                    {
+                        <MudText Typo="Typo.body2">@reason</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@* ── Section 7: Top guarantors ──────────────────────────────── *@
+
+<div class="akiba-section">
+    <MudText Typo="Typo.h4">Top guarantors</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Members who have stood guarantee for the most people, ranked by total amount guaranteed.
+    </MudText>
+</div>
+
+<MudPaper Elevation="1" Class="pa-2 mb-4">
+    @if (_topGuarantors is null)
+    {
+        <TableSkeleton Rows="5" Columns="4" />
+    }
+    else if (_topGuarantors.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Shield"
+                    Title="No guarantees recorded yet"
+                    Description="Guarantees appear once loan applications with guarantors are recorded." />
+    }
+    else
+    {
+        <MudTable Items="_topGuarantors" Dense="true" Hover="true" Striped="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Rank</MudTh>
+                <MudTh>Member</MudTh>
+                <MudTh>Payroll no.</MudTh>
+                <MudTh>People guaranteed</MudTh>
+                <MudTh Style="text-align:right">Total guaranteed</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Rank">@(_topGuarantors.IndexOf(context) + 1)</MudTd>
+                <MudTd DataLabel="Member">@context.GuarantorName</MudTd>
+                <MudTd DataLabel="Payroll no.">@context.PayrollNumber</MudTd>
+                <MudTd DataLabel="People guaranteed">@context.PeopleGuaranteed</MudTd>
+                <MudTd DataLabel="Total guaranteed" Class="akiba-money-cell">
+                    <MoneyText Amount="context.TotalGuaranteed" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    // ── Interest income
+    private DateOnly _interestFrom;
+    private DateOnly _interestTo;
+    private Money? _interestIncome;
+
+    // ── Per-member interest
+    private IReadOnlyList<MemberSummary>? _members;
+    private BorrowerId? _selectedMemberId;
+    private bool _memberInterestAllTime = true;
+    private DateOnly _memberInterestFrom;
+    private DateOnly _memberInterestTo;
+    private Money? _memberInterest;
+
+    // ── Top borrowers
+    private List<BorrowerBorrowingRow>? _topBorrowers;
+    private List<BorrowerBorrowingRow>? _topNormalBorrowers;
+    private List<BorrowerBorrowingRow>? _topEmergencyBorrowers;
+
+    // ── Offsetters
+    private List<BorrowerOffsetRow>? _topOffsets;
+
+    // ── Ineligible
+    private List<IneligibleBorrowerRow>? _ineligible;
+
+    // ── Guarantors
+    private List<GuarantorRankRow>? _topGuarantors;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = Clock.TodayInNairobi;
+        _interestTo = today;
+        _interestFrom = new DateOnly(today.Year, today.Month, 1);
+        _memberInterestTo = today;
+        _memberInterestFrom = new DateOnly(today.Year, today.Month, 1);
+
+        var membersTask = Mediator.Send(new ListMembersQuery(today, true));
+        var interestTask = Mediator.Send(new GetInterestIncomeQuery(_interestFrom, _interestTo));
+        var topBorrowersTask = Mediator.Send(new GetTopBorrowersQuery(10));
+        var topNormalTask = Mediator.Send(new GetTopBorrowersQuery(5, LoanProduct.Normal));
+        var topEmergencyTask = Mediator.Send(new GetTopBorrowersQuery(5, LoanProduct.Emergency));
+        var topOffsetsTask = Mediator.Send(new GetTopOffsetsQuery(today));
+        var ineligibleTask = Mediator.Send(new GetIneligibleBorrowersQuery(today));
+        var topGuarantorsTask = Mediator.Send(new GetTopGuarantorsQuery(10));
+
+        await Task.WhenAll(
+            membersTask, interestTask,
+            topBorrowersTask, topNormalTask, topEmergencyTask,
+            topOffsetsTask, ineligibleTask, topGuarantorsTask);
+
+        _members = await membersTask;
+        _interestIncome = await interestTask;
+        _topBorrowers = [.. await topBorrowersTask];
+        _topNormalBorrowers = [.. await topNormalTask];
+        _topEmergencyBorrowers = [.. await topEmergencyTask];
+        _topOffsets = [.. await topOffsetsTask];
+        _ineligible = [.. await ineligibleTask];
+        _topGuarantors = [.. await topGuarantorsTask];
+    }
+
+    private async Task OnInterestFromChanged(DateOnly from)
+    {
+        _interestFrom = from;
+        _interestIncome = null;
+        _interestIncome = await Mediator.Send(new GetInterestIncomeQuery(_interestFrom, _interestTo));
+    }
+
+    private async Task OnInterestToChanged(DateOnly to)
+    {
+        _interestTo = to;
+        _interestIncome = null;
+        _interestIncome = await Mediator.Send(new GetInterestIncomeQuery(_interestFrom, _interestTo));
+    }
+
+    private async Task OnMemberChanged(BorrowerId? memberId)
+    {
+        _selectedMemberId = memberId;
+        await LoadMemberInterestAsync();
+    }
+
+    private async Task OnMemberInterestFromChanged(DateOnly from)
+    {
+        _memberInterestFrom = from;
+        await LoadMemberInterestAsync();
+    }
+
+    private async Task OnMemberInterestToChanged(DateOnly to)
+    {
+        _memberInterestTo = to;
+        await LoadMemberInterestAsync();
+    }
+
+    private async Task LoadMemberInterestAsync()
+    {
+        if (_selectedMemberId is not { } memberId)
+        {
+            _memberInterest = null;
+            return;
+        }
+
+        _memberInterest = null;
+        _memberInterest = await Mediator.Send(new GetMemberInterestQuery(
+            memberId,
+            _memberInterestAllTime ? null : _memberInterestFrom,
+            _memberInterestTo));
+    }
+}
