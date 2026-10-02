@@ -7,7 +7,7 @@
 <PageTitle>Akiba - Loan settlements</PageTitle>
 
 <PageHeader Title="Loan settlements"
-            Description="Every loan settled in the selected period — via M-Pesa, bank transfer, or cheque. Each row traces back to the journal entry that cleared the balance.">
+            Description="Every loan settled in the selected period — via M-Pesa, bank transfer, cheque, or offset into a new loan. Each row traces back to the journal entry that cleared the balance.">
     <Actions>
         <AsAtPicker AsAt="_from" AsAtChanged="OnFromChanged" Label="From" />
         <AsAtPicker AsAt="_to" AsAtChanged="OnToChanged" Label="To" Class="ml-2" />
@@ -110,6 +110,7 @@
         "M-Pesa" => Color.Success,
         "Bank deposit" => Color.Info,
         "Cheque" => Color.Warning,
+        "Offset (new loan)" => Color.Secondary,
         _ => Color.Default,
     };
 }

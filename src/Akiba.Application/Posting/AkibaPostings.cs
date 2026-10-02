@@ -274,6 +274,46 @@ public static class AkibaPostings
             ]);
 
     /// <summary>
+    /// A loan disbursed where the proceeds partially clear an existing loan.
+    /// </summary>
+    /// <remarks>
+    /// Four lines: the borrower owes principal plus interest on the new loan; the bank pays out
+    /// only the net (principal minus the old loan's remaining balance); the old loan receivable
+    /// is credited to zero; and the interest is recognised as income. One entry rather than two
+    /// because there is only one cheque, drawn for the net amount.
+    /// </remarks>
+    public static JournalEntry DisbursementWithOffset(
+        AccountId newLoanReceivable,
+        AccountId bank,
+        AccountId interestIncome,
+        AccountId oldLoanReceivable,
+        Money principal,
+        Money interest,
+        Money offsetBalance,
+        DateOnly disbursedOn,
+        string newLoanNumber,
+        string oldLoanNumber,
+        SourceDocument sourceDocument,
+        Actor postedBy,
+        DateTimeOffset postedAtUtc)
+    {
+        var netCheque = principal - offsetBalance;
+
+        return JournalEntry.Post(
+            disbursedOn,
+            $"Disbursement - {newLoanNumber} (offset of {oldLoanNumber})",
+            sourceDocument,
+            postedBy,
+            postedAtUtc,
+            [
+                JournalLine.Debit(newLoanReceivable, principal + interest, "Principal and interest"),
+                JournalLine.Credit(bank, netCheque, "Net cheque drawn"),
+                JournalLine.Credit(oldLoanReceivable, offsetBalance, $"Offset — {oldLoanNumber} cleared"),
+                JournalLine.Credit(interestIncome, interest, "Flat interest charged at disbursement"),
+            ]);
+    }
+
+    /// <summary>
     /// A bank charge.
     /// </summary>
     /// <remarks>

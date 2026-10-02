@@ -618,13 +618,18 @@ internal sealed class ApproveLoanApplicationHandler
 /// <param name="ChequeNumber">The cheque number.</param>
 /// <param name="VoucherReference">The payment voucher filed with it.</param>
 /// <param name="Signatories">The two signatories.</param>
+/// <param name="OffsetLoanId">
+/// The running loan to clear from the new loan's proceeds. The borrower must have repaid at
+/// least 75 % of it. The cheque is drawn for the net (new principal minus remaining balance).
+/// </param>
 public sealed record DisburseLoanCommand(
     LoanApplicationId ApplicationId,
     string LoanNumber,
     DateOnly DisbursedOn,
     string ChequeNumber,
     string VoucherReference,
-    IReadOnlyList<string> Signatories) : IRequest<LoanId>;
+    IReadOnlyList<string> Signatories,
+    LoanId? OffsetLoanId = null) : IRequest<LoanId>;
 
 public sealed class DisburseLoanValidator : AbstractValidator<DisburseLoanCommand>
 {
@@ -650,6 +655,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
     private readonly IChequeBookRepository _chequeBooks;
     private readonly IJournalRepository _journal;
     private readonly IAkibaAccounts _accounts;
+    private readonly IBalanceQueries _balances;
     private readonly IBorrowerRepository _borrowers;
     private readonly IMediator _mediator;
     private readonly ICurrentUser _currentUser;
@@ -662,6 +668,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         IChequeBookRepository chequeBooks,
         IJournalRepository journal,
         IAkibaAccounts accounts,
+        IBalanceQueries balances,
         IBorrowerRepository borrowers,
         IMediator mediator,
         ICurrentUser currentUser,
@@ -673,6 +680,7 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         _chequeBooks = chequeBooks;
         _journal = journal;
         _accounts = accounts;
+        _balances = balances;
         _borrowers = borrowers;
         _mediator = mediator;
         _currentUser = currentUser;
@@ -735,16 +743,57 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
             bankAccountId = chequeBook.BankAccountId;
         }
 
+        // Validate offset eligibility before creating any entities or accounts, so a refusal
+        // leaves nothing half-created.
+        Loan? offsetLoan = null;
+        Money offsetBalance = Money.ZeroKes;
+
+        if (command.OffsetLoanId is { } offsetId)
+        {
+            offsetLoan = await _loans.FindByIdAsync(offsetId, cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException(
+                    $"No loan with id {offsetId} to offset.");
+
+            if (offsetLoan.BorrowerId != application.BorrowerId)
+            {
+                throw new InvalidOperationException(
+                    "The offset loan does not belong to the same borrower as the application.");
+            }
+
+            offsetBalance = await _balances
+                .NaturalBalanceAsAtAsync(offsetLoan.ReceivableAccountId, command.DisbursedOn, cancellationToken)
+                .ConfigureAwait(false);
+
+            var eligibility = LoanOffset.Assess(offsetLoan, offsetBalance);
+            if (!eligibility.IsEligible)
+            {
+                throw new InvalidOperationException(
+                    $"Loan {offsetLoan.LoanNumber} cannot be offset: {eligibility.Explanation}");
+            }
+
+            var netCheque = terms.Principal - offsetBalance;
+            if (!netCheque.IsPositive)
+            {
+                throw new InvalidOperationException(
+                    $"The offset balance of {offsetBalance} equals or exceeds the new loan's " +
+                    $"principal of {terms.Principal}. The net cheque must be positive.");
+            }
+        }
+
         var loanId = Guid.NewGuid();
 
         var receivable = await _accounts
             .OpenLoanReceivableAccountAsync(command.LoanNumber, loanId, cancellationToken)
             .ConfigureAwait(false);
 
+        // The cheque is drawn for the net amount when an offset is involved.
+        var chequeAmount = offsetLoan is not null ? terms.Principal - offsetBalance : terms.Principal;
+
         var cheque = new ChequeDetails(
             chequeNumber,
             voucherReference,
-            terms.Principal,
+            chequeAmount,
             command.DisbursedOn,
             command.Signatories);
 
@@ -760,17 +809,44 @@ internal sealed class DisburseLoanHandler : IRequestHandler<DisburseLoanCommand,
         _loans.Add(loan);
         _applications.Update(application);
 
-        var entry = AkibaPostings.Disbursement(
-            receivable.Id,
-            bankAccountId,
-            await _accounts.LoanInterestIncomeAsync(cancellationToken).ConfigureAwait(false),
-            terms.Principal,
-            terms.Interest,
-            command.DisbursedOn,
-            command.LoanNumber,
-            SourceDocument.PaymentVoucher(voucherReference),
-            _currentUser.Actor,
-            _clock.UtcNow);
+        var interestIncome = await _accounts.LoanInterestIncomeAsync(cancellationToken).ConfigureAwait(false);
+        var sourceDocument = SourceDocument.PaymentVoucher(voucherReference);
+
+        JournalEntry entry;
+        if (offsetLoan is not null)
+        {
+            entry = AkibaPostings.DisbursementWithOffset(
+                receivable.Id,
+                bankAccountId,
+                interestIncome,
+                offsetLoan.ReceivableAccountId,
+                terms.Principal,
+                terms.Interest,
+                offsetBalance,
+                command.DisbursedOn,
+                command.LoanNumber,
+                offsetLoan.LoanNumber,
+                sourceDocument,
+                _currentUser.Actor,
+                _clock.UtcNow);
+
+            offsetLoan.Settle(command.DisbursedOn);
+            _loans.Update(offsetLoan);
+        }
+        else
+        {
+            entry = AkibaPostings.Disbursement(
+                receivable.Id,
+                bankAccountId,
+                interestIncome,
+                terms.Principal,
+                terms.Interest,
+                command.DisbursedOn,
+                command.LoanNumber,
+                sourceDocument,
+                _currentUser.Actor,
+                _clock.UtcNow);
+        }
 
         await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

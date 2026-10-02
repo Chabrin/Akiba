@@ -221,6 +221,45 @@
                           HelperText="Who signed the cheque, separated by commas" />
         </MudItem>
     </MudGrid>
+
+    @* Offset option — only visible when the borrower holds a running loan that has been
+       repaid at least three-quarters. The new loan's proceeds clear the remaining balance,
+       and the cheque is drawn for the net. *@
+    @if (_offsetEligibility is not null)
+    {
+        <MudDivider Class="my-4" />
+
+        @if (_offsetEligibility.IsEligible)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-3" Dense="true">
+                <strong>Offset available.</strong>
+                Loan @_offsetEligibility.LoanNumber has
+                <MoneyText Amount="@_offsetEligibility.OutstandingBalance" /> remaining
+                (@(_offsetEligibility.ProportionRepaid.ToString("P0")) repaid).
+                Applying it will clear that loan and reduce the cheque to the net.
+            </MudAlert>
+
+            <MudCheckBox @bind-Value="_applyOffset" Label="Apply offset: clear existing loan from new proceeds"
+                         Color="Color.Warning" Dense="true" />
+
+            @if (_applyOffset && Application?.ApprovedPrincipal is { } approved)
+            {
+                var netCheque = approved - _offsetEligibility!.OutstandingBalance;
+                <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
+                    Cheque will be drawn for <strong><MoneyText Amount="netCheque" /></strong>
+                    (approved <MoneyText Amount="approved" /> minus offset
+                    <MoneyText Amount="@_offsetEligibility.OutstandingBalance" />).
+                    Loan @_offsetEligibility.LoanNumber will be marked settled on disbursement.
+                </MudAlert>
+            }
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-0">
+                <strong>No offset available.</strong> @_offsetEligibility.Explanation
+            </MudAlert>
+        }
+    }
 </WorkPanel>
 
 @code {
@@ -272,6 +311,9 @@
     private string _voucher = string.Empty;
     private string? _signatories;
     private DateTime? _disbursedOn;
+
+    private OffsetEligibility? _offsetEligibility;
+    private bool _applyOffset;
 
     private bool _busy;
     private bool _loaded;
@@ -329,6 +371,15 @@
             {
                 _chequeBooks = await Mediator.Send(new ListChequeBooksQuery());
                 _loaded = true;
+                _applyOffset = false;
+
+                if (Application is not null)
+                {
+                    _offsetEligibility = await Mediator.Send(
+                        new AssessOffsetEligibilityQuery(
+                            Application.ApplicationId,
+                            Clock.TodayInNairobi));
+                }
 
                 // Pick up a voucher prepared earlier, from the application itself rather than
                 // from whatever this panel last held. Without the first half, a clerk who
@@ -399,13 +450,18 @@
         var signatories = (_signatories ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+        var offsetLoanId = _applyOffset && _offsetEligibility?.IsEligible == true
+            ? _offsetEligibility.LoanId
+            : (LoanId?)null;
+
         await Mediator.Send(new DisburseLoanCommand(
             Application!.ApplicationId,
             _loanNumber.Trim(),
             DateOnly.FromDateTime(_disbursedOn!.Value),
             _chequeNumber.Trim(),
             _preparedVoucher!.Trim(),
-            signatories));
+            signatories,
+            offsetLoanId));
     });
 
     private async Task PrepareVoucherAsync()

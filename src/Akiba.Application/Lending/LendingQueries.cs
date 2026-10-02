@@ -497,40 +497,78 @@ internal sealed class ListLoanSettlementsHandler
             .BetweenAsync(query.From, query.To, cancellationToken)
             .ConfigureAwait(false);
 
-        const string prefix = "Loan settlement - ";
+        const string directPrefix = "Loan settlement - ";
+        // Offset disbursements carry the old loan number in "(offset of X)" at the end.
+        const string offsetSuffix = "(offset of ";
         var results = new List<LoanSettlementSummary>();
 
-        foreach (var entry in entries.Where(e =>
-            e.Narration.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        foreach (var entry in entries)
         {
-            var loanNumber = entry.Narration[prefix.Length..].Trim();
-            var loan = await _loans
-                .FindByNumberAsync(loanNumber, cancellationToken)
-                .ConfigureAwait(false);
-
-            string borrowerName;
-            if (loan is not null)
+            if (entry.Narration.StartsWith(directPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var borrower = await _borrowers
-                    .FindByIdAsync(loan.BorrowerId, cancellationToken)
+                var loanNumber = entry.Narration[directPrefix.Length..].Trim();
+                var borrowerName = await ResolveBorrowerNameAsync(loanNumber, cancellationToken)
                     .ConfigureAwait(false);
-                borrowerName = borrower?.Name.Full ?? "(unknown)";
-            }
-            else
-            {
-                borrowerName = "(unknown)";
-            }
 
-            results.Add(new LoanSettlementSummary(
-                loanNumber,
-                borrowerName,
-                entry.Total,
-                entry.EntryDate,
-                DescribePaymentMethod(entry.SourceDocument.Kind),
-                entry.SourceDocument.Reference));
+                results.Add(new LoanSettlementSummary(
+                    loanNumber,
+                    borrowerName,
+                    entry.Total,
+                    entry.EntryDate,
+                    DescribePaymentMethod(entry.SourceDocument.Kind),
+                    entry.SourceDocument.Reference));
+            }
+            else if (entry.Narration.Contains(offsetSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                // "Disbursement - NEW# (offset of OLD#)"
+                var start = entry.Narration.IndexOf(offsetSuffix, StringComparison.OrdinalIgnoreCase)
+                            + offsetSuffix.Length;
+                var end = entry.Narration.LastIndexOf(')');
+
+                if (start >= offsetSuffix.Length && end > start)
+                {
+                    var oldLoanNumber = entry.Narration[start..end].Trim();
+                    var borrowerName = await ResolveBorrowerNameAsync(oldLoanNumber, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // The offset balance is on the credit line whose narration starts with
+                    // "Offset —". Use it rather than entry.Total, which is the full new loan.
+                    const string offsetLinePrefix = "Offset —";
+                    var offsetLine = entry.Lines.FirstOrDefault(l =>
+                        l.Side == Domain.Ledger.BalanceSide.Credit
+                        && l.Narration?.StartsWith(offsetLinePrefix, StringComparison.OrdinalIgnoreCase) == true);
+
+                    var amount = offsetLine?.Magnitude ?? entry.Total;
+
+                    results.Add(new LoanSettlementSummary(
+                        oldLoanNumber,
+                        borrowerName,
+                        amount,
+                        entry.EntryDate,
+                        "Offset (new loan)",
+                        entry.SourceDocument.Reference));
+                }
+            }
         }
 
         return [.. results.OrderByDescending(s => s.SettledOn)];
+    }
+
+    private async Task<string> ResolveBorrowerNameAsync(
+        string loanNumber, CancellationToken cancellationToken)
+    {
+        var loan = await _loans.FindByNumberAsync(loanNumber, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (loan is null)
+        {
+            return "(unknown)";
+        }
+
+        var borrower = await _borrowers.FindByIdAsync(loan.BorrowerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return borrower?.Name.Full ?? "(unknown)";
     }
 
     private static string DescribePaymentMethod(SourceDocumentKind kind) => kind switch
@@ -540,6 +578,65 @@ internal sealed class ListLoanSettlementsHandler
         SourceDocumentKind.Cheque => "Cheque",
         _ => kind.ToString(),
     };
+}
+
+/// <summary>
+/// Checks whether an approved application's borrower holds a loan eligible to be offset.
+/// </summary>
+/// <remarks>
+/// Returns <c>null</c> when the borrower has no running loans at all. Returns an
+/// <see cref="OffsetEligibility"/> with <see cref="OffsetEligibility.IsEligible"/> false when
+/// a loan exists but does not meet the three-quarters threshold yet.
+/// </remarks>
+public sealed record AssessOffsetEligibilityQuery(LoanApplicationId ApplicationId, DateOnly AsAt)
+    : IRequest<OffsetEligibility?>;
+
+internal sealed class AssessOffsetEligibilityHandler
+    : IRequestHandler<AssessOffsetEligibilityQuery, OffsetEligibility?>
+{
+    private readonly ILoanApplicationRepository _applications;
+    private readonly ILoanRepository _loans;
+    private readonly IBalanceQueries _balances;
+
+    public AssessOffsetEligibilityHandler(
+        ILoanApplicationRepository applications,
+        ILoanRepository loans,
+        IBalanceQueries balances)
+    {
+        _applications = applications;
+        _loans = loans;
+        _balances = balances;
+    }
+
+    public async Task<OffsetEligibility?> Handle(
+        AssessOffsetEligibilityQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var application = await _applications.FindByIdAsync(query.ApplicationId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (application is null)
+        {
+            return null;
+        }
+
+        var running = await _loans
+            .RunningForBorrowerAsync(application.BorrowerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (running.Count == 0)
+        {
+            return null;
+        }
+
+        var loan = running[0];
+        var outstanding = await _balances
+            .NaturalBalanceAsAtAsync(loan.ReceivableAccountId, query.AsAt, cancellationToken)
+            .ConfigureAwait(false);
+
+        return LoanOffset.Assess(loan, outstanding);
+    }
 }
 
 /// <summary>One row of a loan's expected repayment schedule, as displayed to the clerk.</summary>
