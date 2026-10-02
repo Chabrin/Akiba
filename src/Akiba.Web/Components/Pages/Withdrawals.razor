@@ -8,9 +8,11 @@
 <PageHeader Title="Share withdrawals"
             Description="A member who holds no running loans may withdraw their shares. The withdrawal posts to the ledger immediately and cannot be undone — a mistake is corrected by re-contributing.">
     <Actions>
+        <AsAtPicker AsAt="_from" AsAtChanged="OnFromChanged" Label="From" />
+        <AsAtPicker AsAt="_to" AsAtChanged="OnToChanged" Label="To" Class="ml-2" />
         <MudButton Variant="Variant.Filled" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.ArrowCircleDown"
-                   OnClick="@(() => _panelOpen = true)">
+                   OnClick="@(() => _panelOpen = true)" Class="ml-2">
             Process withdrawal
         </MudButton>
     </Actions>
@@ -101,6 +103,17 @@
                     @context.ProcessedOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
                 </MudTd>
             </RowTemplate>
+            <FooterContent>
+                <MudTh>
+                    <MudText Typo="Typo.body2">
+                        <strong>@_withdrawals.Count withdrawal(s)</strong>
+                    </MudText>
+                </MudTh>
+                <MudTh Class="akiba-money-cell">
+                    <MoneyText Amount="_total" />
+                </MudTh>
+                <MudTh colspan="2"></MudTh>
+            </FooterContent>
             <PagerContent>
                 <MudTablePager Class="akiba-no-print" />
             </PagerContent>
@@ -112,6 +125,8 @@
     private bool _panelOpen;
     private IReadOnlyList<WithdrawalView>? _withdrawals;
     private IReadOnlyList<MemberSummary> _members = [];
+    private DateOnly _from;
+    private DateOnly _to;
 
     private Guid? _memberId;
     private decimal _amount;
@@ -121,9 +136,30 @@
     private bool _busy;
     private string? _error;
 
+    private Money _total => _withdrawals is null
+        ? Money.ZeroKes
+        : _withdrawals.Sum(w => w.Amount, Currency.Kes);
+
     protected override async Task OnInitializedAsync()
     {
+        var today = Clock.TodayInNairobi;
+        _to = today;
+        _from = new DateOnly(today.Year, today.Month, 1);
         _processedOn = DateTime.Today;
+        await LoadAsync();
+    }
+
+    private async Task OnFromChanged(DateOnly from)
+    {
+        _from = from;
+        _withdrawals = null;
+        await LoadAsync();
+    }
+
+    private async Task OnToChanged(DateOnly to)
+    {
+        _to = to;
+        _withdrawals = null;
         await LoadAsync();
     }
 
@@ -131,7 +167,7 @@
     {
         var today = Clock.TodayInNairobi;
         _members = await Mediator.Send(new ListMembersQuery(today));
-        _withdrawals = await Mediator.Send(new ListWithdrawalsQuery(today));
+        _withdrawals = await Mediator.Send(new ListWithdrawalsQuery(_from, _to));
     }
 
     private async Task ProcessAsync()

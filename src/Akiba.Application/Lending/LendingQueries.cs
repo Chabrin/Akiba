@@ -1,5 +1,6 @@
 using Akiba.Application.Abstractions;
 using Akiba.Domain.Financial;
+using Akiba.Domain.Ledger;
 using Akiba.Domain.Lending;
 using Akiba.Domain.Membership;
 using MediatR;
@@ -442,6 +443,103 @@ internal sealed class ListApplicationGuaranteesHandler
                 g.ShareValueAtSigning,
                 g.SignedOn))];
     }
+}
+
+/// <summary>One settled loan as it appears on the settlements report.</summary>
+/// <param name="LoanNumber">The loan's own reference number.</param>
+/// <param name="BorrowerName">Who the loan was to.</param>
+/// <param name="Amount">The balance cleared at settlement.</param>
+/// <param name="SettledOn">The date the payment was received.</param>
+/// <param name="PaymentMethod">Friendly name of the channel (M-Pesa, bank deposit, cheque).</param>
+/// <param name="Reference">The M-Pesa code, cheque number, or bank reference.</param>
+public sealed record LoanSettlementSummary(
+    string LoanNumber,
+    string BorrowerName,
+    Money Amount,
+    DateOnly SettledOn,
+    string PaymentMethod,
+    string Reference);
+
+/// <summary>
+/// Lists loan settlements posted within a date range.
+/// </summary>
+/// <remarks>
+/// Rebuilt from the journal rather than stored: every entry whose narration starts with
+/// "Loan settlement - " is a settlement. This means the report is always consistent with the
+/// ledger, and a journal reversal that corrects a wrong settlement is reflected automatically.
+/// </remarks>
+/// <param name="From">First day to include (inclusive).</param>
+/// <param name="To">Last day to include (inclusive).</param>
+public sealed record ListLoanSettlementsQuery(DateOnly From, DateOnly To)
+    : IRequest<IReadOnlyList<LoanSettlementSummary>>;
+
+internal sealed class ListLoanSettlementsHandler
+    : IRequestHandler<ListLoanSettlementsQuery, IReadOnlyList<LoanSettlementSummary>>
+{
+    private readonly IJournalRepository _journal;
+    private readonly ILoanRepository _loans;
+    private readonly IBorrowerRepository _borrowers;
+
+    public ListLoanSettlementsHandler(
+        IJournalRepository journal, ILoanRepository loans, IBorrowerRepository borrowers)
+    {
+        _journal = journal;
+        _loans = loans;
+        _borrowers = borrowers;
+    }
+
+    public async Task<IReadOnlyList<LoanSettlementSummary>> Handle(
+        ListLoanSettlementsQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var entries = await _journal
+            .BetweenAsync(query.From, query.To, cancellationToken)
+            .ConfigureAwait(false);
+
+        const string prefix = "Loan settlement - ";
+        var results = new List<LoanSettlementSummary>();
+
+        foreach (var entry in entries.Where(e =>
+            e.Narration.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            var loanNumber = entry.Narration[prefix.Length..].Trim();
+            var loan = await _loans
+                .FindByNumberAsync(loanNumber, cancellationToken)
+                .ConfigureAwait(false);
+
+            string borrowerName;
+            if (loan is not null)
+            {
+                var borrower = await _borrowers
+                    .FindByIdAsync(loan.BorrowerId, cancellationToken)
+                    .ConfigureAwait(false);
+                borrowerName = borrower?.Name.Full ?? "(unknown)";
+            }
+            else
+            {
+                borrowerName = "(unknown)";
+            }
+
+            results.Add(new LoanSettlementSummary(
+                loanNumber,
+                borrowerName,
+                entry.Total,
+                entry.EntryDate,
+                DescribePaymentMethod(entry.SourceDocument.Kind),
+                entry.SourceDocument.Reference));
+        }
+
+        return [.. results.OrderByDescending(s => s.SettledOn)];
+    }
+
+    private static string DescribePaymentMethod(SourceDocumentKind kind) => kind switch
+    {
+        SourceDocumentKind.MpesaReceipt => "M-Pesa",
+        SourceDocumentKind.BankDeposit => "Bank deposit",
+        SourceDocumentKind.Cheque => "Cheque",
+        _ => kind.ToString(),
+    };
 }
 
 /// <summary>One row of a loan's expected repayment schedule, as displayed to the clerk.</summary>

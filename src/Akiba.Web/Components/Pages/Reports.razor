@@ -129,6 +129,35 @@
 </MudGrid>
 
 <div class="akiba-section">
+    <MudText Typo="Typo.h4">Activity in a period</MudText>
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+        Everything that happened between two dates, not a position on one day. Filter by period on the destination screen.
+    </MudText>
+</div>
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Loan settlements"
+                    Icon="@Icons.Material.Filled.CheckCircle"
+                    Format="Screen"
+                    Colour="Color.Info"
+                    Href="/loans/settled"
+                    LinkText="View settlements"
+                    Description="Every loan closed in full — by M-Pesa, bank transfer, or cheque — in the period you choose. Shows the borrower, amount, payment method, and the reference on the document that cleared the balance." />
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <ReportCard Title="Share withdrawals"
+                    Icon="@Icons.Material.Filled.ArrowCircleDown"
+                    Format="Screen"
+                    Colour="Color.Info"
+                    Href="/withdrawals"
+                    LinkText="View withdrawals"
+                    Description="Members who withdrew their shares in the period. A withdrawal is only possible when the member holds no running loans, so this list is also the people who exited cleanly." />
+    </MudItem>
+</MudGrid>
+
+<div class="akiba-section">
     <MudText Typo="Typo.h4">Once a year, and for the auditor</MudText>
     <MudText Typo="Typo.caption" Class="mud-text-secondary">
         The two that leave the society entirely.

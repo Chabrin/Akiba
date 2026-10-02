@@ -1,0 +1,115 @@
+@page "/loans/settled"
+@attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
+@using Akiba.Application.Lending
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Loan settlements</PageTitle>
+
+<PageHeader Title="Loan settlements"
+            Description="Every loan settled in the selected period — via M-Pesa, bank transfer, or cheque. Each row traces back to the journal entry that cleared the balance.">
+    <Actions>
+        <AsAtPicker AsAt="_from" AsAtChanged="OnFromChanged" Label="From" />
+        <AsAtPicker AsAt="_to" AsAtChanged="OnToChanged" Label="To" Class="ml-2" />
+    </Actions>
+</PageHeader>
+
+<MudPaper Elevation="1" Class="pa-2">
+    @if (_settlements is null)
+    {
+        <TableSkeleton Rows="6" Columns="6" />
+    }
+    else if (_settlements.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.CheckCircle"
+                    Title="No settlements in this period"
+                    Description="When a member settles a running loan in full — by M-Pesa, bank transfer, or cheque — it will appear here. Regular monthly repayments are on the receipts page." />
+    }
+    else
+    {
+        <MudTable Items="_settlements" Dense="true" Hover="true" Striped="true" Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Loan</MudTh>
+                <MudTh>Borrower</MudTh>
+                <MudTh Style="text-align: right">Amount settled</MudTh>
+                <MudTh>Method</MudTh>
+                <MudTh>Reference</MudTh>
+                <MudTh>Date</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Loan">@context.LoanNumber</MudTd>
+                <MudTd DataLabel="Borrower">@context.BorrowerName</MudTd>
+                <MudTd DataLabel="Amount settled" Class="akiba-money-cell">
+                    <MoneyText Amount="context.Amount" />
+                </MudTd>
+                <MudTd DataLabel="Method">
+                    <MudChip T="string" Size="Size.Small" Color="@MethodColour(context.PaymentMethod)">
+                        @context.PaymentMethod
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Reference">@context.Reference</MudTd>
+                <MudTd DataLabel="Date">
+                    @context.SettledOn.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                </MudTd>
+            </RowTemplate>
+            <FooterContent>
+                <MudTh colspan="2">
+                    <MudText Typo="Typo.body2">
+                        <strong>@_settlements.Count settlement(s)</strong>
+                    </MudText>
+                </MudTh>
+                <MudTh Class="akiba-money-cell">
+                    <MoneyText Amount="_total" />
+                </MudTh>
+                <MudTh colspan="3"></MudTh>
+            </FooterContent>
+            <PagerContent>
+                <MudTablePager Class="akiba-no-print" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private DateOnly _from;
+    private DateOnly _to;
+    private IReadOnlyList<LoanSettlementSummary>? _settlements;
+
+    private Money _total => _settlements is null
+        ? Money.ZeroKes
+        : _settlements.Sum(s => s.Amount, Currency.Kes);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = Clock.TodayInNairobi;
+        _to = today;
+        _from = new DateOnly(today.Year, today.Month, 1);
+        await LoadAsync();
+    }
+
+    private async Task OnFromChanged(DateOnly from)
+    {
+        _from = from;
+        _settlements = null;
+        await LoadAsync();
+    }
+
+    private async Task OnToChanged(DateOnly to)
+    {
+        _to = to;
+        _settlements = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() =>
+        _settlements = await Mediator.Send(new ListLoanSettlementsQuery(_from, _to));
+
+    private static Color MethodColour(string method) => method switch
+    {
+        "M-Pesa" => Color.Success,
+        "Bank deposit" => Color.Info,
+        "Cheque" => Color.Warning,
+        _ => Color.Default,
+    };
+}

@@ -366,13 +366,16 @@ public sealed record WithdrawalView(
     string VoucherReference);
 
 /// <summary>
-/// Lists share withdrawals up to and including a date.
+/// Lists share withdrawals processed within a date range.
 /// </summary>
 /// <remarks>
 /// Rebuilds from the journal: every entry whose source document is a withdrawal voucher is
 /// a withdrawal. There is no separate table — the ledger is the record.
 /// </remarks>
-public sealed record ListWithdrawalsQuery(DateOnly AsAt) : IRequest<IReadOnlyList<WithdrawalView>>;
+/// <param name="From">First date to include (inclusive).</param>
+/// <param name="To">Last date to include (inclusive).</param>
+public sealed record ListWithdrawalsQuery(DateOnly From, DateOnly To)
+    : IRequest<IReadOnlyList<WithdrawalView>>;
 
 internal sealed class ListWithdrawalsHandler
     : IRequestHandler<ListWithdrawalsQuery, IReadOnlyList<WithdrawalView>>
@@ -386,7 +389,9 @@ internal sealed class ListWithdrawalsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var entries = await _journal.AsOfAsync(query.AsAt, cancellationToken).ConfigureAwait(false);
+        var entries = await _journal
+            .BetweenAsync(query.From, query.To, cancellationToken)
+            .ConfigureAwait(false);
 
         const string prefix = "Share withdrawal - ";
 

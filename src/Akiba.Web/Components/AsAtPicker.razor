@@ -6,15 +6,15 @@
     screen that could only ever show today would be the one that could not answer it.
 *@
 
-<MudDatePicker Label="As at"
+<MudDatePicker Label="@Label"
                Date="@(AsAt.ToDateTime(TimeOnly.MinValue))"
                DateChanged="OnDateChanged"
                DateFormat="dd MMM yyyy"
                MaxDate="@DateTime.Today.AddYears(1)"
                Variant="Variant.Outlined"
                Margin="Margin.Dense"
-               Class="akiba-as-at akiba-no-print"
-               HelperText="Figures are stated as at this date" />
+               Class="@($"akiba-as-at akiba-no-print {Class}".Trim())"
+               HelperText="@HelperText" />
 
 @code {
     [Parameter, EditorRequired]
@@ -22,6 +22,16 @@
 
     [Parameter]
     public EventCallback<DateOnly> AsAtChanged { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "As at";
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string HelperText => Label == "As at"
+        ? "Figures are stated as at this date"
+        : string.Empty;
 
     private Task OnDateChanged(DateTime? date) =>
         date is null ? Task.CompletedTask : AsAtChanged.InvokeAsync(DateOnly.FromDateTime(date.Value));
