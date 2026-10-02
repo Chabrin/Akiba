@@ -2,6 +2,7 @@ using Akiba.Application.Abstractions;
 using Akiba.Application.Posting;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
+using Akiba.Domain.Lending;
 using Akiba.Domain.Membership;
 using Akiba.Domain.Receipting;
 using FluentValidation;
@@ -229,6 +230,7 @@ internal sealed class AllocateReceiptHandler
     private readonly ILoanRepository _loans;
     private readonly IJournalRepository _journal;
     private readonly IAkibaAccounts _accounts;
+    private readonly IBalanceQueries _balances;
     private readonly ICurrentUser _currentUser;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
@@ -239,6 +241,7 @@ internal sealed class AllocateReceiptHandler
         ILoanRepository loans,
         IJournalRepository journal,
         IAkibaAccounts accounts,
+        IBalanceQueries balances,
         ICurrentUser currentUser,
         IClock clock,
         IUnitOfWork unitOfWork)
@@ -248,6 +251,7 @@ internal sealed class AllocateReceiptHandler
         _loans = loans;
         _journal = journal;
         _accounts = accounts;
+        _balances = balances;
         _currentUser = currentUser;
         _clock = clock;
         _unitOfWork = unitOfWork;
@@ -270,6 +274,41 @@ internal sealed class AllocateReceiptHandler
         }
 
         var clerk = _currentUser.Actor;
+
+        // For loan allocations, validate the amount against the outstanding balance before
+        // touching the receipt or the ledger. An over-allocation would leave a credit balance
+        // on a receivable account, which is wrong accounting. Also check here whether this
+        // payment will zero the balance so the loan can be auto-settled in the same transaction.
+        Loan? loanToSettle = null;
+
+        if (command.Target == AllocationTarget.LoanInstalment)
+        {
+            var loan = await _loans
+                .FindByIdAsync(new LoanId(command.TargetId), cancellationToken)
+                .ConfigureAwait(false)
+                ?? throw new InvalidOperationException($"No loan with id {command.TargetId}.");
+
+            var outstanding = await _balances
+                .NaturalBalanceAsAtAsync(loan.ReceivableAccountId, command.EntryDate, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (command.Amount.Amount > outstanding.Amount)
+            {
+                throw new InvalidOperationException(
+                    $"The allocation of {command.Amount} exceeds the outstanding balance of " +
+                    $"{outstanding} on {loan.LoanNumber}. " +
+                    "Allocate the exact outstanding amount to close the loan, " +
+                    "or enter a smaller amount for a partial payment.");
+            }
+
+            if (command.Amount == outstanding)
+            {
+                // This payment clears the balance entirely — settle the loan in the same
+                // transaction so it leaves the running portfolio immediately.
+                loan.Settle(command.EntryDate);
+                loanToSettle = loan;
+            }
+        }
 
         receipt.Allocate(command.Target, command.TargetId, command.Amount, clerk, _clock.UtcNow);
         _receipts.Update(receipt);
@@ -298,6 +337,12 @@ internal sealed class AllocateReceiptHandler
         };
 
         await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
+
+        if (loanToSettle is not null)
+        {
+            _loans.Update(loanToSettle);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return entry.Id;
