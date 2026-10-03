@@ -190,6 +190,14 @@ internal sealed class WithdrawSharesHandler : IRequestHandler<WithdrawSharesComm
             .ConfigureAwait(false)
             ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
 
+        if (member.SharesOnHold)
+        {
+            throw new InvalidOperationException(
+                $"{member.Name.Full}'s shares are on hold pending exit settlement. " +
+                "Release the hold once all outstanding obligations have been resolved, " +
+                "then process the withdrawal.");
+        }
+
         var running = await _loans.RunningForBorrowerAsync(command.MemberId, cancellationToken)
             .ConfigureAwait(false);
 
@@ -317,9 +325,13 @@ internal sealed class SetMemberNotificationsHandler : IRequestHandler<SetMemberN
             ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
 
         if (command.Enabled)
+        {
             member.EnableNotifications();
+        }
         else
+        {
             member.DisableNotifications();
+        }
 
         _borrowers.Update(member);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -385,11 +397,18 @@ internal sealed class RecordMemberExitHandler
             ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
 
         member.ExitEmployment(command.ExitedOn, _clock.UtcNow);
-        _borrowers.Update(member);
 
         var review = await BuildExitReviewAsync(member, command.ExitedOn, cancellationToken)
             .ConfigureAwait(false);
 
+        // Q14: shares are held automatically when the funds cannot yet be released. The clerk
+        // releases the hold once the outstanding obligations are resolved.
+        if (!review.FundsMayBeReleased)
+        {
+            member.PlaceSharesOnHold();
+        }
+
+        _borrowers.Update(member);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return review;
@@ -446,5 +465,46 @@ internal sealed class RecordMemberExitHandler
             review.FundsMayBeReleased,
             [.. review.LoansNeedingReplacement.Select(loan => loan.LoanNumber)],
             $"{review.Departure} {review.ClerkTask}");
+    }
+}
+
+/// <summary>
+/// Releases a shares hold placed at exit, once all outstanding obligations are resolved.
+/// </summary>
+/// <remarks>
+/// The hold is placed automatically when a member's exit is recorded and their funds cannot
+/// yet be released. Once the outstanding loans, guarantees, and final dues have been settled,
+/// the clerk records the release here, which allows the withdrawal to proceed.
+/// </remarks>
+public sealed record ReleaseSharesHoldCommand(BorrowerId MemberId) : IRequest;
+
+internal sealed class ReleaseSharesHoldHandler : IRequestHandler<ReleaseSharesHoldCommand>
+{
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public ReleaseSharesHoldHandler(IBorrowerRepository borrowers, IUnitOfWork unitOfWork)
+    {
+        _borrowers = borrowers;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(ReleaseSharesHoldCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var member = await _borrowers.FindMemberAsync(command.MemberId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
+
+        if (!member.SharesOnHold)
+        {
+            return;
+        }
+
+        member.ReleaseSharesHold();
+        _borrowers.Update(member);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

@@ -86,7 +86,11 @@ builder.WebHost.ConfigureKestrel(kestrel => kestrel.AddServerHeader = false);
 builder.Services.AddAkibaApplication();
 // Enforce command policies in the server-side dispatch path as well as on pages and endpoints.
 builder.Services.AddTransient(typeof(IPipelineBehavior<,>), typeof(CommandAuthorizationBehaviour<,>));
-builder.Services.AddAkibaInfrastructure(connectionString);
+
+// Q8: tenure-based repayment bands. Off by default; the committee enables it by setting
+// Akiba:Lending:TenureTermsEnabled = true in appsettings.json (or an environment variable).
+var tenureTermsEnabled = builder.Configuration.GetValue("Akiba:Lending:TenureTermsEnabled", false);
+builder.Services.AddAkibaInfrastructure(connectionString, tenureTermsEnabled);
 builder.Services.AddAkibaRateLimiting();
 
 // Notifications. Sending is allowed in Production and nowhere else - everywhere else every

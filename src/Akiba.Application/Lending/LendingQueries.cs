@@ -723,3 +723,121 @@ internal sealed class GetLoanScheduleHandler : IRequestHandler<GetLoanScheduleQu
                 i.InterestPortion))]);
     }
 }
+
+/// <summary>One row of the carry-forward repayment tracking table.</summary>
+/// <param name="Number">Instalment number.</param>
+/// <param name="DueDate">The last day of the month the instalment is due.</param>
+/// <param name="Scheduled">The amount scheduled for this instalment.</param>
+/// <param name="Actual">Credits posted to the receivable account in this calendar month.</param>
+/// <param name="CarryIn">Cumulative surplus (positive) or shortfall (negative) carried in from all prior months.</param>
+/// <param name="Balance">Net position after this month: CarryIn + Actual − Scheduled. Positive = ahead; negative = behind.</param>
+public sealed record TrackedInstalmentView(
+    int Number,
+    DateOnly DueDate,
+    Money Scheduled,
+    Money Actual,
+    Money CarryIn,
+    Money Balance);
+
+/// <summary>Carry-forward repayment tracking for one loan, as far as data is available.</summary>
+/// <param name="LoanNumber">The loan's reference number.</param>
+/// <param name="BorrowerName">The borrower's full name.</param>
+/// <param name="Rows">One row per instalment that has a due date on or before today.</param>
+public sealed record LoanRepaymentTrackingView(
+    string LoanNumber,
+    string BorrowerName,
+    IReadOnlyList<TrackedInstalmentView> Rows);
+
+/// <summary>
+/// Returns the carry-forward repayment tracking for one loan: scheduled vs. actual vs. surplus/shortfall per month.
+/// </summary>
+/// <remarks>
+/// Only instalments due on or before <see cref="GetLoanRepaymentTrackingQuery.AsAt"/> are included;
+/// future instalments have no actual data and would always show a shortfall.
+/// </remarks>
+public sealed record GetLoanRepaymentTrackingQuery(LoanId LoanId, DateOnly AsAt)
+    : IRequest<LoanRepaymentTrackingView?>;
+
+internal sealed class GetLoanRepaymentTrackingHandler
+    : IRequestHandler<GetLoanRepaymentTrackingQuery, LoanRepaymentTrackingView?>
+{
+    private readonly ILoanRepository _loans;
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IJournalRepository _journal;
+
+    public GetLoanRepaymentTrackingHandler(
+        ILoanRepository loans, IBorrowerRepository borrowers, IJournalRepository journal)
+    {
+        _loans = loans;
+        _borrowers = borrowers;
+        _journal = journal;
+    }
+
+    public async Task<LoanRepaymentTrackingView?> Handle(
+        GetLoanRepaymentTrackingQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var loan = await _loans.FindByIdAsync(query.LoanId, cancellationToken).ConfigureAwait(false);
+        if (loan is null)
+        {
+            return null;
+        }
+
+        var borrower = await _borrowers
+            .FindByIdAsync(loan.BorrowerId, cancellationToken)
+            .ConfigureAwait(false);
+
+        var entries = await _journal
+            .ForAccountAsOfAsync(loan.ReceivableAccountId, query.AsAt, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Sum credits posted to the receivable account by calendar month.
+        // Credits reduce the receivable balance — each one is a repayment.
+        var actualByMonth = entries
+            .SelectMany(e => e.Lines
+                .Where(l => l.AccountId == loan.ReceivableAccountId && l.Side == BalanceSide.Credit)
+                .Select(l => (Month: new YearMonth(e.ValueDate.Year, e.ValueDate.Month), l.Magnitude)))
+            .GroupBy(x => x.Month)
+            .ToDictionary(g => g.Key, g => g.Aggregate(
+                new Money(0, Currency.Kes),
+                (sum, x) => sum + x.Magnitude));
+
+        var schedule = loan.Schedule;
+        var rows = new List<TrackedInstalmentView>();
+        var carryForward = new Money(0, Currency.Kes);
+
+        foreach (var instalment in schedule.Instalments)
+        {
+            // Only include instalments that are already due.
+            if (instalment.DueDate > query.AsAt)
+            {
+                break;
+            }
+
+            var month = new YearMonth(instalment.DueDate.Year, instalment.DueDate.Month);
+            var actual = actualByMonth.TryGetValue(month, out var paid)
+                ? paid
+                : new Money(0, Currency.Kes);
+
+            var balance = carryForward + actual - instalment.Amount;
+
+            rows.Add(new TrackedInstalmentView(
+                instalment.Number,
+                instalment.DueDate,
+                instalment.Amount,
+                actual,
+                carryForward,
+                balance));
+
+            carryForward = balance;
+        }
+
+        return new LoanRepaymentTrackingView(
+            loan.LoanNumber,
+            borrower?.Name.Full ?? "(unknown borrower)",
+            rows);
+    }
+
+    private readonly record struct YearMonth(int Year, int Month);
+}

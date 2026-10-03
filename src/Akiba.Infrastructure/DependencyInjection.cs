@@ -4,6 +4,7 @@ using Akiba.Application.Dividends;
 using Akiba.Application.Notifications;
 using Akiba.Application.Reporting;
 using Akiba.Domain.Common;
+using Akiba.Domain.Lending;
 using Akiba.Infrastructure.Auditing;
 using Akiba.Infrastructure.Persistence;
 using Akiba.Infrastructure.Persistence.Repositories;
@@ -29,12 +30,18 @@ public static class DependencyInjection
     /// </summary>
     /// <param name="services">The container.</param>
     /// <param name="connectionString">The PostgreSQL connection string.</param>
+    /// <param name="tenureTermsEnabled">Registers <see cref="TenureBasedTerms.Enabled"/> when true; otherwise <see cref="TenureBasedTerms.Disabled"/>.</param>
     public static IServiceCollection AddAkibaInfrastructure(
         this IServiceCollection services,
-        string connectionString)
+        string connectionString,
+        bool tenureTermsEnabled = false)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+
+        // Q8: tenure-based repayment bands for loans of KSh 400,001+. Off by default; the
+        // committee enables it by setting Akiba:Lending:TenureTermsEnabled in configuration.
+        services.AddSingleton(tenureTermsEnabled ? TenureBasedTerms.Enabled : TenureBasedTerms.Disabled);
 
         services.AddDbContext<AkibaDbContext>(options => options
             .UseNpgsql(connectionString, npgsql =>

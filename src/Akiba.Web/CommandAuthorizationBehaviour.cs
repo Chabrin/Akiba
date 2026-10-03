@@ -140,6 +140,8 @@ internal sealed class CommandAuthorizationBehaviour<TRequest, TResponse> : IPipe
 
         _ when requestType == typeof(DryRunOpeningBalancesCommand) => AkibaPolicies.LoadsOpeningBalances,
         _ when requestType == typeof(CommitOpeningBalancesCommand) => AkibaPolicies.LoadsOpeningBalances,
+        _ when requestType == typeof(DryRunLoanBalancesCommand) => AkibaPolicies.LoadsOpeningBalances,
+        _ when requestType == typeof(CommitLoanBalancesCommand) => AkibaPolicies.LoadsOpeningBalances,
 
         // Loan decisions currently have no authoritative link between user identities and the
         // zone/office representative register. Keep them clerk-entered until that model is agreed.

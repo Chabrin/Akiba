@@ -1,0 +1,431 @@
+@page "/setup/opening-loans"
+@attribute [Authorize(Policy = AkibaPolicies.LoadsOpeningBalances)]
+@using System.Text.RegularExpressions
+@using Akiba.Application.Migration
+@inject IMediator Mediator
+@inject IClock Clock
+
+@*
+    Importing running loans into Akiba at go-live, once.
+
+    A mirror of /setup/opening-balances in structure: paste, check, commit — and the commit
+    is refused unless the check was clean. The difference here is that we're not creating
+    members; we're attaching outstanding loan balances to members who are already in Akiba.
+
+    Paste rather than upload for the same reason: the loan register is a real document and the
+    office should not be putting a copy of it on the server. Five columns — loan number,
+    payroll number, outstanding balance, disbursement date, months remaining — cover what is
+    needed to reconstruct a schedule and post the opening receivables.
+*@
+
+<PageTitle>Akiba - Opening loans</PageTitle>
+
+<PageHeader Title="Opening loans"
+            Description="The one-time import of outstanding loans at go-live. Run this after the member register is loaded and before the first month-end." />
+
+@if (_result is not null)
+{
+    <MudAlert Severity="Severity.Success" Class="mb-4">
+        <MudText Typo="Typo.subtitle2">Opening loans are loaded.</MudText>
+        <MudText Typo="Typo.body2">
+            @_result.LoansCreated loan(s) created carrying a combined outstanding balance of
+            <MoneyText Amount="_result.TotalOutstanding" />. Each loan's receivable account is
+            now open in the ledger, and one journal entry dated the go-live date balanced the
+            lot against Opening Balance Equity.
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            <b>Do not run this again.</b> A second import would create every loan twice.
+        </MudText>
+    </MudAlert>
+}
+else
+{
+    <MudPaper Elevation="1" Class="pa-4 mb-4">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">Step one — the loan register</MudText>
+
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" Style="max-width: 70ch;">
+            Copy five columns out of the register — loan number, payroll number, outstanding
+            balance, disbursement date, months remaining — and paste them here. One loan per
+            line, separated by tabs or commas. A heading row is ignored. The spreadsheet itself
+            stays where it is; nothing is uploaded.
+        </MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
+            Dates may be written as DD/MM/YYYY or YYYY-MM-DD. Outstanding balance is the amount
+            still owed as at the go-live date, not the original principal.
+        </MudText>
+
+        <MudTextField @bind-Value="_pasted" Label="Pasted from the loan register"
+                      Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Placeholder="L-0042&#9;0001&#9;85000&#9;15/06/2024&#9;18&#10;L-0043&#9;0002&#9;42500&#9;01/01/2025&#9;9"
+                      Class="akiba-paste" />
+
+        <MudGrid Spacing="2" Class="mt-3">
+            <MudItem xs="12" sm="6" md="4">
+                <MudDatePicker @bind-Date="_goLive" Label="Go-live date"
+                               DateFormat="dd MMM yyyy" Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               HelperText="The date every opening balance is dated" />
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-start">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.FactCheck"
+                           Disabled="@(_busy || string.IsNullOrWhiteSpace(_pasted))"
+                           OnClick="CheckAsync">
+                    Check it
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_parseProblems.Count > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-3">
+                <MudText Typo="Typo.subtitle2">
+                    @_parseProblems.Count line(s) could not be read
+                </MudText>
+                @foreach (var problem in _parseProblems.Take(8))
+                {
+                    <MudText Typo="Typo.body2">@problem</MudText>
+                }
+                @if (_parseProblems.Count > 8)
+                {
+                    <MudText Typo="Typo.body2">…and @(_parseProblems.Count - 8) more.</MudText>
+                }
+            </MudAlert>
+        }
+    </MudPaper>
+
+    @if (_dryRun is not null)
+    {
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                Step two — what would happen
+            </MudText>
+
+            <MudGrid Spacing="3" Class="mt-1 mb-4">
+                <MudItem xs="12" sm="4">
+                    <div class="akiba-stat" style="color: var(--mud-palette-primary);">
+                        <div class="akiba-stat-header">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Primary"
+                                     Size="Size.Small" />
+                            <MudText Typo="Typo.overline" Class="mud-text-secondary akiba-stat-title">
+                                Loans
+                            </MudText>
+                        </div>
+                        <MudText Typo="Typo.h3" Class="akiba-figure">@_dryRun.Rows.Count</MudText>
+                        <div class="akiba-stat-accent"></div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            would be created
+                        </MudText>
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <StatCard Title="Total outstanding" Value="_dryRun.TotalOutstanding"
+                              Icon="@Icons.Material.Filled.Payments"
+                              Caption="Combined balance at go-live"
+                              Colour="Color.Tertiary" />
+                </MudItem>
+            </MudGrid>
+
+            @if (_dryRun.FatalProblems.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4">
+                    <MudText Typo="Typo.subtitle2">
+                        This cannot be loaded until @_dryRun.FatalProblems.Count problem(s) are fixed.
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var problem in _dryRun.FatalProblems)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.Error"
+                                         IconColor="Color.Error">
+                                @(problem.RowNumber is { } row ? $"Line {row}: " : string.Empty)@problem.Problem
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudAlert>
+            }
+
+            @if (_dryRun.Warnings.Count > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-4">
+                    <MudText Typo="Typo.subtitle2">
+                        @_dryRun.Warnings.Count thing(s) worth looking at first
+                    </MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var problem in _dryRun.Warnings)
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.Warning"
+                                         IconColor="Color.Warning">
+                                @(problem.RowNumber is { } row ? $"Line {row}: " : string.Empty)@problem.Problem
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudAlert>
+            }
+
+            <MudExpansionPanels Elevation="0" Class="mb-4">
+                <MudExpansionPanel Text="@($"Read back all {_dryRun.Rows.Count} rows")">
+                    <MudTable Items="_dryRun.Rows" Dense="true" Striped="true" Elevation="0"
+                              Height="22rem" FixedHeader="true">
+                        <HeaderContent>
+                            <MudTh>Line</MudTh>
+                            <MudTh>Loan no.</MudTh>
+                            <MudTh>Payroll no.</MudTh>
+                            <MudTh Style="text-align: right">Outstanding</MudTh>
+                            <MudTh>Disbursed</MudTh>
+                            <MudTh Style="text-align: right">Months left</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@context.RowNumber</MudTd>
+                            <MudTd>@context.LoanNumber</MudTd>
+                            <MudTd>@(context.PayrollNumber ?? "—")</MudTd>
+                            <MudTd Class="akiba-money-cell">
+                                <MoneyText Amount="context.OutstandingBalance" />
+                            </MudTd>
+                            <MudTd>@context.DisbursedOn.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</MudTd>
+                            <MudTd Style="text-align: right">@context.RemainingTermMonths</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            @if (_dryRun.FatalProblems.Count == 0)
+            {
+                <MudDivider Class="mb-4" />
+
+                <MudText Typo="Typo.overline" Class="mud-text-secondary">
+                    Step three — commit it
+                </MudText>
+
+                <MudAlert Severity="Severity.Warning" Class="my-3">
+                    This runs once and cannot be undone. Each loan's receivable account opens in
+                    the ledger and a journal entry posts the opening balance. Check the totals
+                    against the loan register before you sign.
+                </MudAlert>
+
+                <MudTextField @bind-Value="_treasurer" Label="Signed off by"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Style="max-width: 40ch;"
+                              HelperText="The treasurer's name. Recorded permanently." />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Error" Class="mt-3"
+                           StartIcon="@Icons.Material.Filled.Publish"
+                           Disabled="@(_busy || !CanCommit)"
+                           OnClick="CommitAsync">
+                    Load @_dryRun.Rows.Count loan(s) permanently
+                </MudButton>
+            }
+        </MudPaper>
+    }
+}
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private string? _pasted;
+    private DateTime? _goLive;
+    private string _treasurer = string.Empty;
+
+    private List<string> _parseProblems = [];
+    private LoanBalanceDryRun? _dryRun;
+    private LoanImportResult? _result;
+
+    private bool _busy;
+    private string? _error;
+
+    /// <summary>
+    /// Thousands separator: a comma between a digit and exactly three more.
+    /// </summary>
+    /// <remarks>
+    /// A plain compiled Regex because the source generator cannot add a method to the class
+    /// Razor itself generates.
+    /// </remarks>
+    private static readonly Regex ThousandsSeparatorPattern =
+        new(@"(?<=\d),(?=\d{3}(\D|$))", RegexOptions.Compiled);
+
+    private static Regex ThousandsSeparator() => ThousandsSeparatorPattern;
+
+    private bool CanCommit =>
+        _dryRun is { FatalProblems.Count: 0 }
+        && !string.IsNullOrWhiteSpace(_treasurer);
+
+    protected override void OnInitialized()
+    {
+        _goLive = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+    }
+
+    /// <summary>
+    /// Parses pasted text into <see cref="LoanBalanceRow"/> instances.
+    /// </summary>
+    /// <remarks>
+    /// Five columns: loan number, payroll number, outstanding balance, disbursement date,
+    /// remaining term months. Tab-separated (from Excel) or comma-separated. Thousands
+    /// separators and "KES" prefixes are stripped from the balance before parsing.
+    /// Dates in DD/MM/YYYY or YYYY-MM-DD are both accepted.
+    /// </remarks>
+    private List<LoanBalanceRow> Parse(string text)
+    {
+        var rows = new List<LoanBalanceRow>();
+        _parseProblems = [];
+
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index].Trim('\r', ' ');
+
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            var normalised = ThousandsSeparator().Replace(line, string.Empty);
+
+            var separators = normalised.Contains('\t', StringComparison.Ordinal)
+                ? new[] { '\t' }
+                : [','];
+
+            var parts = normalised.Split(separators, StringSplitOptions.TrimEntries);
+
+            if (parts.Length < 5)
+            {
+                // First row with fewer columns is probably a heading — skip it silently.
+                if (index == 0)
+                {
+                    continue;
+                }
+
+                _parseProblems.Add(
+                    $"Line {index + 1}: expected five columns (loan no., payroll no., balance, date, months), found {parts.Length}.");
+                continue;
+            }
+
+            var rawBalance = parts[2]
+                .Replace("KES", string.Empty, StringComparison.OrdinalIgnoreCase)
+                .Replace(",", string.Empty, StringComparison.Ordinal)
+                .Trim();
+
+            if (!decimal.TryParse(rawBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var balance))
+            {
+                if (index == 0)
+                {
+                    continue;
+                }
+
+                _parseProblems.Add($"Line {index + 1}: \"{parts[2]}\" is not a valid amount.");
+                continue;
+            }
+
+            if (!TryParseDate(parts[3], out var disbursedOn))
+            {
+                _parseProblems.Add(
+                    $"Line {index + 1}: \"{parts[3]}\" is not a recognised date. Use DD/MM/YYYY or YYYY-MM-DD.");
+                continue;
+            }
+
+            if (!int.TryParse(parts[4], out var months) || months <= 0)
+            {
+                _parseProblems.Add(
+                    $"Line {index + 1}: \"{parts[4]}\" is not a valid number of months.");
+                continue;
+            }
+
+            rows.Add(new LoanBalanceRow(
+                index + 1,
+                string.IsNullOrWhiteSpace(parts[0]) ? $"ROW-{index + 1}" : parts[0],
+                string.IsNullOrWhiteSpace(parts[1]) ? null : parts[1],
+                Money.Kes(balance),
+                disbursedOn,
+                months));
+        }
+
+        return rows;
+    }
+
+    private static bool TryParseDate(string raw, out DateOnly result)
+    {
+        // DD/MM/YYYY
+        if (DateOnly.TryParseExact(raw.Trim(), "d/M/yyyy", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out result))
+        {
+            return true;
+        }
+
+        // YYYY-MM-DD
+        if (DateOnly.TryParseExact(raw.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out result))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task CheckAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_pasted) || _goLive is not { } goLive)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        _dryRun = null;
+
+        try
+        {
+            var rows = Parse(_pasted);
+
+            if (rows.Count == 0)
+            {
+                _error = "Nothing could be read from that. Check the columns are loan number, "
+                    + "payroll number, outstanding balance, disbursement date, months remaining.";
+                return;
+            }
+
+            _dryRun = await Mediator.Send(new DryRunLoanBalancesCommand(
+                rows, DateOnly.FromDateTime(goLive)));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        if (_busy || !CanCommit || _dryRun is null || _goLive is not { } goLive)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            _result = await Mediator.Send(new CommitLoanBalancesCommand(
+                _dryRun.Rows,
+                DateOnly.FromDateTime(goLive),
+                _treasurer.Trim()));
+
+            _dryRun = null;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException
+            or ArgumentException or FluentValidation.ValidationException)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

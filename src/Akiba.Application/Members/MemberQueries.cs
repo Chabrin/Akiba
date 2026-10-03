@@ -17,6 +17,8 @@ namespace Akiba.Application.Members;
 /// <param name="RunningLoans">How many loans they hold. Two is the maximum.</param>
 /// <param name="IsActive">False once they have left CAL.</param>
 /// <param name="IsLandlord">Whether their deductions run on the landlord schedule.</param>
+/// <param name="NotificationsEnabled">Whether the member receives SMS/email notifications.</param>
+/// <param name="SharesOnHold">True when their shares are frozen pending exit settlement.</param>
 public sealed record MemberSummary(
     BorrowerId MemberId,
     string MembershipNumber,
@@ -27,7 +29,8 @@ public sealed record MemberSummary(
     int RunningLoans,
     bool IsActive,
     bool IsLandlord,
-    bool NotificationsEnabled = true)
+    bool NotificationsEnabled = true,
+    bool SharesOnHold = false)
 {
     /// <summary>
     /// Which schedule this member is deducted on.
@@ -99,7 +102,8 @@ internal sealed class ListMembersHandler
                 running.Count,
                 member.IsActive,
                 member.IsLandlord,
-                member.NotificationsEnabled));
+                member.NotificationsEnabled,
+                member.SharesOnHold));
         }
 
         return summaries;

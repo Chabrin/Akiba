@@ -19,6 +19,7 @@ namespace Akiba.Application.Lending;
 /// <param name="ReceivedOn">The date the office received the form.</param>
 /// <param name="DeclaredGrossSalary">Gross salary, as declared on the form.</param>
 /// <param name="RequestedTermMonths">The repayment period stated on the form, where stated.</param>
+/// <param name="LiabilityBasis">How guarantor exposure is split across co-signers.</param>
 public sealed record ReceiveLoanApplicationCommand(
     BorrowerId BorrowerId,
     LoanProduct Product,
@@ -443,6 +444,7 @@ internal sealed class AssessLoanApplicationHandler
     private readonly IJournalRepository _journal;
     private readonly IBalanceQueries _balances;
     private readonly ILoanProductConfigRepository _loanProductConfigs;
+    private readonly TenureBasedTerms _tenureTerms;
 
     public AssessLoanApplicationHandler(
         ILoanApplicationRepository applications,
@@ -450,7 +452,8 @@ internal sealed class AssessLoanApplicationHandler
         ILoanRepository loans,
         IJournalRepository journal,
         IBalanceQueries balances,
-        ILoanProductConfigRepository loanProductConfigs)
+        ILoanProductConfigRepository loanProductConfigs,
+        TenureBasedTerms tenureTerms)
     {
         _applications = applications;
         _borrowers = borrowers;
@@ -458,6 +461,7 @@ internal sealed class AssessLoanApplicationHandler
         _journal = journal;
         _balances = balances;
         _loanProductConfigs = loanProductConfigs;
+        _tenureTerms = tenureTerms;
     }
 
     public async Task<LoanAssessment> Handle(
@@ -497,7 +501,8 @@ internal sealed class AssessLoanApplicationHandler
 
         var terms = new LoanPricing(
             definitions.Select(d => d.Definition).ToList(),
-            scale).Price(
+            scale,
+            _tenureTerms).Price(
             application.Product,
             application.RequestedPrincipal,
             membershipYears,
@@ -567,19 +572,22 @@ internal sealed class ApproveLoanApplicationHandler
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILoanProductConfigRepository _loanProductConfigs;
+    private readonly TenureBasedTerms _tenureTerms;
 
     public ApproveLoanApplicationHandler(
         ILoanApplicationRepository applications,
         IMediator mediator,
         IClock clock,
         IUnitOfWork unitOfWork,
-        ILoanProductConfigRepository loanProductConfigs)
+        ILoanProductConfigRepository loanProductConfigs,
+        TenureBasedTerms tenureTerms)
     {
         _applications = applications;
         _mediator = mediator;
         _clock = clock;
         _unitOfWork = unitOfWork;
         _loanProductConfigs = loanProductConfigs;
+        _tenureTerms = tenureTerms;
     }
 
     public async Task<LoanTerms> Handle(
@@ -619,7 +627,8 @@ internal sealed class ApproveLoanApplicationHandler
 
             terms = new LoanPricing(
                 definitions.Select(d => d.Definition).ToList(),
-                scale).Price(application.Product, reduced, null, application.RequestedTermMonths);
+                scale,
+                _tenureTerms).Price(application.Product, reduced, null, application.RequestedTermMonths);
         }
         else
         {

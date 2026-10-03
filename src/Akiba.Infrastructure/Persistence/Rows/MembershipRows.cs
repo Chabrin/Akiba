@@ -56,6 +56,12 @@ internal sealed class BorrowerRow
 
     public bool NotificationsEnabled { get; set; } = true;
 
+    /// <summary>
+    /// Whether the member's shares are on hold pending exit settlement.
+    /// Set automatically when an exit is recorded and funds cannot yet be released.
+    /// </summary>
+    public bool SharesOnHold { get; set; }
+
     // --- Client only -------------------------------------------------
     public string? IntroducedBy { get; set; }
 

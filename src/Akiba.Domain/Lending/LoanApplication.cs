@@ -195,6 +195,7 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
     /// <param name="receivedOn">The date the office received the form.</param>
     /// <param name="cutoff">The lock period rule in force.</param>
     /// <param name="requestedTermMonths">The repayment period stated on the form, where stated.</param>
+    /// <param name="liabilityBasis">How guarantor exposure is split across co-signers.</param>
     public static LoanApplication Receive(
         BorrowerId borrowerId,
         ZoneId zoneId,

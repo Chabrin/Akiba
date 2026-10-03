@@ -1,7 +1,9 @@
 @page "/settings"
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
 @using Akiba.Application.Lending
+@using Akiba.Domain.Lending
 @inject IMediator Mediator
+@inject TenureBasedTerms TenureTerms
 
 <PageTitle>Akiba - Welfare Settings</PageTitle>
 
@@ -268,6 +270,57 @@
                     Loans below KES 30,000 have no defined term (open question 5).
                 </MudText>
             }
+
+            @* ── Tenure-based terms (Q8) ── *@
+            <div class="d-flex align-center mt-5 mb-2" style="gap: 0.5rem">
+                <MudText Typo="Typo.subtitle2">Tenure-based repayment terms (Q8)</MudText>
+                @if (TenureTerms.IsEnabled)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                }
+                else
+                {
+                    <MudTooltip Text="Set Akiba:Lending:TenureTermsEnabled = true in appsettings.json to enable">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Proposed — not yet adopted</MudChip>
+                    </MudTooltip>
+                }
+            </div>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                Longer repayment periods for large loans (KES @TenureTerms.AppliesAtOrAbove.Amount.ToString("N0") and above),
+                awarded by years of membership. The minutes of 6 September 2026 record this as proposed;
+                the current application form already prints all three tiers. Enable it once the committee confirms adoption.
+            </MudText>
+            <MudSimpleTable Dense="true" Class="mb-2">
+                <thead>
+                    <tr>
+                        <th>Membership length</th>
+                        <th style="text-align:right">Extended term (months)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var band in TenureTerms.Bands)
+                    {
+                        <tr>
+                            <td>
+                                @band.FromYears
+                                @if (band.ToYears.HasValue)
+                                {
+                                    @($" – {band.ToYears} years")
+                                }
+                                else
+                                {
+                                    @(" years and above")
+                                }
+                            </td>
+                            <td style="text-align:right">@band.Months</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                The graduated term scale's 30-month top band applies until this rule is enabled.
+                These terms extend it for members who qualify by tenure — they do not replace the scale.
+            </MudText>
         }
 
         <MudText Typo="Typo.caption" Class="mud-text-secondary mt-3 d-block">

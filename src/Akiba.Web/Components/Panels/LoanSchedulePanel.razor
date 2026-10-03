@@ -49,41 +49,95 @@
         </MudText>
         <MudProgressLinear Value="@(_schedule.TotalRepayable.IsZero ? 0d : (double)(_schedule.Repaid.Amount / _schedule.TotalRepayable.Amount) * 100d)" Color="Color.Primary" Class="mb-4" />
 
-        <MudSimpleTable Dense="true" Hover="true">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Due</th>
-                    <th style="text-align:right">Instalment</th>
-                    <th style="text-align:right">Principal</th>
-                    <th style="text-align:right">Interest</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var row in _schedule.Instalments)
-                {
-                    var isPast = row.DueDate < _today;
-                    <tr class="@(isPast ? "mud-text-secondary" : "")">
-                        <td>@row.Number</td>
-                        <td>@row.DueDate.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</td>
-                        <td style="text-align:right"><MoneyText Amount="row.Amount" /></td>
-                        <td style="text-align:right"><MoneyText Amount="row.PrincipalPortion" /></td>
-                        <td style="text-align:right"><MoneyText Amount="row.InterestPortion" /></td>
-                    </tr>
-                }
-            </tbody>
-        </MudSimpleTable>
+        <MudTabs Elevation="0" Rounded="false">
+            <MudTabPanel Text="Schedule">
+                <MudSimpleTable Dense="true" Hover="true">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Due</th>
+                            <th style="text-align:right">Instalment</th>
+                            <th style="text-align:right">Principal</th>
+                            <th style="text-align:right">Interest</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _schedule.Instalments)
+                        {
+                            var isPast = row.DueDate < _today;
+                            <tr class="@(isPast ? "mud-text-secondary" : "")">
+                                <td>@row.Number</td>
+                                <td>@row.DueDate.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</td>
+                                <td style="text-align:right"><MoneyText Amount="row.Amount" /></td>
+                                <td style="text-align:right"><MoneyText Amount="row.PrincipalPortion" /></td>
+                                <td style="text-align:right"><MoneyText Amount="row.InterestPortion" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                    @_schedule.Instalments.Count instalments. Each is due on the last day of the month
+                    and must reach HR by the 25th for payroll deduction that month.
+                </MudText>
+            </MudTabPanel>
 
-        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
-            @_schedule.Instalments.Count instalments. Each is due on the last day of the month
-            and must reach HR by the 25th for payroll deduction that month.
-        </MudText>
+            <MudTabPanel Text="Tracking" OnClick="LoadTrackingAsync">
+                @if (_trackingLoading)
+                {
+                    <TableSkeleton Rows="6" Columns="5" />
+                }
+                else if (_tracking is not null && _tracking.Rows.Count > 0)
+                {
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Due</th>
+                                <th style="text-align:right">Scheduled</th>
+                                <th style="text-align:right">Actual</th>
+                                <th style="text-align:right">Carry-forward</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _tracking.Rows)
+                            {
+                                var isAhead = row.Balance.IsPositive;
+                                var isBehind = row.Balance.IsNegative;
+                                <tr>
+                                    <td>@row.Number</td>
+                                    <td>@row.DueDate.ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)</td>
+                                    <td style="text-align:right"><MoneyText Amount="row.Scheduled" /></td>
+                                    <td style="text-align:right"><MoneyText Amount="row.Actual" /></td>
+                                    <td style="text-align:right; font-weight:600"
+                                        class="@(isAhead ? "mud-success-text" : isBehind ? "mud-error-text" : "")">
+                                        @(isBehind ? "–" : isAhead ? "+" : "")<MoneyText Amount="row.Balance.Abs()" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2 d-block">
+                        Carry-forward is the cumulative surplus or shortfall after each month.
+                        A positive figure means the member is ahead; negative means they owe that amount in addition to the next instalment.
+                    </MudText>
+                }
+                else if (_tracking is not null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary pt-2">
+                        No instalments are due yet — tracking will appear once the first instalment date has passed.
+                    </MudText>
+                }
+            </MudTabPanel>
+        </MudTabs>
     }
 </WorkPanel>
 
 @code {
     private LoanScheduleView? _schedule;
+    private LoanRepaymentTrackingView? _tracking;
     private bool _loading;
+    private bool _trackingLoading;
+    private bool _trackingLoaded;
     private DateOnly _today;
     private LoanId? _loadedFor;
 
@@ -109,8 +163,23 @@
 
         _loadedFor = id;
         _loading = true;
+        _tracking = null;
+        _trackingLoaded = false;
         _schedule = await Mediator.Send(new GetLoanScheduleQuery(id, _today));
         _loading = false;
+    }
+
+    private async Task LoadTrackingAsync()
+    {
+        if (_trackingLoaded || LoanId is not { } id)
+        {
+            return;
+        }
+
+        _trackingLoaded = true;
+        _trackingLoading = true;
+        _tracking = await Mediator.Send(new GetLoanRepaymentTrackingQuery(id, _today));
+        _trackingLoading = false;
     }
 
     private async Task CloseAsync()
@@ -118,6 +187,8 @@
         await OpenChanged.InvokeAsync(false);
         Open = false;
         _schedule = null;
+        _tracking = null;
+        _trackingLoaded = false;
         _loadedFor = null;
     }
 }

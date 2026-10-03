@@ -43,6 +43,7 @@ internal static class MembershipMapper
             IsLandlord = member.IsLandlord,
             MonthlyContributionKes = member.MonthlyShareContribution?.Amount,
             NotificationsEnabled = member.NotificationsEnabled,
+            SharesOnHold = member.SharesOnHold,
             Documents = [.. member.Documents.Select(document => ToRow(document, member.Id.Value, null))],
         },
         ClientBorrower client => new BorrowerRow
@@ -104,7 +105,8 @@ internal static class MembershipMapper
             row.ExitedOn,
             row.IsLandlord,
             monthlyContribution,
-            row.NotificationsEnabled);
+            row.NotificationsEnabled,
+            row.SharesOnHold);
 
         Attach(member, row);
 

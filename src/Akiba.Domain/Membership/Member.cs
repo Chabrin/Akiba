@@ -114,6 +114,31 @@ public sealed class Member : Borrower
     public void EnableNotifications() => NotificationsEnabled = true;
 
     /// <summary>
+    /// Whether the member's shares and final dues are on hold pending exit settlement.
+    /// </summary>
+    /// <remarks>
+    /// Set automatically when a member's exit is recorded and their funds cannot yet be
+    /// released — either because they hold running loans, or because a loan they guarantee
+    /// has an outstanding balance that exceeds the borrower's own shares and no replacement
+    /// guarantor has been found. The clerk releases the hold manually once the outstanding
+    /// obligations are resolved. See <see cref="PlaceSharesOnHold"/> and
+    /// <see cref="ReleaseSharesHold"/>.
+    /// </remarks>
+    public bool SharesOnHold { get; private set; }
+
+    /// <summary>Puts the member's shares on hold, preventing withdrawals until released.</summary>
+    public void PlaceSharesOnHold()
+    {
+        SharesOnHold = true;
+    }
+
+    /// <summary>Releases the hold, allowing the member's shares to be withdrawn.</summary>
+    public void ReleaseSharesHold()
+    {
+        SharesOnHold = false;
+    }
+
+    /// <summary>
     /// Records the member's chosen monthly share deduction.
     /// </summary>
     /// <remarks>
@@ -186,7 +211,8 @@ public sealed class Member : Borrower
         DateOnly? exitedOn,
         bool isLandlord,
         Money? monthlyShareContribution = null,
-        bool notificationsEnabled = true) =>
+        bool notificationsEnabled = true,
+        bool sharesOnHold = false) =>
         new(id, membershipNumber, payrollNumber, name, nationalId, phone, email, zoneId, sharesAccountId)
         {
             EmploymentStatus = employmentStatus,
@@ -194,6 +220,7 @@ public sealed class Member : Borrower
             IsLandlord = isLandlord,
             MonthlyShareContribution = monthlyShareContribution,
             NotificationsEnabled = notificationsEnabled,
+            SharesOnHold = sharesOnHold,
         };
 
     /// <summary>
