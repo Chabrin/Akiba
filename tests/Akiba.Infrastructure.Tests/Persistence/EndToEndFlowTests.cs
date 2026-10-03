@@ -106,11 +106,10 @@ public sealed class EndToEndFlowTests : IAsyncLifetime
         assessment.IsWithinBorrowingLimit.Should().BeTrue();
         assessment.Affordability!.IsWithinLimit.Should().BeTrue();
 
-        // A normal loan needs a guarantor under the conservative default, and none has signed.
-        assessment.CanBeApproved.Should().BeFalse();
-        assessment.Blockers.Should().ContainSingle().Which.Should().Contain("uncovered");
+        // Grace's shares (80,000) cover the full loan (66,000), so no guarantor is required.
+        assessment.CanBeApproved.Should().BeTrue();
+        assessment.Blockers.Should().BeEmpty();
 
-        await AddGuarantorAsync(applicationId, "Peter Mwangi", Money.Kes(70_000m));
         await SubmitAsync(applicationId);
         await DecideAsync(applicationId, ZoneRep, ApprovalDecisionKind.Approve);
         await DecideAsync(applicationId, OfficeRep, ApprovalDecisionKind.Approve);

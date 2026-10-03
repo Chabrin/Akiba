@@ -26,7 +26,8 @@ public sealed record MemberSummary(
     Money BorrowingLimit,
     int RunningLoans,
     bool IsActive,
-    bool IsLandlord)
+    bool IsLandlord,
+    bool NotificationsEnabled = true)
 {
     /// <summary>
     /// Which schedule this member is deducted on.
@@ -97,12 +98,43 @@ internal sealed class ListMembersHandler
                 Shareholding.BorrowingLimit(shareholding),
                 running.Count,
                 member.IsActive,
-                member.IsLandlord));
+                member.IsLandlord,
+                member.NotificationsEnabled));
         }
 
         return summaries;
     }
 }
+
+// ──────────────────────────────────────────────────────────────
+
+/// <summary>A client borrower as the loan-application panel shows them.</summary>
+public sealed record ClientBorrowerSummary(BorrowerId BorrowerId, string Name, string? IntroducedBy);
+
+/// <summary>All non-member client borrowers, for the Client loan application form.</summary>
+public sealed record ListClientBorrowersQuery : IRequest<IReadOnlyList<ClientBorrowerSummary>>;
+
+internal sealed class ListClientBorrowersHandler
+    : IRequestHandler<ListClientBorrowersQuery, IReadOnlyList<ClientBorrowerSummary>>
+{
+    private readonly IBorrowerRepository _borrowers;
+
+    public ListClientBorrowersHandler(IBorrowerRepository borrowers) => _borrowers = borrowers;
+
+    public async Task<IReadOnlyList<ClientBorrowerSummary>> Handle(
+        ListClientBorrowersQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var clients = await _borrowers
+            .AllClientBorrowersAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. clients.Select(c => new ClientBorrowerSummary(c.Id, c.Name.Full, c.IntroducedBy))];
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
 
 /// <summary>One line of a member's statement.</summary>
 /// <param name="Date">The entry date.</param>

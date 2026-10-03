@@ -6,7 +6,7 @@ namespace Akiba.Domain.Guaranteeing;
 /// <summary>Whether a loan needs guarantors, and how firmly.</summary>
 public enum GuarantorRequirementLevel
 {
-    /// <summary>No guarantors needed. Confirmed only for emergency loans meeting the rule.</summary>
+    /// <summary>No guarantors needed.</summary>
     NotRequired = 0,
 
     /// <summary>
@@ -99,18 +99,20 @@ public static class GuarantorRequirementPolicy
                     IsSettledRule: true);
         }
 
-        // TODO: confirm with committee - open question 1. Whether a normal loan fully covered
-        // by the borrower's own shares needs guarantors is not stated anywhere. Requiring one
-        // is the conservative default; do not relax it without an answer.
+        if (uncovered.IsZero)
+        {
+            return new GuarantorRequirement(
+                GuarantorRequirementLevel.NotRequired,
+                uncovered,
+                "The loan is fully covered by the member's own shares.",
+                IsSettledRule: true);
+        }
+
         return new GuarantorRequirement(
             GuarantorRequirementLevel.Required,
             uncovered,
-            uncovered.IsZero
-                ? "The loan is fully covered by the member's own shares, but the committee has " +
-                  "not confirmed that such a loan may go unguaranteed, so a guarantor is still " +
-                  "required."
-                : $"{uncovered} of this loan is not covered by the member's own shares.",
-            IsSettledRule: uncovered.IsPositive);
+            $"{uncovered} of this loan is not covered by the member's own shares.",
+            IsSettledRule: true);
     }
 }
 

@@ -151,6 +151,14 @@
                                            OnClick="@(() => OpenStatement(context))" />
                         </MudTooltip>
 
+                        <MudTooltip Text="@(context.NotificationsEnabled ? "Mute notifications" : "Enable notifications")">
+                            <MudIconButton Icon="@(context.NotificationsEnabled ? Icons.Material.Filled.Notifications : Icons.Material.Filled.NotificationsOff)"
+                                           Size="Size.Small"
+                                           Color="@(context.NotificationsEnabled ? Color.Default : Color.Warning)"
+                                           aria-label="@($"{(context.NotificationsEnabled ? "Mute" : "Enable")} notifications for {context.Name}")"
+                                           OnClick="@(() => ToggleNotificationsAsync(context))" />
+                        </MudTooltip>
+
                         @if (context.IsActive)
                         {
                             <MudTooltip Text="Record that they have left CAL">
@@ -267,6 +275,12 @@
     {
         _exitingMember = member;
         _exiting = true;
+    }
+
+    private async Task ToggleNotificationsAsync(MemberSummary member)
+    {
+        await Mediator.Send(new SetMemberNotificationsCommand(member.MemberId, !member.NotificationsEnabled));
+        await ReloadAsync();
     }
 
     private void OpenStatement(MemberSummary? member)

@@ -104,6 +104,16 @@ public sealed class Member : Borrower
     public Money? MonthlyShareContribution { get; private set; }
 
     /// <summary>
+    /// Whether the member has opted in to notifications (SMS alerts, email reminders).
+    /// True by default; a member can request to be removed from the distribution.
+    /// </summary>
+    public bool NotificationsEnabled { get; private set; } = true;
+
+    public void DisableNotifications() => NotificationsEnabled = false;
+
+    public void EnableNotifications() => NotificationsEnabled = true;
+
+    /// <summary>
     /// Records the member's chosen monthly share deduction.
     /// </summary>
     /// <remarks>
@@ -175,13 +185,15 @@ public sealed class Member : Borrower
         EmploymentStatus employmentStatus,
         DateOnly? exitedOn,
         bool isLandlord,
-        Money? monthlyShareContribution = null) =>
+        Money? monthlyShareContribution = null,
+        bool notificationsEnabled = true) =>
         new(id, membershipNumber, payrollNumber, name, nationalId, phone, email, zoneId, sharesAccountId)
         {
             EmploymentStatus = employmentStatus,
             ExitedOn = exitedOn,
             IsLandlord = isLandlord,
             MonthlyShareContribution = monthlyShareContribution,
+            NotificationsEnabled = notificationsEnabled,
         };
 
     /// <summary>

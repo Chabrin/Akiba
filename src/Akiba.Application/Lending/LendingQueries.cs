@@ -175,7 +175,8 @@ public sealed record ApplicationSummary(
     int Guarantors,
     Money TotalGuaranteed,
     BorrowerCategory BorrowerCategory,
-    PreparedVoucherSummary? PreparedVoucher = null);
+    PreparedVoucherSummary? PreparedVoucher = null,
+    GuarantorLiabilityBasis LiabilityBasis = GuarantorLiabilityBasis.ProRata);
 
 /// <summary>
 /// A payment voucher prepared for an approved application, and the cheque reserved for it.
@@ -268,7 +269,8 @@ internal sealed class ListApplicationsHandler
                     VoucherPreparedOn: { } preparedOn,
                 }
                     ? new PreparedVoucherSummary(voucher, cheque, loanNumber, preparedOn)
-                    : null));
+                    : null,
+                application.LiabilityBasis));
         }
 
         return [.. summaries.OrderByDescending(application => application.ReceivedOn)];

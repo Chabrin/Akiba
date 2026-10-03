@@ -14,6 +14,18 @@ public static class ChartOfAccounts
 {
     // Assets
     public const string Bank = "1000";
+
+    /// <summary>
+    /// The business account, on which employee payroll cheques are drawn.
+    /// </summary>
+    /// <remarks>
+    /// The society appears to run two accounts. The main account (1000) is for landlord-rent
+    /// offsets; this one is for employee loan cheques. The committee must confirm the names
+    /// before go-live; splitting them after opening balances are posted requires a manual
+    /// journal entry. See docs/open-questions.md section "Raised by building reconciliation".
+    /// </remarks>
+    public const string BankBusiness = "1001";
+
     public const string InterestReceivable = "1100";
 
     /// <summary>Prefix for per-loan receivable accounts, e.g. <c>1200-AKB-2026-0007</c>.</summary>
@@ -49,6 +61,7 @@ public static class ChartOfAccounts
     public static IReadOnlyList<SeedAccount> SocietyAccounts { get; } =
     [
         new(Bank, "Bank", AccountType.Asset),
+        new(BankBusiness, "Business Account", AccountType.Asset),
         new(InterestReceivable, "Interest Receivable", AccountType.Asset),
         new(DividendsPayable, "Dividends Payable", AccountType.Liability),
         new(UnallocatedReceipts, "Unallocated Receipts", AccountType.Liability),

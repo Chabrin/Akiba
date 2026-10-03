@@ -45,6 +45,20 @@ public enum ApprovalDecisionKind
     Reject = 2,
 }
 
+/// <summary>
+/// How the liability is divided when a loan has multiple guarantors.
+/// </summary>
+/// <remarks>
+/// The committee chooses which rule applies at the point of receiving the application.
+/// ProRata divides liability in proportion to each guarantor's covered amount;
+/// JointAndSeveral makes every guarantor liable for the full outstanding balance.
+/// </remarks>
+public enum GuarantorLiabilityBasis
+{
+    ProRata = 1,
+    JointAndSeveral = 2,
+}
+
 /// <summary>One representative's decision on an application.</summary>
 /// <param name="Approver">The representative.</param>
 /// <param name="Decision">What they decided.</param>
@@ -160,6 +174,18 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
     public string? RejectionReason { get; private set; }
 
     /// <summary>
+    /// How guarantor liability is apportioned on this application.
+    /// Defaults to ProRata; can be changed while the application is still in Draft.
+    /// </summary>
+    public GuarantorLiabilityBasis LiabilityBasis { get; private set; } = GuarantorLiabilityBasis.ProRata;
+
+    public void SetLiabilityBasis(GuarantorLiabilityBasis basis)
+    {
+        EnsureEditable();
+        LiabilityBasis = basis;
+    }
+
+    /// <summary>
     /// Starts an application from the paper form.
     /// </summary>
     /// <param name="borrowerId">Who is applying.</param>
@@ -176,7 +202,8 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         Money requestedPrincipal,
         DateOnly receivedOn,
         ApplicationCutoff cutoff,
-        int? requestedTermMonths = null)
+        int? requestedTermMonths = null,
+        GuarantorLiabilityBasis liabilityBasis = GuarantorLiabilityBasis.ProRata)
     {
         ArgumentNullException.ThrowIfNull(cutoff);
 
@@ -200,7 +227,10 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
             requestedTermMonths,
             receivedOn,
             cutoff.ConsiderationMonth(receivedOn),
-            cutoff.Version);
+            cutoff.Version)
+        {
+            LiabilityBasis = liabilityBasis,
+        };
     }
 
     /// <summary>Rebuilds an application from storage. For the persistence layer only.</summary>
@@ -230,7 +260,8 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
         IEnumerable<ApprovalDecision> decisions,
         IEnumerable<Guarantee> guarantees,
         IEnumerable<LoanSecurity> security,
-        IEnumerable<AttachedDocument> documents)
+        IEnumerable<AttachedDocument> documents,
+        GuarantorLiabilityBasis liabilityBasis = GuarantorLiabilityBasis.ProRata)
     {
         var application = new LoanApplication(
             id, borrowerId, zoneId, product, requestedPrincipal, requestedTermMonths,
@@ -249,6 +280,7 @@ public sealed class LoanApplication : AggregateRoot<LoanApplicationId>
             PaymentVoucherReference = paymentVoucherReference,
             VoucherPreparedOn = voucherPreparedOn,
             VoucherRevision = voucherRevision,
+            LiabilityBasis = liabilityBasis,
         };
 
         application._decisions.AddRange(decisions);

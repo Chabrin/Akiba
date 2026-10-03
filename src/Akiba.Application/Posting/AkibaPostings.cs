@@ -397,6 +397,37 @@ public static class AkibaPostings
     }
 
     /// <summary>
+    /// Settles one member's dividend entitlement.
+    /// </summary>
+    /// <remarks>
+    /// Debit Dividends Payable (the liability to this member clears), credit the settlement
+    /// account: Bank for cash, the member's share account for capitalisation, or the loan
+    /// receivable for an offset.
+    /// </remarks>
+    public static JournalEntry DividendSettlement(
+        AccountId dividendsPayable,
+        AccountId settlementAccount,
+        Money amount,
+        DateOnly settledOn,
+        string memberName,
+        int dividendYear,
+        string settlementKindLabel,
+        Actor postedBy,
+        DateTimeOffset postedAtUtc) =>
+        JournalEntry.Post(
+            settledOn,
+            $"Dividend settlement ({settlementKindLabel}) - {memberName}",
+            SourceDocument.Of(
+                SourceDocumentKind.DividendSchedule,
+                dividendYear.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            postedBy,
+            postedAtUtc,
+            [
+                JournalLine.Debit(dividendsPayable, amount, memberName),
+                JournalLine.Credit(settlementAccount, amount, $"{dividendYear} dividend — {memberName}"),
+            ]);
+
+    /// <summary>
     /// A member's shares are withdrawn.
     /// </summary>
     /// <remarks>

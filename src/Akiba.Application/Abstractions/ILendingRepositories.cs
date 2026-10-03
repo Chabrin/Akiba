@@ -26,6 +26,9 @@ public interface IBorrowerRepository
     /// </summary>
     Task<IReadOnlyList<Member>> LandlordMembersAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Non-member client borrowers.</summary>
+    Task<IReadOnlyList<ClientBorrower>> AllClientBorrowersAsync(CancellationToken cancellationToken = default);
+
     void Add(Borrower borrower);
 
     void Update(Borrower borrower);

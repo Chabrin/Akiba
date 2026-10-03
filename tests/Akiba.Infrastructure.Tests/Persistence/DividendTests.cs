@@ -1,4 +1,4 @@
-using Akiba.Application;
+﻿using Akiba.Application;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Dividends;
 using Akiba.Application.Ledger;
@@ -77,7 +77,7 @@ public sealed class DividendTests : IAsyncLifetime
         await ContributeAsync(peter, 10_000m, months: 12);
 
         // One loan, so there is interest to distribute. 60,000 at a flat 10% recognises 6,000.
-        await LendAsync(grace, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(grace, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var runId = await SendAsync(new ComputeDividendRunCommand(2026));
 
@@ -136,7 +136,7 @@ public sealed class DividendTests : IAsyncLifetime
     {
         var memberId = await EnrolAsync("0001", "Grace", "Njeri");
         await ContributeAsync(memberId, 20_000m, months: 12);
-        await LendAsync(memberId, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(memberId, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var runId = await SendAsync(new ComputeDividendRunCommand(2026));
 
@@ -163,7 +163,7 @@ public sealed class DividendTests : IAsyncLifetime
         await ContributeAsync(yearRound, 10_000m, months: 12);
         await ContributeAsync(lateJoiner, 60_000m, months: 2, from: 11);
 
-        await LendAsync(yearRound, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(yearRound, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var runId = await SendAsync(new ComputeDividendRunCommand(2026));
         var comparison = await SendAsync(new CompareDividendBasesQuery(runId));
@@ -231,7 +231,7 @@ public sealed class DividendTests : IAsyncLifetime
 
         await ContributeAsync(grace, 20_000m, months: 12);
         await ContributeAsync(peter, 10_000m, months: 12);
-        await LendAsync(grace, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(grace, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var runId = await SendAsync(new ComputeDividendRunCommand(2026));
 

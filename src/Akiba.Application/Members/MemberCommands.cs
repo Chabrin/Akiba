@@ -289,6 +289,44 @@ internal sealed class SetMemberContributionHandler : IRequestHandler<SetMemberCo
 }
 
 /// <summary>
+/// Enables or disables notifications for a member.
+/// </summary>
+/// <remarks>
+/// A member can request to be removed from the SMS/email distribution by writing to the
+/// chairman. The clerk records the change here; it takes effect immediately.
+/// </remarks>
+public sealed record SetMemberNotificationsCommand(BorrowerId MemberId, bool Enabled) : IRequest;
+
+internal sealed class SetMemberNotificationsHandler : IRequestHandler<SetMemberNotificationsCommand>
+{
+    private readonly IBorrowerRepository _borrowers;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SetMemberNotificationsHandler(IBorrowerRepository borrowers, IUnitOfWork unitOfWork)
+    {
+        _borrowers = borrowers;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(SetMemberNotificationsCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var member = await _borrowers.FindMemberAsync(command.MemberId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No member with id {command.MemberId}.");
+
+        if (command.Enabled)
+            member.EnableNotifications();
+        else
+            member.DisableNotifications();
+
+        _borrowers.Update(member);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+}
+
+/// <summary>
 /// Records that a member has left CAL.
 /// </summary>
 /// <remarks>

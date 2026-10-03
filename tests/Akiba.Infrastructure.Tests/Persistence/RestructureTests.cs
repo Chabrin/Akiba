@@ -211,9 +211,9 @@ public sealed class RestructureTests : IAsyncLifetime
             "0001", "CAL/0001", "Grace", "Njeri", null,
             "28765432", "0712345678", null, _zoneId, false));
 
-        for (var month = 1; month <= 2; month++)
+        for (var month = 7; month <= 8; month++)
         {
-            await ContributeAsync(memberId, 100_000m, new DateOnly(2026, month, 28));
+            await ContributeAsync(memberId, 100_000m, new DateOnly(2025, month, 28));
         }
 
         var applicationId = await SendAsync(new ReceiveLoanApplicationCommand(

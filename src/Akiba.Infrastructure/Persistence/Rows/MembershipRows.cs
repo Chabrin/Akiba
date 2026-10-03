@@ -54,6 +54,8 @@ internal sealed class BorrowerRow
     /// </summary>
     public decimal? MonthlyContributionKes { get; set; }
 
+    public bool NotificationsEnabled { get; set; } = true;
+
     // --- Client only -------------------------------------------------
     public string? IntroducedBy { get; set; }
 

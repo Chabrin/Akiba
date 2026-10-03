@@ -50,6 +50,7 @@ internal static class LendingMapper
             PaymentVoucherReference = application.PaymentVoucherReference,
             VoucherPreparedOn = application.VoucherPreparedOn,
             VoucherRevision = application.VoucherRevision,
+            LiabilityBasis = (int)application.LiabilityBasis,
         };
 
         row.Decisions =
@@ -150,7 +151,8 @@ internal static class LendingMapper
             row.Guarantees.Select(ToDomain),
             row.Security.Select(security =>
                 new LoanSecurity((LoanSecurityKind)security.Kind, security.Details)),
-            row.Documents.Select(MembershipMapper.ToDomain));
+            row.Documents.Select(MembershipMapper.ToDomain),
+            (GuarantorLiabilityBasis)row.LiabilityBasis);
 
         return application;
     }

@@ -42,6 +42,7 @@ internal static class MembershipMapper
             ExitedOn = member.ExitedOn,
             IsLandlord = member.IsLandlord,
             MonthlyContributionKes = member.MonthlyShareContribution?.Amount,
+            NotificationsEnabled = member.NotificationsEnabled,
             Documents = [.. member.Documents.Select(document => ToRow(document, member.Id.Value, null))],
         },
         ClientBorrower client => new BorrowerRow
@@ -102,7 +103,8 @@ internal static class MembershipMapper
             (EmploymentStatus)(row.EmploymentStatus ?? (int)EmploymentStatus.Employed),
             row.ExitedOn,
             row.IsLandlord,
-            monthlyContribution);
+            monthlyContribution,
+            row.NotificationsEnabled);
 
         Attach(member, row);
 
@@ -113,6 +115,11 @@ internal static class MembershipMapper
         ToDomain(row) as Member
         ?? throw new InvalidOperationException(
             $"Borrower {row?.Id} is a non-member client and holds no shares.");
+
+    public static ClientBorrower ToClient(BorrowerRow row) =>
+        ToDomain(row) as ClientBorrower
+        ?? throw new InvalidOperationException(
+            $"Borrower {row?.Id} is a member, not a non-member client.");
 
     public static AttachedDocumentRow ToRow(
         AttachedDocument document, Guid? borrowerId, Guid? applicationId) => new()

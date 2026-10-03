@@ -3,6 +3,8 @@ using Akiba.Application.Posting;
 using Akiba.Domain.Dividends;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
+using Akiba.Domain.Lending;
+using Akiba.Domain.Membership;
 using FluentValidation;
 using MediatR;
 
@@ -402,6 +404,137 @@ internal sealed class PostDividendRunHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return entry.Id;
+    }
+}
+
+/// <summary>How a member's dividend entitlement is settled after the run is posted.</summary>
+public enum DividendSettlementKind
+{
+    /// <summary>Cheque or cash payment out of the bank account.</summary>
+    CashPayout = 1,
+
+    /// <summary>The entitlement is credited to the member's share account.</summary>
+    AddToShares = 2,
+
+    /// <summary>The entitlement is applied to reduce an outstanding loan balance.</summary>
+    OffsetLoan = 3,
+}
+
+/// <summary>
+/// Settles one member's dividend entitlement from a posted run.
+/// </summary>
+/// <param name="RunId">The posted dividend run.</param>
+/// <param name="MemberId">The member whose line is being settled.</param>
+/// <param name="Kind">Cash, capitalise to shares, or offset a running loan.</param>
+/// <param name="SettledOn">The date of the payment or capitalisation.</param>
+public sealed record SettleDividendLineCommand(
+    DividendRunId RunId,
+    Guid MemberId,
+    DividendSettlementKind Kind,
+    DateOnly SettledOn) : IRequest<JournalEntryId>;
+
+internal sealed class SettleDividendLineHandler
+    : IRequestHandler<SettleDividendLineCommand, JournalEntryId>
+{
+    private readonly IDividendRunRepository _runs;
+    private readonly IAkibaAccounts _accounts;
+    private readonly ILoanRepository _loans;
+    private readonly IJournalRepository _journal;
+    private readonly ICurrentUser _currentUser;
+    private readonly IClock _clock;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public SettleDividendLineHandler(
+        IDividendRunRepository runs,
+        IAkibaAccounts accounts,
+        ILoanRepository loans,
+        IJournalRepository journal,
+        ICurrentUser currentUser,
+        IClock clock,
+        IUnitOfWork unitOfWork)
+    {
+        _runs = runs;
+        _accounts = accounts;
+        _loans = loans;
+        _journal = journal;
+        _currentUser = currentUser;
+        _clock = clock;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<JournalEntryId> Handle(
+        SettleDividendLineCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var run = await ReviewDividendRunHandler
+            .LoadAsync(_runs, command.RunId, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (run.Status != DividendRunStatus.Posted)
+        {
+            throw new InvalidOperationException(
+                "Only a posted dividend run can be settled. Post the run first.");
+        }
+
+        var line = run.Lines.FirstOrDefault(l => l.MemberId == command.MemberId)
+            ?? throw new InvalidOperationException(
+                $"Member {command.MemberId} has no line in this dividend run.");
+
+        var dividendsPayable = await _accounts.DividendsPayableAsync(cancellationToken).ConfigureAwait(false);
+
+        var settlementAccount = command.Kind switch
+        {
+            DividendSettlementKind.AddToShares =>
+                new AccountId(line.SharesAccountId),
+
+            DividendSettlementKind.OffsetLoan =>
+                await ResolveLoanReceivableAsync(command.MemberId, cancellationToken).ConfigureAwait(false),
+
+            _ =>
+                await _accounts.BankAsync(cancellationToken).ConfigureAwait(false),
+        };
+
+        var label = command.Kind switch
+        {
+            DividendSettlementKind.AddToShares => "add to shares",
+            DividendSettlementKind.OffsetLoan => "offset loan",
+            _ => "cash payout",
+        };
+
+        var entry = AkibaPostings.DividendSettlement(
+            dividendsPayable,
+            settlementAccount,
+            line.Amount,
+            command.SettledOn,
+            line.FullName,
+            run.Year,
+            label,
+            _currentUser.Actor,
+            _clock.UtcNow);
+
+        await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        return entry.Id;
+    }
+
+    private async Task<AccountId> ResolveLoanReceivableAsync(
+        Guid memberId, CancellationToken cancellationToken)
+    {
+        var running = await _loans
+            .RunningForBorrowerAsync(new BorrowerId(memberId), cancellationToken)
+            .ConfigureAwait(false);
+
+        if (running.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "This member has no running loan to offset the dividend against. " +
+                "Choose cash payout or add to shares instead.");
+        }
+
+        // Offset against the oldest running loan (lowest by disbursement — first in list).
+        return running[0].ReceivableAccountId;
     }
 }
 

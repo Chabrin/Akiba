@@ -30,16 +30,35 @@
     <div class="akiba-field-group">
         <span class="akiba-field-group-label">Who is asking</span>
 
-        <MudSelect T="Guid?" @bind-Value="_borrowerId" Label="Member"
-                   Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
-            @foreach (var member in _members)
-            {
-                <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
-                    @member.MembershipNumber — @member.Name
-                    (limit <MoneyText Amount="member.BorrowingLimit" />)
-                </MudSelectItem>
-            }
-        </MudSelect>
+        @if (_product == LoanProduct.Client)
+        {
+            <MudSelect T="Guid?" @bind-Value="_borrowerId" Label="Client"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                @foreach (var client in _clients)
+                {
+                    <MudSelectItem T="Guid?" Value="@client.BorrowerId.Value">
+                        @client.Name
+                        @if (client.IntroducedBy is { } intro)
+                        {
+                            <span> — introduced by @intro</span>
+                        }
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        }
+        else
+        {
+            <MudSelect T="Guid?" @bind-Value="_borrowerId" Label="Member"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                @foreach (var member in _members)
+                {
+                    <MudSelectItem T="Guid?" Value="@member.MemberId.Value">
+                        @member.MembershipNumber — @member.Name
+                        (limit <MoneyText Amount="member.BorrowingLimit" />)
+                    </MudSelectItem>
+                }
+            </MudSelect>
+        }
     </div>
 
     <div class="akiba-field-group">
@@ -47,7 +66,9 @@
 
         <MudGrid Spacing="2">
             <MudItem xs="12">
-                <MudSelect T="LoanProduct" @bind-Value="_product" Label="Product"
+                <MudSelect T="LoanProduct" Value="_product"
+                           ValueChanged="@((LoanProduct p) => { _product = p; _borrowerId = null; })"
+                           Label="Product"
                            Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
                     <MudSelectItem T="LoanProduct" Value="LoanProduct.Normal">
                         Normal — flat 10%, term from the graduated scale
@@ -89,6 +110,18 @@
                                  HelperText="For the two-thirds rule" />
             </MudItem>
         </MudGrid>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Guarantor liability</span>
+        <MudRadioGroup T="GuarantorLiabilityBasis" @bind-Value="_liabilityBasis">
+            <MudRadio T="GuarantorLiabilityBasis" Value="GuarantorLiabilityBasis.ProRata" Dense="true">
+                Pro rata — each guarantor is liable for their share of the balance only
+            </MudRadio>
+            <MudRadio T="GuarantorLiabilityBasis" Value="GuarantorLiabilityBasis.JointAndSeveral" Dense="true">
+                Joint and several — each guarantor is liable for the full outstanding balance
+            </MudRadio>
+        </MudRadioGroup>
     </div>
 </WorkPanel>
 
@@ -285,6 +318,7 @@
     private Step _step => Current;
 
     private IReadOnlyList<MemberSummary> _members = [];
+    private IReadOnlyList<ClientBorrowerSummary> _clients = [];
     private IReadOnlyList<ChequeBookSummary> _chequeBooks = [];
     private Guid? _chequeBookId;
     private Guid? _selectedLeafId;
@@ -300,6 +334,8 @@
     private DateTime? _receivedOn;
     private int? _termMonths;
     private decimal? _grossSalary;
+
+    private GuarantorLiabilityBasis _liabilityBasis = GuarantorLiabilityBasis.ProRata;
 
     private ApprovalDecisionKind _decision = ApprovalDecisionKind.Approve;
     private string? _comment;
@@ -416,7 +452,11 @@
         }
 
         _loaded = true;
-        _members = await Mediator.Send(new ListMembersQuery(today, false));
+        var (membersResult, clientsResult) = (
+            await Mediator.Send(new ListMembersQuery(today, false)),
+            await Mediator.Send(new ListClientBorrowersQuery()));
+        _members = membersResult;
+        _clients = clientsResult;
     }
 
     private async Task ReceiveAsync() => await RunAsync(async () =>
@@ -427,7 +467,8 @@
             Money.Kes(_principal),
             DateOnly.FromDateTime(_receivedOn!.Value),
             _grossSalary is { } salary ? Money.Kes(salary) : null,
-            _termMonths));
+            _termMonths,
+            _liabilityBasis));
     });
 
     private async Task DecideAsync() => await RunAsync(async () =>
@@ -578,6 +619,7 @@
         _principal = 0;
         _termMonths = null;
         _grossSalary = null;
+        _liabilityBasis = GuarantorLiabilityBasis.ProRata;
         _decision = ApprovalDecisionKind.Approve;
         _comment = null;
         _approvedPrincipal = null;

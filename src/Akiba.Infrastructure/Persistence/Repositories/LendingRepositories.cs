@@ -106,6 +106,20 @@ internal sealed class BorrowerRepository : IBorrowerRepository
         return [.. rows.Select(MembershipMapper.ToMember)];
     }
 
+    public async Task<IReadOnlyList<ClientBorrower>> AllClientBorrowersAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var rows = await _context.Borrowers
+            .AsNoTracking()
+            .Where(borrower => borrower.Kind == BorrowerKind.Client)
+            .OrderBy(borrower => borrower.FamilyName)
+            .ThenBy(borrower => borrower.GivenName)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. rows.Select(MembershipMapper.ToClient)];
+    }
+
     public void Add(Borrower borrower) => _context.Borrowers.Add(MembershipMapper.ToRow(borrower));
 
     public void Update(Borrower borrower)

@@ -41,6 +41,8 @@ internal sealed class LoanApplicationRow
 
     public string? RejectionReason { get; set; }
 
+    public int LiabilityBasis { get; set; } = 1;
+
     // --- Rental income security, from the revised form ----------------
     public string? PropertyName { get; set; }
 

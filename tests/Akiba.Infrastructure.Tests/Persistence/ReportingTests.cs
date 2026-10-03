@@ -1,4 +1,4 @@
-using Akiba.Application;
+﻿using Akiba.Application;
 using Akiba.Application.Abstractions;
 using Akiba.Application.Lending;
 using Akiba.Application.Members;
@@ -240,7 +240,7 @@ public sealed class ReportingTests : IAsyncLifetime
     {
         var memberId = await EnrolAsync("0001", "CAL/0001", "Grace", "Njeri");
         await ContributeAsync(memberId, 200_000m, months: 1, to: 2);
-        await LendAsync(memberId, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(memberId, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var year = await SendAsync(new GetIncomeAndExpenditureQuery(
             new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 31)));
@@ -262,7 +262,7 @@ public sealed class ReportingTests : IAsyncLifetime
     {
         var memberId = await EnrolAsync("0001", "CAL/0001", "Grace", "Njeri");
         await ContributeAsync(memberId, 200_000m, months: 1, to: 2);
-        await LendAsync(memberId, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(memberId, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var pack = await SendAsync(new GetAgmPackQuery(
             2026,
@@ -288,10 +288,10 @@ public sealed class ReportingTests : IAsyncLifetime
     {
         var memberId = await EnrolAsync("0001", "CAL/0001", "Grace", "Njeri");
         await ContributeAsync(memberId, 40_000m, months: 1, to: 2);
-        await LendAsync(memberId, 60_000m, new DateOnly(2026, 3, 10), "AKB-2026-0001");
+        await LendAsync(memberId, 60_000m, new DateOnly(2026, 8, 10), "AKB-2026-0001");
 
         var summary = await SendAsync(
-            new GetShareholdingSummaryQuery(new DateOnly(2026, 3, 31)));
+            new GetShareholdingSummaryQuery(new DateOnly(2026, 9, 30)));
 
         var line = summary.Lines.Single();
 

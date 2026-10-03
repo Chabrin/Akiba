@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
 @inject IMediator Mediator
 @inject ICurrentUser CurrentUser
+@inject IClock Clock
 
 <PageTitle>Akiba - Dividend run</PageTitle>
 
@@ -145,6 +146,10 @@ else
                 <MudTh>Member</MudTh>
                 <MudTh Style="text-align: right">@_run.BasisName</MudTh>
                 <MudTh Style="text-align: right">Dividend</MudTh>
+                @if (_run.Status == DividendRunStatus.Posted)
+                {
+                    <MudTh Class="akiba-no-print"></MudTh>
+                }
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Member no.">@context.MembershipNumber</MudTd>
@@ -155,6 +160,16 @@ else
                 <MudTd DataLabel="Dividend" Class="akiba-money-cell">
                     <MoneyText Amount="context.Amount" />
                 </MudTd>
+                @if (_run.Status == DividendRunStatus.Posted)
+                {
+                    <MudTd Class="akiba-no-print">
+                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                   StartIcon="@Icons.Material.Filled.Payments"
+                                   OnClick="@(() => OpenSettlement(context))">
+                            Settle
+                        </MudButton>
+                    </MudTd>
+                }
             </RowTemplate>
             <PagerContent>
                 <MudTablePager Class="akiba-no-print" />
@@ -217,6 +232,43 @@ else
     }
 }
 
+<WorkPanel Open="@(_settlingLine is not null)"
+           OpenChanged="@(open => { if (!open) _settlingLine = null; })"
+           Title="Settle dividend entitlement"
+           Subtitle="@_settlingLine?.FullName"
+           Consequence="Posts to the ledger immediately. The Dividends Payable balance for this member clears."
+           ConfirmText="Post settlement"
+           ConfirmIcon="@Icons.Material.Filled.Payments"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SettleLineAsync">
+
+    @if (_settlingLine is not null)
+    {
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Entitlement: <strong><MoneyText Amount="_settlingLine.Amount" /></strong>
+        </MudText>
+
+        <MudRadioGroup T="DividendSettlementKind" @bind-Value="_settlementKind" Class="mb-4">
+            <MudRadio T="DividendSettlementKind" Value="DividendSettlementKind.CashPayout"
+                      Color="Color.Primary" Dense="true">
+                Cash payout — cheque drawn from the bank account
+            </MudRadio>
+            <MudRadio T="DividendSettlementKind" Value="DividendSettlementKind.AddToShares"
+                      Color="Color.Primary" Dense="true">
+                Add to shares — credited to the member's share account
+            </MudRadio>
+            <MudRadio T="DividendSettlementKind" Value="DividendSettlementKind.OffsetLoan"
+                      Color="Color.Primary" Dense="true">
+                Offset loan — applied to reduce the member's running loan balance
+            </MudRadio>
+        </MudRadioGroup>
+
+        <MudDatePicker @bind-Date="_settlementDate" Label="Settlement date"
+                       DateFormat="dd MMM yyyy" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    }
+</WorkPanel>
+
 <WorkPanel @bind-Open="_withdrawing"
            Title="Withdraw this dividend run"
            Subtitle="@(_run is null ? null : $"{_run.Year} dividend")"
@@ -244,6 +296,10 @@ else
     private bool _withdrawing;
     private string _withdrawReason = string.Empty;
 
+    private DividendLine? _settlingLine;
+    private DividendSettlementKind _settlementKind = DividendSettlementKind.CashPayout;
+    private DateTime? _settlementDate;
+
     private async Task WithdrawAsync()
     {
         if (string.IsNullOrWhiteSpace(_withdrawReason))
@@ -258,6 +314,30 @@ else
 
             _withdrawing = false;
             _withdrawReason = string.Empty;
+        });
+    }
+
+    private void OpenSettlement(DividendLine line)
+    {
+        _settlingLine = line;
+        _settlementKind = DividendSettlementKind.CashPayout;
+        _settlementDate = Clock.TodayInNairobi.ToDateTime(TimeOnly.MinValue);
+        _error = null;
+    }
+
+    private async Task SettleLineAsync()
+    {
+        if (_settlingLine is null || _settlementDate is null) return;
+
+        await RunAsync(async () =>
+        {
+            await Mediator.Send(new SettleDividendLineCommand(
+                new DividendRunId(Id),
+                _settlingLine.MemberId,
+                _settlementKind,
+                DateOnly.FromDateTime(_settlementDate.Value)));
+
+            _settlingLine = null;
         });
     }
 

@@ -152,22 +152,20 @@ public sealed class GuarantorRequirementTests
     }
 
     [Fact]
-    public void A_normal_loan_fully_covered_by_shares_still_requires_a_guarantor_but_says_so_is_unconfirmed()
+    public void A_normal_loan_fully_covered_by_shares_needs_no_guarantor()
     {
-        // The conservative default. Nothing in any source document says a share-covered normal
-        // loan may go unguaranteed, and the form has eighteen guarantor rows.
-        // See docs/open-questions.md, item 1.
+        // Committee decision (open-questions.md, item 1): no guarantors required when the
+        // borrower's own shares cover the full loan amount.
         var requirement = GuarantorRequirementPolicy.For(
             LoanProduct.Normal,
             loanAmount: Money.Kes(66_000m),
             borrowerShareholding: Money.Kes(120_000m),
             existingNormalLoanBalance: Money.ZeroKes);
 
-        requirement.AreGuarantorsRequired.Should().BeTrue();
+        requirement.AreGuarantorsRequired.Should().BeFalse();
         requirement.AmountNotCoveredByOwnShares.Should().Be(Money.ZeroKes);
-        requirement.IsSettledRule.Should().BeFalse(
-            because: "the committee has not confirmed this, and an approver should see that");
-        requirement.Reason.Should().Contain("has not confirmed");
+        requirement.IsSettledRule.Should().BeTrue();
+        requirement.Reason.Should().Contain("fully covered");
     }
 
     [Fact]

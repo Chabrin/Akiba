@@ -25,7 +25,8 @@ public sealed record ReceiveLoanApplicationCommand(
     Money RequestedPrincipal,
     DateOnly ReceivedOn,
     Money? DeclaredGrossSalary,
-    int? RequestedTermMonths) : IRequest<LoanApplicationId>;
+    int? RequestedTermMonths,
+    GuarantorLiabilityBasis LiabilityBasis = GuarantorLiabilityBasis.ProRata) : IRequest<LoanApplicationId>;
 
 public sealed class ReceiveLoanApplicationValidator : AbstractValidator<ReceiveLoanApplicationCommand>
 {
@@ -120,7 +121,8 @@ internal sealed class ReceiveLoanApplicationHandler
             command.RequestedPrincipal,
             command.ReceivedOn,
             ApplicationCutoff.Version1,
-            command.RequestedTermMonths);
+            command.RequestedTermMonths,
+            command.LiabilityBasis);
 
         if (command.DeclaredGrossSalary is { } salary)
         {
