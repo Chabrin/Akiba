@@ -4,6 +4,7 @@
 @using Akiba.Application.Migration
 @inject IMediator Mediator
 @inject IClock Clock
+@inject IJSRuntime JS
 
 @*
     Getting the society's existing register into Akiba, once.
@@ -49,11 +50,17 @@ else
     <MudPaper Elevation="1" Class="pa-4 mb-4">
         <MudText Typo="Typo.overline" Class="mud-text-secondary">Step one — the register</MudText>
 
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" Style="max-width: 70ch;">
-            Copy three columns out of the register — staff number, name, shareholding — and
-            paste them here. One member per line, separated by tabs or commas. A heading row is
-            ignored. The spreadsheet itself stays where it is; nothing is uploaded.
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2" Style="max-width: 70ch;">
+            Download the template, fill it in Excel or Google Sheets — one member per row —
+            then select all the data rows (not the heading), copy, and paste below.
         </MudText>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Download"
+                   Class="mb-4"
+                   OnClick="DownloadTemplateAsync">
+            Download template (members.csv)
+        </MudButton>
 
         <MudTextField @bind-Value="_pasted" Label="Pasted from the register"
                       Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -426,6 +433,19 @@ else
         {
             _busy = false;
         }
+    }
+
+    private async Task DownloadTemplateAsync()
+    {
+        const string csv =
+            "Staff Number,Full Name,Shareholding (KES)\r\n" +
+            "0001,Grace Njeri,102000\r\n" +
+            "0002,Peter Mwangi,93500\r\n" +
+            "0003,Jane Atieno,78000\r\n";
+
+        var module = await JS.InvokeAsync<IJSObjectReference>(
+            "import", "/js/akiba-download.js");
+        await module.InvokeVoidAsync("downloadCsv", "akiba-members-template.csv", csv);
     }
 
     private async Task CommitAsync()

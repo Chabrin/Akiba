@@ -4,6 +4,7 @@
 @using Akiba.Application.Migration
 @inject IMediator Mediator
 @inject IClock Clock
+@inject IJSRuntime JS
 
 @*
     Importing running loans into Akiba at go-live, once.
@@ -43,16 +44,21 @@ else
     <MudPaper Elevation="1" Class="pa-4 mb-4">
         <MudText Typo="Typo.overline" Class="mud-text-secondary">Step one — the loan register</MudText>
 
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3" Style="max-width: 70ch;">
-            Copy five columns out of the register — loan number, payroll number, outstanding
-            balance, disbursement date, months remaining — and paste them here. One loan per
-            line, separated by tabs or commas. A heading row is ignored. The spreadsheet itself
-            stays where it is; nothing is uploaded.
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2" Style="max-width: 70ch;">
+            Download the template, fill it in Excel or Google Sheets — one loan per row —
+            then select all the data rows (not the heading), copy, and paste below.
         </MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-            Dates may be written as DD/MM/YYYY or YYYY-MM-DD. Outstanding balance is the amount
-            still owed as at the go-live date, not the original principal.
+            Outstanding balance is what the member still owes today, not the original amount.
+            Dates: DD/MM/YYYY. Months remaining: how many deductions are left.
         </MudText>
+
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Download"
+                   Class="mb-4"
+                   OnClick="DownloadTemplateAsync">
+            Download template (loans.csv)
+        </MudButton>
 
         <MudTextField @bind-Value="_pasted" Label="Pasted from the loan register"
                       Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -397,6 +403,19 @@ else
         {
             _busy = false;
         }
+    }
+
+    private async Task DownloadTemplateAsync()
+    {
+        const string csv =
+            "Loan Number,Payroll Number,Outstanding Balance (KES),Disbursement Date (DD/MM/YYYY),Months Remaining\r\n" +
+            "L-0001,0001,85000,15/12/2025,18\r\n" +
+            "L-0002,0002,42500,01/01/2026,9\r\n" +
+            "L-0003,0003,120000,10/06/2025,24\r\n";
+
+        var module = await JS.InvokeAsync<IJSObjectReference>(
+            "import", "/js/akiba-download.js");
+        await module.InvokeVoidAsync("downloadCsv", "akiba-loans-template.csv", csv);
     }
 
     private async Task CommitAsync()
