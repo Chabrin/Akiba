@@ -128,6 +128,10 @@ public static class IdentityConfiguration
                 policy.RequireTwoFactor().RequireRole(AkibaRoles.Treasurer))
             .AddPolicy(AkibaPolicies.ApprovesDividends, policy =>
                 policy.RequireTwoFactor().RequireRole(AkibaRoles.Chairman))
+            .AddPolicy(AkibaPolicies.ManagesOfficials, policy =>
+                policy.RequireTwoFactor().RequireRole(AkibaRoles.Chairman))
+            .AddPolicy(AkibaPolicies.ManagesCommittee, policy =>
+                policy.RequireTwoFactor().RequireRole(AkibaRoles.Chairman))
             .AddPolicy(AkibaPolicies.LoadsOpeningBalances, policy =>
                 policy.RequireTwoFactor()
                     .RequireRole(AkibaRoles.Treasurer, AkibaRoles.Chairman))

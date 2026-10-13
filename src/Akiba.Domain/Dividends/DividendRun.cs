@@ -84,6 +84,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
         int year,
         Money interestEarned,
         Money bankCharges,
+        Money otherExpenses,
         string basisName,
         string basisExplanation,
         IEnumerable<DividendLine> lines)
@@ -105,9 +106,16 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
                 "Bank charges are a positive amount that is deducted.", nameof(bankCharges));
         }
 
+        if (otherExpenses.IsNegative)
+        {
+            throw new ArgumentException(
+                "Other expenses are a positive amount that is deducted.", nameof(otherExpenses));
+        }
+
         Year = year;
         InterestEarned = interestEarned.Round();
         BankCharges = bankCharges.Round();
+        OtherExpenses = otherExpenses.Round();
         BasisName = basisName.Trim();
         BasisExplanation = basisExplanation?.Trim() ?? string.Empty;
         Status = DividendRunStatus.Draft;
@@ -122,8 +130,14 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
     /// <summary>Bank charges over the year. Deducted before the dividend.</summary>
     public Money BankCharges { get; }
 
-    /// <summary>Interest earned net of bank charges. What is shared out.</summary>
-    public Money Distributable => (InterestEarned - BankCharges).Round();
+    /// <summary>
+    /// Other society expenses for the year — committee allowances, AGM costs, etc.
+    /// Deducted before the dividend. Entered by the clerk when computing the run.
+    /// </summary>
+    public Money OtherExpenses { get; }
+
+    /// <summary>Interest earned net of all expenses. What is shared out.</summary>
+    public Money Distributable => (InterestEarned - BankCharges - OtherExpenses).Round();
 
     /// <summary>Which basis was used. Recorded, because it is not settled.</summary>
     public string BasisName { get; }
@@ -182,6 +196,9 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
     /// <param name="year">The year being distributed.</param>
     /// <param name="interestEarned">Interest earned on loans over the year.</param>
     /// <param name="bankCharges">Bank charges over the year.</param>
+    /// <param name="otherExpenses">
+    /// Other society expenses — committee allowances, AGM costs, etc. Entered by the clerk.
+    /// </param>
     /// <param name="members">Every member's shareholding over the year, read from the ledger.</param>
     /// <param name="basis">How each member's share is worked out.</param>
     /// <param name="clerk">Who computed it.</param>
@@ -193,6 +210,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
         int year,
         Money interestEarned,
         Money bankCharges,
+        Money otherExpenses,
         IReadOnlyList<MemberShareholdingOverYear> members,
         IDividendBasis basis,
         Actor clerk,
@@ -206,7 +224,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
             throw new ArgumentException("A dividend run records who computed it.", nameof(clerk));
         }
 
-        var distributable = (interestEarned - bankCharges).Round();
+        var distributable = (interestEarned - bankCharges - otherExpenses).Round();
 
         if (!distributable.IsPositive)
         {
@@ -248,7 +266,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
             .ToList();
 
         var run = new DividendRun(
-            DividendRunId.New(), year, interestEarned, bankCharges,
+            DividendRunId.New(), year, interestEarned, bankCharges, otherExpenses,
             basis.Name, basis.Explanation, lines)
         {
             ComputedBy = clerk,
@@ -264,6 +282,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
         int year,
         Money interestEarned,
         Money bankCharges,
+        Money otherExpenses,
         string basisName,
         string basisExplanation,
         DividendRunStatus status,
@@ -277,7 +296,7 @@ public sealed class DividendRun : AggregateRoot<DividendRunId>
         DateTimeOffset? postedAtUtc,
         string? withdrawnReason,
         IEnumerable<DividendLine> lines) =>
-        new(id, year, interestEarned, bankCharges, basisName, basisExplanation, lines)
+        new(id, year, interestEarned, bankCharges, otherExpenses, basisName, basisExplanation, lines)
         {
             Status = status,
             ComputedBy = computedBy,

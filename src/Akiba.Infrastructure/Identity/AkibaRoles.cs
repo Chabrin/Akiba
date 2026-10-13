@@ -67,6 +67,20 @@ public static class AkibaPolicies
     public const string DownloadsSchedules = "DownloadsSchedules";
 
     /// <summary>
+    /// Creating, editing, deactivating and reactivating official accounts. The chairman.
+    /// </summary>
+    /// <remarks>
+    /// The chairman holds break-glass credentials and is ultimately accountable for who can
+    /// access the system. Only the chairman may grant or revoke that access.
+    /// </remarks>
+    public const string ManagesOfficials = "ManagesOfficials";
+
+    /// <summary>
+    /// Managing committee positions, appointments, and election records. The chairman.
+    /// </summary>
+    public const string ManagesCommittee = "ManagesCommittee";
+
+    /// <summary>
     /// Loading the society's existing register. The treasurer or the chairman.
     /// </summary>
     /// <remarks>

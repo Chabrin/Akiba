@@ -133,6 +133,15 @@ public sealed class AkibaDbContext : IdentityDbContext<AkibaUser, AkibaRole, Gui
 
     internal DbSet<DividendLineRow> DividendLines => Set<DividendLineRow>();
 
+    internal DbSet<CommitteePositionRow> CommitteePositions => Set<CommitteePositionRow>();
+
+    internal DbSet<CommitteeAppointmentRow> CommitteeAppointments =>
+        Set<CommitteeAppointmentRow>();
+
+    internal DbSet<ElectionRecordRow> ElectionRecords => Set<ElectionRecordRow>();
+
+    internal DbSet<ElectionOutcomeRow> ElectionOutcomes => Set<ElectionOutcomeRow>();
+
     internal DbSet<LoanProductConfigRow> LoanProductConfigs => Set<LoanProductConfigRow>();
 
     internal DbSet<TermScaleBandRow> TermScaleBands => Set<TermScaleBandRow>();

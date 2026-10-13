@@ -1,5 +1,6 @@
 using Akiba.Application.Abstractions;
 using Akiba.Application.Auditing;
+using Akiba.Application.Committee;
 using Akiba.Application.Dividends;
 using Akiba.Application.Notifications;
 using Akiba.Application.Reporting;
@@ -65,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IReceiptRepository, ReceiptRepository>();
         services.AddScoped<IBankReconciliationRepository, BankReconciliationRepository>();
         services.AddScoped<IDividendRunRepository, DividendRunRepository>();
+        services.AddScoped<ICommitteeRepository, CommitteeRepository>();
         services.AddScoped<IAuditTrailQueries, AuditTrailQueries>();
         services.AddScoped<INotificationOutbox, NotificationOutbox>();
 
@@ -106,6 +108,8 @@ public static class DependencyInjection
         QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
         services.AddSingleton<IClock, SystemClock>();
+
+        services.AddScoped<IOfficialRepository, OfficialRepository>();
 
         return services;
     }

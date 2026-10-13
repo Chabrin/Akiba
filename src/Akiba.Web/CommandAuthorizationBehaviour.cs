@@ -1,5 +1,6 @@
 using System.Net;
 using Akiba.Application.Dividends;
+using Akiba.Application.Identity;
 using Akiba.Application.Ledger;
 using Akiba.Application.Migration;
 using Akiba.Application.Notifications;
@@ -127,6 +128,12 @@ internal sealed class CommandAuthorizationBehaviour<TRequest, TResponse> : IPipe
     /// </remarks>
     internal static string PolicyFor(Type requestType) => requestType switch
     {
+        _ when requestType == typeof(CreateOfficialCommand) => AkibaPolicies.ManagesOfficials,
+        _ when requestType == typeof(ResetOfficialPasswordCommand) => AkibaPolicies.ManagesOfficials,
+        _ when requestType == typeof(SetOfficialRolesCommand) => AkibaPolicies.ManagesOfficials,
+        _ when requestType == typeof(DeactivateOfficialCommand) => AkibaPolicies.ManagesOfficials,
+        _ when requestType == typeof(ReactivateOfficialCommand) => AkibaPolicies.ManagesOfficials,
+
         _ when requestType == typeof(ClosePeriodCommand) => AkibaPolicies.ClosesPeriods,
         _ when requestType == typeof(ReviewDividendRunCommand) => AkibaPolicies.ClosesPeriods,
 
@@ -151,6 +158,7 @@ internal sealed class CommandAuthorizationBehaviour<TRequest, TResponse> : IPipe
     /// <summary>The office a policy belongs to, as an official would say it.</summary>
     private static string WhoMayDo(string policy) => policy switch
     {
+        AkibaPolicies.ManagesOfficials => "the chairman",
         AkibaPolicies.ClosesPeriods => "the treasurer",
         AkibaPolicies.ApprovesDividends => "the chairman",
         AkibaPolicies.LoadsOpeningBalances => "the treasurer or the chairman",

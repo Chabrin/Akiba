@@ -57,6 +57,12 @@ public static class ChartOfAccounts
     // Expenses
     public const string BankCharges = "5000";
 
+    /// <summary>Monthly allowances paid to committee members and zone representatives.</summary>
+    public const string CommitteeAllowances = "5100";
+
+    /// <summary>AGM hall hire, refreshments, and other society-level administrative costs.</summary>
+    public const string SocietyExpenses = "5200";
+
     /// <summary>The society-wide accounts created at go-live.</summary>
     public static IReadOnlyList<SeedAccount> SocietyAccounts { get; } =
     [
@@ -70,6 +76,8 @@ public static class ChartOfAccounts
         new(LoanInterestIncome, "Loan Interest Income", AccountType.Income),
         new(RestructuringFees, "Restructuring Fees", AccountType.Income),
         new(BankCharges, "Bank Charges", AccountType.Expense),
+        new(CommitteeAllowances, "Committee Allowances", AccountType.Expense),
+        new(SocietyExpenses, "Society Expenses", AccountType.Expense),
     ];
 
     /// <summary>The account code for a member's shares, from their membership number.</summary>

@@ -47,6 +47,13 @@
                 </MudSelect>
             </MudItem>
 
+            <MudItem xs="12" sm="6" md="4">
+                <MudNumericField T="decimal" @bind-Value="_otherExpenses"
+                                 Label="Other expenses (KSH)"
+                                 HelperText="Committee allowances + AGM + other society costs for the year"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+
             <MudItem xs="12" Class="d-flex gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary"
                            Disabled="_busy" OnClick="ComputeAsync">
@@ -127,6 +134,7 @@
 
     private int _year = DateTime.Today.Year - 1;
     private DividendBasisChoice _basis = DividendBasisChoice.ClosingShareholding;
+    private decimal _otherExpenses;
 
     private static IEnumerable<int> Years => Enumerable.Range(DateTime.Today.Year - 4, 5);
 
@@ -160,7 +168,7 @@
 
         try
         {
-            var runId = await Mediator.Send(new ComputeDividendRunCommand(_year, _basis));
+            var runId = await Mediator.Send(new ComputeDividendRunCommand(_year, _basis, _otherExpenses));
             Navigation.NavigateTo($"/dividends/{runId.Value}");
         }
         catch (Exception exception) when (exception is InvalidOperationException

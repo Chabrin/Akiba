@@ -975,6 +975,19 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
 }
 
 /* ---------------------------------------------------------------------------
+   The work panel overlay — a plain div so we own the z-index completely.
+   MudOverlay renders in a portal and can out-z-index any value we pass it.
+   --------------------------------------------------------------------------- */
+
+.akiba-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
    The work panel
 
    Every form in Akiba. Down the right-hand edge, so the list an official is
@@ -986,7 +999,7 @@ h1, h2, .mud-typography-h1, .mud-typography-h2 {
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 1401;
+    z-index: 9999;
     display: flex;
     flex-direction: column;
     width: min(37rem, 100vw);

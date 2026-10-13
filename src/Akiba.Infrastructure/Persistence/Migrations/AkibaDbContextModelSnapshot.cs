@@ -528,15 +528,12 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("MonthlyContributionKes")
                         .HasColumnType("numeric(14,2)");
 
-                    b.Property<bool>("NotificationsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("SharesOnHold")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("NationalId")
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)");
+
+                    b.Property<bool>("NotificationsEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("OtherNames")
                         .HasMaxLength(100)
@@ -552,6 +549,9 @@ namespace Akiba.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("SharesAccountId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("SharesOnHold")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("ZoneId")
                         .HasColumnType("uuid");
@@ -647,6 +647,87 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status", "ChequeBookId");
 
                     b.ToTable("cheque_leaves", "akiba");
+                });
+
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.CommitteeAppointmentRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("AppointedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EndedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("HolderName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SuspendedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PositionId", "Status");
+
+                    b.ToTable("committee_appointments", "akiba");
+                });
+
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.CommitteePositionRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AllowanceAmount")
+                        .HasColumnType("numeric(19,4)");
+
+                    b.Property<string>("AllowanceCurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Frequency")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("committee_positions", "akiba");
                 });
 
             modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.DividendLineRow", b =>
@@ -745,6 +826,11 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("InterestEarned")
                         .HasColumnType("numeric(19,4)");
 
+                    b.Property<decimal>("OtherExpenses")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(19,4)")
+                        .HasDefaultValue(0m);
+
                     b.Property<DateTimeOffset?>("PostedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -776,6 +862,62 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.HasIndex("Year");
 
                     b.ToTable("dividend_runs", "akiba");
+                });
+
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.ElectionOutcomeRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ElectedName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ElectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PositionName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ElectionId", "PositionId")
+                        .IsUnique();
+
+                    b.ToTable("election_outcomes", "akiba");
+                });
+
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.ElectionRecordRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("HeldOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("election_records", "akiba");
                 });
 
             modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.GuaranteeRow", b =>
@@ -946,6 +1088,9 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("DeclaredGrossSalary")
                         .HasColumnType("numeric(19,4)");
 
+                    b.Property<int>("LiabilityBasis")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("MonthlyRentalIncome")
                         .HasColumnType("numeric(19,4)");
 
@@ -959,9 +1104,6 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<string>("PreparedLoanNumber")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
-
-                    b.Property<int>("LiabilityBasis")
-                        .HasColumnType("integer");
 
                     b.Property<int>("Product")
                         .HasColumnType("integer");
@@ -1594,6 +1736,15 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.ElectionOutcomeRow", b =>
+                {
+                    b.HasOne("Akiba.Infrastructure.Persistence.Rows.ElectionRecordRow", null)
+                        .WithMany("Outcomes")
+                        .HasForeignKey("ElectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.GuaranteeRow", b =>
                 {
                     b.HasOne("Akiba.Infrastructure.Persistence.Rows.LoanApplicationRow", null)
@@ -1747,6 +1898,11 @@ namespace Akiba.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.DividendRunRow", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.ElectionRecordRow", b =>
+                {
+                    b.Navigation("Outcomes");
                 });
 
             modelBuilder.Entity("Akiba.Infrastructure.Persistence.Rows.JournalEntryRow", b =>

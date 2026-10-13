@@ -27,8 +27,10 @@
       dependency on EF Core itself, because a Blazor component that can open a DbContext is a
       component that will end up calculating money.
     -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="QRCoder" />
   </ItemGroup>
 
   <ItemGroup>

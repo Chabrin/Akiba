@@ -1,0 +1,456 @@
+@page "/setup/officials"
+@attribute [Authorize(Policy = AkibaPolicies.ManagesOfficials)]
+@inject IMediator Mediator
+
+<PageTitle>Akiba - Officials</PageTitle>
+
+<PageHeader Title="Officials"
+            Description="The people who run Akiba. Every account requires a TOTP authenticator; a new account can sign in once to enrol and can do nothing else until they have.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="@(() => _addingOfficial = true)">
+            Add official
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@* ── Add official panel ── *@
+<WorkPanel @bind-Open="_addingOfficial"
+           Title="Add an official"
+           Consequence="A one-time password will be shown once. Read it aloud to the new official — it is not stored anywhere."
+           ConfirmText="Create account"
+           ConfirmIcon="@Icons.Material.Filled.PersonAdd"
+           CanConfirm="@CanCreateOfficial"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="CreateAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Identity</span>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_newUsername"
+                              Label="Username"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              HelperText="Short, unique, no spaces — what they type to sign in"
+                              Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_newDisplayName"
+                              Label="Display name"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              HelperText="Name that appears against every entry they post"
+                              Immediate="true" />
+            </MudItem>
+        </MudGrid>
+    </div>
+
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Roles</span>
+        @foreach (var role in AllRoles)
+        {
+            <MudCheckBox T="bool"
+                         Value="@_newRoles.Contains(role.Name)"
+                         ValueChanged="@(v => ToggleNewRole(role.Name, v))"
+                         Label="@role.Name"
+                         Color="Color.Primary"
+                         Dense="true" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block" Style="margin-left:2.25rem">
+                @role.Description
+            </MudText>
+        }
+    </div>
+</WorkPanel>
+
+@* ── Edit roles panel ── *@
+<WorkPanel @bind-Open="_editingRoles"
+           Title="@($"Edit roles — {_editingOfficial?.DisplayName}")"
+           ConfirmText="Save roles"
+           ConfirmIcon="@Icons.Material.Filled.Save"
+           CanConfirm="true"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SaveRolesAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Roles</span>
+        @foreach (var role in AllRoles)
+        {
+            <MudCheckBox T="bool"
+                         Value="@_editRoles.Contains(role.Name)"
+                         ValueChanged="@(v => ToggleEditRole(role.Name, v))"
+                         Label="@role.Name"
+                         Color="Color.Primary"
+                         Dense="true" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2 d-block" Style="margin-left:2.25rem">
+                @role.Description
+            </MudText>
+        }
+    </div>
+</WorkPanel>
+
+@* ── One-time password result (shown until dismissed) ── *@
+@if (_temporaryPassword is not null)
+{
+    <MudAlert Severity="Severity.Warning" ShowCloseIcon="true" CloseIconClicked="() => _temporaryPassword = null"
+              Class="mb-4">
+        <MudText Typo="Typo.subtitle2">Temporary password — read aloud to @_temporaryPasswordFor. Not shown again.</MudText>
+        <MudText Typo="Typo.body1" Style="font-family: monospace; letter-spacing: 0.1em; user-select: all">
+            @_temporaryPassword
+        </MudText>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+            They will be prompted to set up their authenticator on first sign-in.
+        </MudText>
+    </MudAlert>
+}
+
+@* ── Officials table ── *@
+<MudPaper Elevation="1">
+    @if (_officials is null)
+    {
+        <TableSkeleton Rows="5" Columns="5" />
+    }
+    else if (_officials.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.Group"
+                    Title="No officials yet"
+                    Description="Add the accounts clerk, treasurer, chairman, secretary and HR." />
+    }
+    else
+    {
+        <MudTable Items="_officials"
+                  Dense="true"
+                  Hover="true"
+                  Striped="true"
+                  Elevation="0"
+                  Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Username</MudTh>
+                <MudTh>Display name</MudTh>
+                <MudTh>Roles</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>2FA</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Username">
+                    <strong>@context.Username</strong>
+                </MudTd>
+                <MudTd DataLabel="Display name">@context.DisplayName</MudTd>
+                <MudTd DataLabel="Roles">
+                    @foreach (var role in context.Roles)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="RoleColour(role)"
+                                 Variant="Variant.Outlined" Class="mr-1 mb-1">
+                            @role
+                        </MudChip>
+                    }
+                    @if (context.Roles.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">No roles</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                            Active
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="@($"Deactivated {context.DeactivatedAtUtc?.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)}")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined">
+                                Inactive
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="2FA">
+                    @if (context.TwoFactorEnrolled)
+                    {
+                        <MudTooltip Text="Authenticator enrolled">
+                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser"
+                                     Color="Color.Success" Size="Size.Small" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Authenticator not yet set up — they must enrol on next sign-in">
+                            <MudIcon Icon="@Icons.Material.Filled.GppMaybe"
+                                     Color="Color.Warning" Size="Size.Small" />
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <div class="akiba-row-actions" @onclick:stopPropagation="true">
+                        <MudTooltip Text="Edit roles">
+                            <MudIconButton Icon="@Icons.Material.Filled.ManageAccounts"
+                                           Size="Size.Small"
+                                           aria-label="@($"Edit roles for {context.DisplayName}")"
+                                           OnClick="@(() => StartEditRoles(context))" />
+                        </MudTooltip>
+
+                        <MudTooltip Text="Reset password and clear authenticator">
+                            <MudIconButton Icon="@Icons.Material.Filled.LockReset"
+                                           Size="Size.Small"
+                                           Color="Color.Warning"
+                                           aria-label="@($"Reset password for {context.DisplayName}")"
+                                           OnClick="@(() => ConfirmResetAsync(context))" />
+                        </MudTooltip>
+
+                        @if (context.IsActive)
+                        {
+                            <MudTooltip Text="Deactivate account — they can no longer sign in">
+                                <MudIconButton Icon="@Icons.Material.Filled.PersonOff"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               aria-label="@($"Deactivate {context.DisplayName}")"
+                                               OnClick="@(() => ConfirmDeactivateAsync(context))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Reactivate account">
+                                <MudIconButton Icon="@Icons.Material.Filled.PersonAdd"
+                                               Size="Size.Small"
+                                               Color="Color.Success"
+                                               aria-label="@($"Reactivate {context.DisplayName}")"
+                                               OnClick="@(() => ReactivateAsync(context))" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            @_officials.Count official(s). Every account requires a TOTP authenticator.
+        </MudText>
+    }
+</MudPaper>
+
+@if (_error is not null && !_addingOfficial && !_editingRoles)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private IReadOnlyList<OfficialSummary>? _officials;
+
+    private bool _addingOfficial;
+    private string _newUsername = string.Empty;
+    private string _newDisplayName = string.Empty;
+    private readonly HashSet<string> _newRoles = [];
+
+    private bool _editingRoles;
+    private OfficialSummary? _editingOfficial;
+    private readonly HashSet<string> _editRoles = [];
+
+    private string? _temporaryPassword;
+    private string? _temporaryPasswordFor;
+
+    private bool _busy;
+    private string? _error;
+
+    private bool CanCreateOfficial =>
+        !string.IsNullOrWhiteSpace(_newUsername) &&
+        !string.IsNullOrWhiteSpace(_newDisplayName) &&
+        _newRoles.Count > 0;
+
+    private static readonly (string Name, string Description)[] AllRoles =
+    [
+        (Akiba.Infrastructure.Identity.AkibaRoles.AccountsClerk,
+            "The only role that creates or edits records — enters receipts, applications, contributions"),
+        (Akiba.Infrastructure.Identity.AkibaRoles.Treasurer,
+            "Views everything; closes periods, reviews dividend runs, holds break-glass credentials"),
+        (Akiba.Infrastructure.Identity.AkibaRoles.Chairman,
+            "Views everything; approves dividend runs, reopens periods, manages accounts, holds break-glass credentials"),
+        (Akiba.Infrastructure.Identity.AkibaRoles.Secretary,
+            "Views everything"),
+        (Akiba.Infrastructure.Identity.AkibaRoles.Hr,
+            "Downloads monthly deduction schedules — cannot see any balance or loan"),
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _officials = await Mediator.Send(new ListOfficialsQuery());
+    }
+
+    private void ToggleNewRole(string role, bool add)
+    {
+        if (add)
+        {
+            _newRoles.Add(role);
+        }
+        else
+        {
+            _newRoles.Remove(role);
+        }
+    }
+
+    private void ToggleEditRole(string role, bool add)
+    {
+        if (add)
+        {
+            _editRoles.Add(role);
+        }
+        else
+        {
+            _editRoles.Remove(role);
+        }
+    }
+
+    private void StartEditRoles(OfficialSummary official)
+    {
+        _editingOfficial = official;
+        _editRoles.Clear();
+
+        foreach (var role in official.Roles)
+        {
+            _editRoles.Add(role);
+        }
+
+        _editingRoles = true;
+    }
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var result = await Mediator.Send(new CreateOfficialCommand(
+                _newUsername.Trim(),
+                _newDisplayName.Trim(),
+                [.. _newRoles]));
+
+            _temporaryPassword = result.TemporaryPassword;
+            _temporaryPasswordFor = _newDisplayName.Trim();
+
+            _newUsername = string.Empty;
+            _newDisplayName = string.Empty;
+            _newRoles.Clear();
+            _addingOfficial = false;
+
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveRolesAsync()
+    {
+        if (_editingOfficial is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new SetOfficialRolesCommand(
+                _editingOfficial.UserId, [.. _editRoles]));
+
+            _editingRoles = false;
+            _editingOfficial = null;
+
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmResetAsync(OfficialSummary official)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            var result = await Mediator.Send(new ResetOfficialPasswordCommand(official.UserId));
+            _temporaryPassword = result.TemporaryPassword;
+            _temporaryPasswordFor = official.DisplayName;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmDeactivateAsync(OfficialSummary official)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new DeactivateOfficialCommand(official.UserId));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReactivateAsync(OfficialSummary official)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await Mediator.Send(new ReactivateOfficialCommand(official.UserId));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static Color RoleColour(string role) => role switch
+    {
+        Akiba.Infrastructure.Identity.AkibaRoles.AccountsClerk => Color.Primary,
+        Akiba.Infrastructure.Identity.AkibaRoles.Treasurer => Color.Secondary,
+        Akiba.Infrastructure.Identity.AkibaRoles.Chairman => Color.Tertiary,
+        Akiba.Infrastructure.Identity.AkibaRoles.Secretary => Color.Info,
+        Akiba.Infrastructure.Identity.AkibaRoles.Hr => Color.Default,
+        _ => Color.Default,
+    };
+}

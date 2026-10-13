@@ -3,6 +3,7 @@
 [Oo]bj/
 [Oo]ut/
 artifacts/
+publish/
 *.user
 *.suo
 *.userosscache

@@ -11,6 +11,9 @@ internal sealed class DividendRunRow
 
     public decimal BankCharges { get; set; }
 
+    /// <summary>Other society expenses deducted before the dividend — allowances, AGM, etc.</summary>
+    public decimal OtherExpenses { get; set; }
+
     public string CurrencyCode { get; set; } = "KES";
 
     /// <summary>

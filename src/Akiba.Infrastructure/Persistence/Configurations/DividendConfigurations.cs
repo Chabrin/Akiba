@@ -17,6 +17,10 @@ internal sealed class DividendRunConfiguration : IEntityTypeConfiguration<Divide
         builder.Property(run => run.BankCharges)
             .HasColumnType(AkibaDbContext.MoneyColumnType).IsRequired();
 
+        builder.Property(run => run.OtherExpenses)
+            .HasColumnType(AkibaDbContext.MoneyColumnType).IsRequired()
+            .HasDefaultValue(0m);
+
         builder.Property(run => run.CurrencyCode).HasMaxLength(3).IsRequired();
         builder.Property(run => run.BasisName).HasMaxLength(100).IsRequired();
         builder.Property(run => run.BasisExplanation).HasMaxLength(500);

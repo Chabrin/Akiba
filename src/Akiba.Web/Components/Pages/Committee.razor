@@ -1,0 +1,551 @@
+@page "/committee"
+@attribute [Authorize(Policy = AkibaPolicies.ManagesCommittee)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Committee</PageTitle>
+
+<PageHeader Title="Committee"
+            Description="The people who run the society. Positions carry a configurable allowance; appointments track who holds each seat and for which term.">
+    <Actions>
+        <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.WorkspacePremium"
+                   OnClick="@(() => _addingPosition = true)">
+            Add position
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="@(() => _addingAppointment = true)">
+            Appoint member
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@* ── Add position panel ── *@
+<WorkPanel @bind-Open="_addingPosition"
+           Title="Add a position"
+           ConfirmText="Create position"
+           ConfirmIcon="@Icons.Material.Filled.WorkspacePremium"
+           CanConfirm="@CanCreatePosition"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="CreatePositionAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Position</span>
+        <MudTextField @bind-Value="_posName" Label="Name"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      HelperText="e.g. Chairperson, Zone Representative"
+                      Immediate="true" />
+        <MudTextField @bind-Value="_posDescription" Label="Description (optional)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                      Immediate="true" />
+    </div>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Allowance</span>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="7">
+                <MudNumericField T="decimal" @bind-Value="_posAllowance"
+                                 Label="Amount (KSH)" Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudSelect T="AllowanceFrequency" @bind-Value="_posFrequency"
+                           Label="Paid" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="AllowanceFrequency" Value="AllowanceFrequency.Monthly">
+                        Per month
+                    </MudSelectItem>
+                    <MudSelectItem T="AllowanceFrequency" Value="AllowanceFrequency.PerSitting">
+                        Per sitting
+                    </MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@* ── Edit position panel ── *@
+<WorkPanel @bind-Open="_editingPosition"
+           Title="@($"Edit — {_editPosition?.Name}")"
+           ConfirmText="Save"
+           ConfirmIcon="@Icons.Material.Filled.Save"
+           CanConfirm="true"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SavePositionAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Position</span>
+        <MudTextField @bind-Value="_posName" Label="Name"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+        <MudTextField @bind-Value="_posDescription" Label="Description (optional)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" Immediate="true" />
+    </div>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Allowance</span>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="7">
+                <MudNumericField T="decimal" @bind-Value="_posAllowance"
+                                 Label="Amount (KSH)" Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="12" sm="5">
+                <MudSelect T="AllowanceFrequency" @bind-Value="_posFrequency"
+                           Label="Paid" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="AllowanceFrequency" Value="AllowanceFrequency.Monthly">
+                        Per month
+                    </MudSelectItem>
+                    <MudSelectItem T="AllowanceFrequency" Value="AllowanceFrequency.PerSitting">
+                        Per sitting
+                    </MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@* ── Appoint member panel ── *@
+<WorkPanel @bind-Open="_addingAppointment"
+           Title="Appoint a member"
+           ConfirmText="Appoint"
+           ConfirmIcon="@Icons.Material.Filled.PersonAdd"
+           CanConfirm="@CanAddAppointment"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="AddAppointmentAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Position</span>
+        <MudSelect T="CommitteePositionSummary" @bind-Value="_apptPosition"
+                   Label="Position" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   ToStringFunc="@(p => p?.Name ?? string.Empty)">
+            @foreach (var pos in (_positions ?? []).Where(p => p.IsActive))
+            {
+                <MudSelectItem T="CommitteePositionSummary" Value="@pos">
+                    @pos.Name — KSH @pos.AllowanceAmount.ToString("N0")/@FrequencyLabel(pos.Frequency)
+                </MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Person</span>
+        <MudTextField @bind-Value="_apptHolderName" Label="Full name"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+    </div>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Term</span>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="5">
+                <MudDatePicker @bind-Date="_apptDate" Label="Appointed on"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="7">
+                <MudTextField @bind-Value="_apptTerm" Label="Term"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="e.g. 2024–2026" Immediate="true" />
+            </MudItem>
+        </MudGrid>
+    </div>
+</WorkPanel>
+
+@* ── Suspend appointment panel ── *@
+<WorkPanel @bind-Open="_suspending"
+           Title="@($"Suspend — {_suspendTarget?.HolderName}")"
+           ConfirmText="Suspend"
+           ConfirmIcon="@Icons.Material.Filled.PauseCircle"
+           ConfirmColour="Color.Warning"
+           CanConfirm="@(!string.IsNullOrWhiteSpace(_suspendReason))"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="SuspendAsync">
+    <MudTextField @bind-Value="_suspendReason" Label="Reason"
+                  Variant="Variant.Outlined" Margin="Margin.Dense"
+                  HelperText="Briefly record why this person is being removed from the seat."
+                  Immediate="true" />
+</WorkPanel>
+
+@* ── Estimated allowances summary ── *@
+@if (_estimatedAnnual > 0)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        Estimated annual committee allowances (active appointments):
+        <strong>KSH @_estimatedAnnual.ToString("N0")</strong>
+        — enter this in the <em>Other expenses</em> field when computing the dividend run,
+        along with the AGM allocation and any other society costs for the year.
+    </MudAlert>
+}
+
+@* ── Positions table ── *@
+<MudText Typo="Typo.h6" Class="mb-2 mt-4">Positions</MudText>
+<MudPaper Elevation="1" Class="mb-4">
+    @if (_positions is null)
+    {
+        <TableSkeleton Rows="4" Columns="4" />
+    }
+    else if (_positions.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.WorkspacePremium"
+                    Title="No positions yet"
+                    Description="Add positions before appointing members." />
+    }
+    else
+    {
+        <MudTable Items="_positions" Dense="true" Hover="true" Striped="true"
+                  Elevation="0" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Position</MudTh>
+                <MudTh>Allowance</MudTh>
+                <MudTh>Frequency</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Position">
+                    <strong>@context.Name</strong>
+                    @if (!string.IsNullOrWhiteSpace(context.Description))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">
+                            @context.Description
+                        </MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Allowance">KSH @context.AllowanceAmount.ToString("N0")</MudTd>
+                <MudTd DataLabel="Frequency">@FrequencyLabel(context.Frequency)</MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success"
+                                 Variant="Variant.Outlined">Active</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                 Variant="Variant.Outlined">Inactive</MudChip>
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <div class="akiba-row-actions" @onclick:stopPropagation="true">
+                        <MudTooltip Text="Edit">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => StartEditPosition(context))" />
+                        </MudTooltip>
+                        @if (context.IsActive)
+                        {
+                            <MudTooltip Text="Deactivate">
+                                <MudIconButton Icon="@Icons.Material.Filled.Archive"
+                                               Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => DeactivatePositionAsync(context))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Reactivate">
+                                <MudIconButton Icon="@Icons.Material.Filled.Unarchive"
+                                               Size="Size.Small" Color="Color.Success"
+                                               OnClick="@(() => ReactivatePositionAsync(context))" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@* ── Appointments table ── *@
+<MudText Typo="Typo.h6" Class="mb-2">Current appointments</MudText>
+<MudPaper Elevation="1">
+    @if (_appointments is null)
+    {
+        <TableSkeleton Rows="6" Columns="5" />
+    }
+    else if (_appointments.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.People"
+                    Title="No appointments"
+                    Description="Appoint members to the committee positions above." />
+    }
+    else
+    {
+        <MudTable Items="_appointments" Dense="true" Hover="true" Striped="true"
+                  Elevation="0" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Position</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Appointed</MudTh>
+                <MudTh>Term</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Position">@context.PositionName</MudTd>
+                <MudTd DataLabel="Name"><strong>@context.HolderName</strong></MudTd>
+                <MudTd DataLabel="Appointed">@context.AppointedOn.ToString("d MMM yyyy")</MudTd>
+                <MudTd DataLabel="Term">@context.Term</MudTd>
+                <MudTd DataLabel="Status">
+                    @switch (context.Status)
+                    {
+                        case AppointmentStatus.Active:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success"
+                                     Variant="Variant.Outlined">Active</MudChip>
+                            break;
+                        case AppointmentStatus.Suspended:
+                            <MudTooltip Text="@context.SuspendedReason">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                         Variant="Variant.Outlined">Suspended</MudChip>
+                            </MudTooltip>
+                            break;
+                        case AppointmentStatus.Ended:
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                     Variant="Variant.Outlined">Ended</MudChip>
+                            break;
+                    }
+                </MudTd>
+                <MudTd Class="akiba-no-print">
+                    <div class="akiba-row-actions" @onclick:stopPropagation="true">
+                        @if (context.Status == AppointmentStatus.Active)
+                        {
+                            <MudTooltip Text="Suspend">
+                                <MudIconButton Icon="@Icons.Material.Filled.PauseCircle"
+                                               Size="Size.Small" Color="Color.Warning"
+                                               OnClick="@(() => StartSuspend(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="End appointment">
+                                <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle"
+                                               Size="Size.Small" Color="Color.Error"
+                                               OnClick="@(() => EndAppointmentAsync(context))" />
+                            </MudTooltip>
+                        }
+                        @if (context.Status == AppointmentStatus.Suspended)
+                        {
+                            <MudTooltip Text="Reinstate">
+                                <MudIconButton Icon="@Icons.Material.Filled.PlayCircle"
+                                               Size="Size.Small" Color="Color.Success"
+                                               OnClick="@(() => ReinstateAsync(context))" />
+                            </MudTooltip>
+                        }
+                    </div>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+            @_appointments.Count appointment(s). Ended appointments are hidden — use the
+            Elections page to see the full history.
+        </MudText>
+    }
+</MudPaper>
+
+@if (_error is not null && !_addingPosition && !_editingPosition && !_addingAppointment && !_suspending)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private IReadOnlyList<CommitteePositionSummary>? _positions;
+    private IReadOnlyList<CommitteeAppointmentSummary>? _appointments;
+    private decimal _estimatedAnnual;
+
+    // Position panel state
+    private bool _addingPosition;
+    private bool _editingPosition;
+    private CommitteePositionSummary? _editPosition;
+    private string _posName = string.Empty;
+    private string _posDescription = string.Empty;
+    private decimal _posAllowance;
+    private AllowanceFrequency _posFrequency = AllowanceFrequency.Monthly;
+
+    // Appointment panel state
+    private bool _addingAppointment;
+    private CommitteePositionSummary? _apptPosition;
+    private string _apptHolderName = string.Empty;
+    private DateTime? _apptDate = DateTime.Today;
+    private string _apptTerm = string.Empty;
+
+    // Suspend panel state
+    private bool _suspending;
+    private CommitteeAppointmentSummary? _suspendTarget;
+    private string _suspendReason = string.Empty;
+
+    private bool _busy;
+    private string? _error;
+
+    private bool CanCreatePosition =>
+        !string.IsNullOrWhiteSpace(_posName);
+
+    private bool CanAddAppointment =>
+        _apptPosition is not null &&
+        !string.IsNullOrWhiteSpace(_apptHolderName) &&
+        !string.IsNullOrWhiteSpace(_apptTerm) &&
+        _apptDate is not null;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _positions = await Mediator.Send(new ListCommitteePositionsQuery());
+        _appointments = await Mediator.Send(
+            new ListCommitteeAppointmentsQuery(ActiveOnly: false));
+        _estimatedAnnual = await Mediator.Send(new EstimateAnnualAllowancesQuery());
+    }
+
+    private void StartEditPosition(CommitteePositionSummary pos)
+    {
+        _editPosition = pos;
+        _posName = pos.Name;
+        _posDescription = pos.Description ?? string.Empty;
+        _posAllowance = pos.AllowanceAmount;
+        _posFrequency = pos.Frequency;
+        _editingPosition = true;
+    }
+
+    private void StartSuspend(CommitteeAppointmentSummary appt)
+    {
+        _suspendTarget = appt;
+        _suspendReason = string.Empty;
+        _suspending = true;
+    }
+
+    private async Task CreatePositionAsync()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new CreateCommitteePositionCommand(
+                _posName.Trim(), NullIfEmpty(_posDescription), _posAllowance, _posFrequency));
+            _addingPosition = false;
+            _posName = _posDescription = string.Empty; _posAllowance = 0;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SavePositionAsync()
+    {
+        if (_editPosition is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new UpdatePositionAllowanceCommand(
+                _editPosition.Id, _posName.Trim(), NullIfEmpty(_posDescription),
+                _posAllowance, _posFrequency));
+            _editingPosition = false; _editPosition = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeactivatePositionAsync(CommitteePositionSummary pos)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new DeactivatePositionCommand(pos.Id));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ReactivatePositionAsync(CommitteePositionSummary pos)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new ReactivatePositionCommand(pos.Id));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task AddAppointmentAsync()
+    {
+        if (_apptPosition is null || _apptDate is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new AddAppointmentCommand(
+                _apptPosition.Id, _apptHolderName.Trim(),
+                DateOnly.FromDateTime(_apptDate.Value), _apptTerm.Trim()));
+            _addingAppointment = false;
+            _apptPosition = null; _apptHolderName = _apptTerm = string.Empty;
+            _apptDate = DateTime.Today;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SuspendAsync()
+    {
+        if (_suspendTarget is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new SuspendAppointmentCommand(
+                _suspendTarget.Id, _suspendReason.Trim()));
+            _suspending = false; _suspendTarget = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ReinstateAsync(CommitteeAppointmentSummary appt)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new ReinstateAppointmentCommand(appt.Id));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task EndAppointmentAsync(CommitteeAppointmentSummary appt)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new EndAppointmentCommand(
+                appt.Id, Clock.TodayInNairobi));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private static string FrequencyLabel(AllowanceFrequency f) => f switch
+    {
+        AllowanceFrequency.PerSitting => "sitting",
+        _ => "month",
+    };
+
+    private static string? NullIfEmpty(string s) =>
+        string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+}

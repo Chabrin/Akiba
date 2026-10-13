@@ -1,0 +1,330 @@
+@page "/elections"
+@attribute [Authorize(Policy = AkibaPolicies.ManagesCommittee)]
+@inject IMediator Mediator
+@inject IClock Clock
+
+<PageTitle>Akiba - Elections</PageTitle>
+
+<PageHeader Title="Elections"
+            Description="Record AGM election outcomes and ratify them to update committee appointments atomically.">
+    <Actions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.HowToVote"
+                   OnClick="@(() => _creating = true)">
+            Record election
+        </MudButton>
+    </Actions>
+</PageHeader>
+
+@* ── New election panel ── *@
+<WorkPanel @bind-Open="_creating"
+           Title="Record an election"
+           ConfirmText="Create draft"
+           ConfirmIcon="@Icons.Material.Filled.HowToVote"
+           CanConfirm="@CanCreate"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="CreateElectionAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Election</span>
+        <MudGrid Spacing="2">
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_createDate" Label="Held on"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               DateFormat="dd/MM/yyyy" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_createTerm" Label="Term"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="e.g. 2024–2026" Immediate="true" />
+            </MudItem>
+        </MudGrid>
+        <MudTextField @bind-Value="_createNotes" Label="Notes (optional)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2"
+                      Immediate="true" />
+    </div>
+</WorkPanel>
+
+@* ── Record outcome panel ── *@
+<WorkPanel @bind-Open="_recordingOutcome"
+           Title="@($"Record outcome — {_outcomeElection?.Term}")"
+           ConfirmText="Record"
+           ConfirmIcon="@Icons.Material.Filled.PersonPin"
+           CanConfirm="@CanRecordOutcome"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="RecordOutcomeAsync">
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Position</span>
+        <MudSelect T="CommitteePositionSummary" @bind-Value="_outcomePosition"
+                   Label="Position" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   ToStringFunc="@(p => p?.Name ?? string.Empty)">
+            @foreach (var pos in (_positions ?? []).Where(p => p.IsActive))
+            {
+                <MudSelectItem T="CommitteePositionSummary" Value="@pos">@pos.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+    <div class="akiba-field-group">
+        <span class="akiba-field-group-label">Elected person</span>
+        <MudTextField @bind-Value="_outcomeElectedName" Label="Full name"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+    </div>
+</WorkPanel>
+
+@* ── Ratify confirmation panel ── *@
+<WorkPanel @bind-Open="_ratifying"
+           Title="@($"Ratify election — {_ratifyTarget?.Term}")"
+           ConfirmText="Ratify"
+           ConfirmIcon="@Icons.Material.Filled.Gavel"
+           ConfirmColour="Color.Success"
+           CanConfirm="true"
+           Busy="_busy"
+           Error="@_error"
+           OnConfirm="RatifyAsync">
+    <MudAlert Severity="Severity.Warning" Dense="true">
+        Ratifying this election will <strong>end all current active appointments</strong> and
+        create new ones from the outcomes listed below. This cannot be undone.
+    </MudAlert>
+    @if (_ratifyTarget is not null)
+    {
+        <MudList T="string" Dense="true" Class="mt-2">
+            @foreach (var o in _ratifyTarget.Outcomes)
+            {
+                <MudListItem T="string" Icon="@Icons.Material.Filled.ArrowForward">
+                    <strong>@o.ElectedName</strong> → @o.PositionName
+                </MudListItem>
+            }
+        </MudList>
+        @if (_ratifyTarget.Outcomes.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                No outcomes recorded. Add at least one outcome before ratifying.
+            </MudText>
+        }
+    }
+</WorkPanel>
+
+@* ── Elections list ── *@
+@if (_elections is null)
+{
+    <TableSkeleton Rows="3" Columns="4" />
+}
+else if (_elections.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.HowToVote"
+                Title="No elections recorded"
+                Description="Use the button above to record an AGM election result." />
+}
+else
+{
+    @foreach (var election in _elections.OrderByDescending(e => e.HeldOn))
+    {
+        <MudPaper Elevation="1" Class="mb-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="pa-3 pb-0">
+                <MudIcon Icon="@Icons.Material.Filled.HowToVote"
+                         Color="@(election.Status == ElectionStatus.Ratified ? Color.Success : Color.Default)" />
+                <div style="flex:1">
+                    <MudText Typo="Typo.subtitle1">
+                        <strong>@election.Term</strong>
+                        <span class="mud-typography mud-typography-caption mud-text-secondary ml-2">
+                            held @election.HeldOn.ToString("d MMM yyyy")
+                        </span>
+                    </MudText>
+                    @if (!string.IsNullOrWhiteSpace(election.Notes))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@election.Notes</MudText>
+                    }
+                </div>
+                @if (election.Status == ElectionStatus.Ratified)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success"
+                             Variant="Variant.Outlined">Ratified</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                             Variant="Variant.Outlined">Draft</MudChip>
+                    <MudTooltip Text="Add outcome">
+                        <MudIconButton Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small"
+                                       OnClick="@(() => StartRecordOutcome(election))" />
+                    </MudTooltip>
+                    <MudTooltip Text="Ratify election">
+                        <MudIconButton Icon="@Icons.Material.Filled.Gavel" Size="Size.Small"
+                                       Color="Color.Success"
+                                       Disabled="@(election.Outcomes.Count == 0)"
+                                       OnClick="@(() => StartRatify(election))" />
+                    </MudTooltip>
+                }
+            </MudStack>
+
+            @if (election.Outcomes.Count > 0)
+            {
+                <MudTable Items="election.Outcomes" Dense="true" Hover="false"
+                          Elevation="0" Class="mt-1" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Position</MudTh>
+                        <MudTh>Elected</MudTh>
+                        @if (election.Status == ElectionStatus.Draft)
+                        {
+                            <MudTh></MudTh>
+                        }
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Position">@context.PositionName</MudTd>
+                        <MudTd DataLabel="Elected"><strong>@context.ElectedName</strong></MudTd>
+                        @if (election.Status == ElectionStatus.Draft)
+                        {
+                            <MudTd Class="akiba-no-print">
+                                <div class="akiba-row-actions" @onclick:stopPropagation="true">
+                                    <MudTooltip Text="Remove outcome">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                       Size="Size.Small" Color="Color.Error"
+                                                       OnClick="@(() => RemoveOutcomeAsync(election, context.Id))" />
+                                    </MudTooltip>
+                                </div>
+                            </MudTd>
+                        }
+                    </RowTemplate>
+                </MudTable>
+            }
+            else if (election.Status == ElectionStatus.Draft)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary pa-3 d-block">
+                    No outcomes yet — click the + button above to record who was elected to each position.
+                </MudText>
+            }
+        </MudPaper>
+    }
+}
+
+@if (_error is not null && !_creating && !_recordingOutcome && !_ratifying)
+{
+    <MudAlert Severity="Severity.Error" Class="mt-4">@_error</MudAlert>
+}
+
+@code {
+    private IReadOnlyList<ElectionSummary>? _elections;
+    private IReadOnlyList<CommitteePositionSummary>? _positions;
+
+    // Create panel
+    private bool _creating;
+    private DateTime? _createDate = DateTime.Today;
+    private string _createTerm = string.Empty;
+    private string _createNotes = string.Empty;
+
+    // Record outcome panel
+    private bool _recordingOutcome;
+    private ElectionSummary? _outcomeElection;
+    private CommitteePositionSummary? _outcomePosition;
+    private string _outcomeElectedName = string.Empty;
+
+    // Ratify panel
+    private bool _ratifying;
+    private ElectionSummary? _ratifyTarget;
+
+    private bool _busy;
+    private string? _error;
+
+    private bool CanCreate =>
+        _createDate is not null && !string.IsNullOrWhiteSpace(_createTerm);
+
+    private bool CanRecordOutcome =>
+        _outcomePosition is not null && !string.IsNullOrWhiteSpace(_outcomeElectedName);
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _elections = await Mediator.Send(new ListElectionsQuery());
+        _positions = await Mediator.Send(new ListCommitteePositionsQuery());
+    }
+
+    private async Task CreateElectionAsync()
+    {
+        if (_createDate is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new CreateElectionCommand(
+                DateOnly.FromDateTime(_createDate.Value),
+                _createTerm.Trim(),
+                NullIfEmpty(_createNotes)));
+            _creating = false;
+            _createTerm = _createNotes = string.Empty; _createDate = DateTime.Today;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private void StartRecordOutcome(ElectionSummary election)
+    {
+        _outcomeElection = election;
+        _outcomePosition = null;
+        _outcomeElectedName = string.Empty;
+        _recordingOutcome = true;
+    }
+
+    private async Task RecordOutcomeAsync()
+    {
+        if (_outcomeElection is null || _outcomePosition is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new RecordElectionOutcomeCommand(
+                _outcomeElection.Id, _outcomePosition.Id, _outcomeElectedName.Trim()));
+            _recordingOutcome = false;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RemoveOutcomeAsync(ElectionSummary election, Guid outcomeId)
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new RemoveElectionOutcomeCommand(election.Id, outcomeId));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private void StartRatify(ElectionSummary election)
+    {
+        _ratifyTarget = election;
+        _ratifying = true;
+    }
+
+    private async Task RatifyAsync()
+    {
+        if (_ratifyTarget is null) return;
+        _busy = true; _error = null;
+        try
+        {
+            await Mediator.Send(new RatifyElectionCommand(_ratifyTarget.Id, Clock.TodayInNairobi));
+            _ratifying = false; _ratifyTarget = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            _error = ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private static string? NullIfEmpty(string s) =>
+        string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+}

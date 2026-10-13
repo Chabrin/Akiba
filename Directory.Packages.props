@@ -1,5 +1,4 @@
 <Project>
-
   <!--
     Central package management. Versions are declared here ONCE and referenced
     without a version by each project.
@@ -11,7 +10,6 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
-
   <ItemGroup Label="Persistence">
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
@@ -22,15 +20,14 @@
          interceptor by the brief, and only one of the two is ever built. -->
     <PackageVersion Include="Audit.NET" Version="33.0.0" />
     <PackageVersion Include="Audit.EntityFramework.Core" Version="33.0.0" />
+    <PackageVersion Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
-
   <ItemGroup Label="Web">
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
     <!-- Lets Akiba run as the Windows service docs/deployment.md tells you to create. -->
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
     <PackageVersion Include="MudBlazor" Version="9.10.0" />
   </ItemGroup>
-
   <ItemGroup Label="Reporting">
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
     <!--
@@ -39,7 +36,6 @@
     -->
     <PackageVersion Include="QuestPDF" Version="2026.9.0" />
   </ItemGroup>
-
   <ItemGroup Label="Application layer">
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
@@ -60,7 +56,6 @@
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
   </ItemGroup>
-
   <ItemGroup Label="Testing">
     <!--
       Npgsql, so the integration tests can clear the connection pool between runs. They talk
@@ -86,5 +81,4 @@
     -->
     <PackageVersion Include="FsCheck.Xunit" Version="3.4.0" />
   </ItemGroup>
-
 </Project>

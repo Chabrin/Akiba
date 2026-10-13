@@ -53,13 +53,19 @@ public enum DividendBasisChoice
 /// How each member's share is worked out. Unsettled by the committee, so it is chosen
 /// explicitly and recorded on the run.
 /// </param>
+/// <param name="OtherExpenses">
+/// Society expenses other than bank charges to deduct before the dividend — committee
+/// allowances, AGM costs, etc. Entered by the clerk; the committee page shows the
+/// estimated annual allowances to help fill this in.
+/// </param>
 /// <remarks>
 /// Nothing is posted. The run is a draft until the treasurer reviews it and the chairman
 /// approves it, and only then may it reach the ledger.
 /// </remarks>
 public sealed record ComputeDividendRunCommand(
     int Year,
-    DividendBasisChoice Basis = DividendBasisChoice.ClosingShareholding)
+    DividendBasisChoice Basis = DividendBasisChoice.ClosingShareholding,
+    decimal OtherExpenses = 0m)
     : IRequest<DividendRunId>;
 
 public sealed class ComputeDividendRunValidator : AbstractValidator<ComputeDividendRunCommand>
@@ -130,10 +136,13 @@ internal sealed class ComputeDividendRunHandler
             .ShareholdingsOverYearAsync(_borrowers, _balances, command.Year, cancellationToken)
             .ConfigureAwait(false);
 
+        var otherExpenses = Money.Kes(command.OtherExpenses);
+
         var run = DividendRun.Compute(
             command.Year,
             interestEarned + restructuringFees,
             bankCharges,
+            otherExpenses,
             shareholdings,
             BasisFor(command.Basis),
             _currentUser.Actor,

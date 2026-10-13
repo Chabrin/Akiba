@@ -14,8 +14,10 @@
     closes the same way, so the second one an official meets needs no learning at all.
 *@
 
-<MudOverlay Visible="Open" DarkBackground="true" ZIndex="1400"
-            AutoClose="false" OnClick="CancelAsync" />
+@if (Open)
+{
+    <div class="akiba-overlay" @onclick="CancelAsync" aria-hidden="true"></div>
+}
 
 @* tabindex so the panel itself can hold focus, which is what makes Escape work and what
    stops the first Tab after opening landing back on the page behind. *@
