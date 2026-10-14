@@ -22,6 +22,12 @@
     <PackageVersion Include="Audit.EntityFramework.Core" Version="33.0.0" />
     <PackageVersion Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
+  <ItemGroup Label="Desktop">
+    <!-- WebView2 embeds the app in a native WPF window (Akiba.Desktop).
+         If dotnet restore fails, check https://www.nuget.org/packages/Microsoft.Web.WebView2
+         for the latest stable version and update below. -->
+    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.2651.64" />
+  </ItemGroup>
   <ItemGroup Label="Web">
     <PackageVersion Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.12" />
     <!-- Lets Akiba run as the Windows service docs/deployment.md tells you to create. -->

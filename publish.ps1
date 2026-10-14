@@ -74,6 +74,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "   Publish succeeded." -ForegroundColor Green
 
+Write-Step "Publishing Akiba.Desktop (the native window launcher)..."
+& dotnet publish "$PSScriptRoot\src\Akiba.Desktop\Akiba.Desktop.csproj" `
+    -c Release `
+    -r win-x64 `
+    --self-contained `
+    -o $PublishDir
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`nDesktop publish failed. Service NOT restarted." -ForegroundColor Red
+    exit 1
+}
+Write-Host "   Desktop publish succeeded." -ForegroundColor Green
+
 # ── 3. Restore the production appsettings ───────────────────────────────────
 Write-Step "Writing appsettings.Production.json..."
 $configPath = Join-Path $PublishDir "appsettings.Production.json"
@@ -110,4 +123,6 @@ try {
     Write-Host "   No response yet — the app may still be starting. Check http://localhost:5280 in a moment." -ForegroundColor Yellow
 }
 
-Write-Host "`nDone. Officials on the LAN can connect to http://<this-machine-IP>:5280`n" -ForegroundColor Cyan
+Write-Host "`nDone.`n" -ForegroundColor Cyan
+Write-Host "  • Chairman's desktop app : $PublishDir\Akiba.exe" -ForegroundColor White
+Write-Host "  • LAN (other officials)  : http://<this-machine-IP>:5280`n" -ForegroundColor White

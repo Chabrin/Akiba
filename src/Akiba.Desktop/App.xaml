@@ -1,0 +1,9 @@
+<Application x:Class="Akiba.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        No StartupUri: window lifecycle is managed in OnStartup so we can
+        show the splash screen before the server has finished starting.
+    -->
+    <Application.Resources />
+</Application>

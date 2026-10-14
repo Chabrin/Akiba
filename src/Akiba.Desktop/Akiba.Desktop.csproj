@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ================================================================
+    Akiba.Desktop
+
+    WPF launcher that starts Akiba.Web as a hidden background process
+    and embeds it in a native window via Microsoft WebView2.
+
+    Double-click Akiba.exe → native window opens, no browser needed.
+    The web server still binds to http://*:5280 so officials on the
+    LAN can connect from their own browsers as usual.
+    ================================================================
+  -->
+
+  <PropertyGroup>
+    <!-- WPF requires the Windows variant of the target framework.
+         This overrides the net10.0 in Directory.Build.props. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Akiba</AssemblyName>
+    <RootNamespace>Akiba.Desktop</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" />
+  </ItemGroup>
+
+</Project>
