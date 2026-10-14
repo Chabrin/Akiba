@@ -518,6 +518,9 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsLandlord")
                         .HasColumnType("boolean");
 
+                    b.Property<DateOnly?>("JoinedOn")
+                        .HasColumnType("date");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 
@@ -546,6 +549,10 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("PositionTitle")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<Guid?>("SharesAccountId")
                         .HasColumnType("uuid");

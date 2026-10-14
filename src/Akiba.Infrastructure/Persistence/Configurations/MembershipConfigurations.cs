@@ -43,6 +43,9 @@ internal sealed class BorrowerConfiguration : IEntityTypeConfiguration<BorrowerR
         builder.Property(borrower => borrower.MonthlyContributionKes)
             .HasColumnType("numeric(14,2)");
 
+        builder.Property(borrower => borrower.JoinedOn);
+        builder.Property(borrower => borrower.PositionTitle).HasMaxLength(100);
+
         builder.HasMany(borrower => borrower.Documents)
             .WithOne()
             .HasForeignKey(document => document.BorrowerId)

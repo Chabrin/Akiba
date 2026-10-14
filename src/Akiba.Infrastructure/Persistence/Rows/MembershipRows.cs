@@ -62,6 +62,12 @@ internal sealed class BorrowerRow
     /// </summary>
     public bool SharesOnHold { get; set; }
 
+    /// <summary>Join date from the paper register. Null where not recorded.</summary>
+    public DateOnly? JoinedOn { get; set; }
+
+    /// <summary>Free-text position title from the register (e.g. "Chairperson", "Secretary").</summary>
+    public string? PositionTitle { get; set; }
+
     // --- Client only -------------------------------------------------
     public string? IntroducedBy { get; set; }
 

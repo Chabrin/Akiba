@@ -2,6 +2,7 @@ using Akiba.Application.Abstractions;
 using Akiba.Application.Posting;
 using Akiba.Domain.Financial;
 using Akiba.Domain.Ledger;
+using Akiba.Domain.Lending;
 using Akiba.Domain.Membership;
 using MediatR;
 
@@ -11,12 +12,30 @@ namespace Akiba.Application.Migration;
 /// <param name="RowNumber">Which row of the file this came from, so a problem can be pointed at.</param>
 /// <param name="StaffNumber">The payroll number, or the office's stand-in for "not on payroll".</param>
 /// <param name="Name">The name exactly as the register writes it.</param>
+/// <param name="JoinDate">The date from the paper register, if present.</param>
+/// <param name="PositionTitle">Job or society position title, if present (e.g. "Chairperson").</param>
 /// <param name="OpeningShareholding">What they hold as at the go-live date.</param>
+/// <param name="MonthlyShareContribution">Their standing monthly deduction instruction, if known.</param>
+/// <param name="EmergencyLoanPrincipal">Outstanding emergency loan balance, if any.</param>
+/// <param name="EmergencyLoanStartDate">When the emergency loan was disbursed, if any.</param>
+/// <param name="EmergencyLoanMonths">Remaining emergency loan term in months, if any.</param>
+/// <param name="NormalLoanPrincipal">Outstanding normal loan balance, if any.</param>
+/// <param name="NormalLoanStartDate">When the normal loan was disbursed, if any.</param>
+/// <param name="NormalLoanMonths">Remaining normal loan term in months, if any.</param>
 public sealed record RegisterRow(
     int RowNumber,
     string? StaffNumber,
     string Name,
-    Money OpeningShareholding);
+    DateOnly? JoinDate,
+    string? PositionTitle,
+    Money OpeningShareholding,
+    Money? MonthlyShareContribution,
+    Money? EmergencyLoanPrincipal,
+    DateOnly? EmergencyLoanStartDate,
+    int? EmergencyLoanMonths,
+    Money? NormalLoanPrincipal,
+    DateOnly? NormalLoanStartDate,
+    int? NormalLoanMonths);
 
 /// <summary>What is wrong with a row, or with the file as a whole.</summary>
 /// <param name="RowNumber">Null where it concerns the whole file.</param>
@@ -201,6 +220,7 @@ internal sealed class DryRunOpeningBalancesHandler
 /// <summary>What a committed import created.</summary>
 public sealed record ImportResult(
     int MembersCreated,
+    int LoansCreated,
     Money TotalShareholding,
     Money OpeningBankBalance,
     JournalEntryId OpeningEntryId);
@@ -237,6 +257,7 @@ internal sealed class CommitOpeningBalancesHandler
 {
     private readonly IMediator _mediator;
     private readonly IBorrowerRepository _borrowers;
+    private readonly ILoanRepository _loans;
     private readonly IJournalRepository _journal;
     private readonly IAkibaAccounts _accounts;
     private readonly ICurrentUser _currentUser;
@@ -246,6 +267,7 @@ internal sealed class CommitOpeningBalancesHandler
     public CommitOpeningBalancesHandler(
         IMediator mediator,
         IBorrowerRepository borrowers,
+        ILoanRepository loans,
         IJournalRepository journal,
         IAkibaAccounts accounts,
         ICurrentUser currentUser,
@@ -254,6 +276,7 @@ internal sealed class CommitOpeningBalancesHandler
     {
         _mediator = mediator;
         _borrowers = borrowers;
+        _loans = loans;
         _journal = journal;
         _accounts = accounts;
         _currentUser = currentUser;
@@ -288,18 +311,19 @@ internal sealed class CommitOpeningBalancesHandler
         }
 
         var lines = new List<JournalLine>();
-        var created = 0;
+        var membersCreated = 0;
+        var loansCreated = 0;
 
         foreach (var row in command.Rows)
         {
-            var memberId = Guid.NewGuid();
             var membershipNumber = row.RowNumber.ToString("D4", System.Globalization.CultureInfo.InvariantCulture);
+            var memberId = Guid.NewGuid();
 
             var sharesAccount = await _accounts
                 .OpenMemberSharesAccountAsync(membershipNumber, row.Name.Trim(), memberId, cancellationToken)
                 .ConfigureAwait(false);
 
-            _borrowers.Add(Member.Join(
+            var member = Member.Join(
                 MembershipNumber.Of(membershipNumber),
                 PayrollNumber.FromRegister(row.StaffNumber),
                 PersonName.FromRegister(row.Name),
@@ -307,14 +331,95 @@ internal sealed class CommitOpeningBalancesHandler
                 PhoneNumber.Unknown,
                 null,
                 command.DefaultZoneId,
-                sharesAccount.Id));
+                sharesAccount.Id);
 
-            created++;
+            if (row.JoinDate.HasValue)
+            {
+                member.SetJoinDate(row.JoinDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.PositionTitle))
+            {
+                member.SetPositionTitle(row.PositionTitle);
+            }
+
+            if (row.MonthlyShareContribution is { } monthly && monthly.IsPositive)
+            {
+                member.SetMonthlyContribution(monthly);
+            }
+
+            _borrowers.Add(member);
+            membersCreated++;
 
             if (row.OpeningShareholding.IsPositive)
             {
                 lines.Add(JournalLine.Credit(
-                    sharesAccount.Id, row.OpeningShareholding, $"Opening shareholding - {row.Name.Trim()}"));
+                    sharesAccount.Id, row.OpeningShareholding,
+                    $"Opening shareholding — {row.Name.Trim()}"));
+            }
+
+            // Emergency loan
+            if (row.EmergencyLoanPrincipal is { } elPrincipal && elPrincipal.IsPositive
+                && row.EmergencyLoanStartDate.HasValue
+                && row.EmergencyLoanMonths is { } elMonths and > 0)
+            {
+                var elNumber = $"EL-{membershipNumber}";
+                var elId = LoanId.New();
+                var elAccount = await _accounts
+                    .OpenLoanReceivableAccountAsync(elNumber, elId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+
+                var elTerms = new LoanTerms(
+                    LoanProduct.Emergency,
+                    elPrincipal,
+                    new Money(0, Currency.Kes),
+                    elMonths,
+                    TermScaleVersion: 1);
+
+                _loans.Add(Loan.Rehydrate(
+                    elId, elNumber, LoanApplicationId.New(), new BorrowerId(memberId),
+                    elAccount.Id, elTerms, row.EmergencyLoanStartDate.Value,
+                    cheque: null, LoanStatus.Running,
+                    restructures: null, hasBeenRestructured: false,
+                    settledOn: null, guarantees: []));
+
+                lines.Add(JournalLine.Debit(
+                    elAccount.Id, elPrincipal,
+                    $"Opening emergency loan — {row.Name.Trim()}"));
+
+                loansCreated++;
+            }
+
+            // Normal loan
+            if (row.NormalLoanPrincipal is { } nlPrincipal && nlPrincipal.IsPositive
+                && row.NormalLoanStartDate.HasValue
+                && row.NormalLoanMonths is { } nlMonths and > 0)
+            {
+                var nlNumber = $"NL-{membershipNumber}";
+                var nlId = LoanId.New();
+                var nlAccount = await _accounts
+                    .OpenLoanReceivableAccountAsync(nlNumber, nlId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+
+                var nlTerms = new LoanTerms(
+                    LoanProduct.Normal,
+                    nlPrincipal,
+                    new Money(0, Currency.Kes),
+                    nlMonths,
+                    TermScaleVersion: 1);
+
+                _loans.Add(Loan.Rehydrate(
+                    nlId, nlNumber, LoanApplicationId.New(), new BorrowerId(memberId),
+                    nlAccount.Id, nlTerms, row.NormalLoanStartDate.Value,
+                    cheque: null, LoanStatus.Running,
+                    restructures: null, hasBeenRestructured: false,
+                    settledOn: null, guarantees: []));
+
+                lines.Add(JournalLine.Debit(
+                    nlAccount.Id, nlPrincipal,
+                    $"Opening normal loan — {row.Name.Trim()}"));
+
+                loansCreated++;
             }
         }
 
@@ -323,9 +428,6 @@ internal sealed class CommitOpeningBalancesHandler
 
         lines.Insert(0, JournalLine.Debit(bank, command.OpeningBankBalance, "Opening bank balance"));
 
-        // Opening Balance Equity is the balancing figure. Where the bank does not match what
-        // members hold, the difference sits here - visible, named, and waiting to be explained
-        // rather than silently absorbed.
         var difference = lines.Select(line => line.SignedAmount).Sum(Currency.Kes);
 
         if (!difference.IsZero)
@@ -337,7 +439,7 @@ internal sealed class CommitOpeningBalancesHandler
 
         var entry = JournalEntry.Post(
             command.GoLiveDate,
-            $"Opening balances at go-live - signed off by {command.TreasurerSignOff.Trim()}",
+            $"Opening balances at go-live — signed off by {command.TreasurerSignOff.Trim()}",
             SourceDocument.Of(
                 SourceDocumentKind.OpeningBalance,
                 command.GoLiveDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
@@ -349,6 +451,6 @@ internal sealed class CommitOpeningBalancesHandler
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return new ImportResult(
-            created, dryRun.TotalShareholding, command.OpeningBankBalance, entry.Id);
+            membersCreated, loansCreated, dryRun.TotalShareholding, command.OpeningBankBalance, entry.Id);
     }
 }

@@ -57,20 +57,22 @@ public sealed class OpeningBalanceImportTests : IAsyncLifetime
     /// <summary>
     /// The register's shape, with invented names and altered figures.
     /// </summary>
+    private static RegisterRow Row(int n, string? staff, string name, Money shareholding) =>
+        new(n, staff, name, null, null, shareholding, null, null, null, null, null, null, null);
+
     private static IReadOnlyList<RegisterRow> Register() =>
     [
         // Two shareholders who are not on the CAL payroll, both written as staff number 0.
         // This pair is why the import exists in this form: a required, unique payroll number
         // refused the second one.
-        new(1, "0", "MERCY WAIRIMU GITHINJI", Money.Kes(1_979_000m)),
-        new(2, "0", "BENARD OTIENO ODUOR", Money.Kes(2_355_000m)),
-
-        new(3, "2", "CAROLINE NDUTA KAMAU", Money.Kes(1_266_000m)),
-        new(4, "4", "TABITHA AKOTH ONYANGO", Money.Kes(170_224m)),
-        new(5, "19", "PATRICK GITHAIGA", Money.Kes(451_000m)),
-        new(6, "22", "SALOME WANGECHI NDERITU", Money.Kes(388_540m)),
-        new(7, "37", "KIPROTICH", Money.Kes(512_003m)),
-        new(8, "333", "AGNES NYAMBURA WAWERU", Money.Kes(2_862m)),
+        Row(1, "0",   "MERCY WAIRIMU GITHINJI",   Money.Kes(1_979_000m)),
+        Row(2, "0",   "BENARD OTIENO ODUOR",       Money.Kes(2_355_000m)),
+        Row(3, "2",   "CAROLINE NDUTA KAMAU",      Money.Kes(1_266_000m)),
+        Row(4, "4",   "TABITHA AKOTH ONYANGO",     Money.Kes(170_224m)),
+        Row(5, "19",  "PATRICK GITHAIGA",          Money.Kes(451_000m)),
+        Row(6, "22",  "SALOME WANGECHI NDERITU",   Money.Kes(388_540m)),
+        Row(7, "37",  "KIPROTICH",                 Money.Kes(512_003m)),
+        Row(8, "333", "AGNES NYAMBURA WAWERU",     Money.Kes(2_862m)),
     ];
 
     [Fact]
@@ -95,7 +97,7 @@ public sealed class OpeningBalanceImportTests : IAsyncLifetime
         // "0" means "no payroll number" and may repeat. A genuine number may not - HR matches
         // the deduction schedule on it.
         var rows = Register().ToList();
-        rows.Add(new RegisterRow(9, "2", "ANOTHER PERSON ENTIRELY", Money.Kes(10_000m)));
+        rows.Add(Row(9, "2", "ANOTHER PERSON ENTIRELY", Money.Kes(10_000m)));
 
         var dryRun = await SendAsync(new DryRunOpeningBalancesCommand(
             rows, GoLive, Money.Kes(7_200_000m)));

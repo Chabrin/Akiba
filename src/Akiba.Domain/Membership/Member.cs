@@ -126,6 +126,23 @@ public sealed class Member : Borrower
     /// </remarks>
     public bool SharesOnHold { get; private set; }
 
+    /// <summary>
+    /// The date the member joined the society, as recorded in the paper register.
+    /// </summary>
+    /// <remarks>
+    /// Optional. Where present this is the date from the original membership form, which may
+    /// predate the first ledger credit (the go-live entry does not reflect history). Where
+    /// absent, the effective join date is derived from the ledger via
+    /// <see cref="Shareholding.MembershipStartDate"/>.
+    /// </remarks>
+    public DateOnly? JoinedOn { get; private set; }
+
+    /// <summary>
+    /// The member's position title as it appears in the society register (e.g., "Chairperson",
+    /// "Secretary", "Zone Representative", "Accounts Clerk").
+    /// </summary>
+    public string? PositionTitle { get; private set; }
+
     /// <summary>Puts the member's shares on hold, preventing withdrawals until released.</summary>
     public void PlaceSharesOnHold()
     {
@@ -145,6 +162,11 @@ public sealed class Member : Borrower
     /// Members write to the chairman to change this amount. The clerk records the new figure
     /// when the letter is approved, and it takes effect on the next deduction schedule.
     /// </remarks>
+    public void SetJoinDate(DateOnly date) => JoinedOn = date;
+
+    public void SetPositionTitle(string? title) =>
+        PositionTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+
     public void SetMonthlyContribution(Money amount)
     {
         if (!amount.IsPositive)
@@ -212,7 +234,9 @@ public sealed class Member : Borrower
         bool isLandlord,
         Money? monthlyShareContribution = null,
         bool notificationsEnabled = true,
-        bool sharesOnHold = false) =>
+        bool sharesOnHold = false,
+        DateOnly? joinedOn = null,
+        string? positionTitle = null) =>
         new(id, membershipNumber, payrollNumber, name, nationalId, phone, email, zoneId, sharesAccountId)
         {
             EmploymentStatus = employmentStatus,
@@ -221,6 +245,8 @@ public sealed class Member : Borrower
             MonthlyShareContribution = monthlyShareContribution,
             NotificationsEnabled = notificationsEnabled,
             SharesOnHold = sharesOnHold,
+            JoinedOn = joinedOn,
+            PositionTitle = string.IsNullOrWhiteSpace(positionTitle) ? null : positionTitle.Trim(),
         };
 
     /// <summary>

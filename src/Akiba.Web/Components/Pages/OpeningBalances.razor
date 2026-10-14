@@ -21,8 +21,23 @@
 
     Paste rather than upload, deliberately. The register is an Excel file containing every
     member's savings, and the office should not be putting a copy of it on a server to get it
-    in here - nor should this application be storing one. Copying the three columns out of
-    Excel and pasting them leaves the file where it is.
+    in here - nor should this application be storing one. Copying the columns out of Excel and
+    pasting them leaves the file where it is.
+
+    Column order (tabs or commas accepted):
+      0  Staff Number
+      1  Full Name
+      2  Join Date                       (DD/MM/YYYY or YYYY-MM-DD; blank = unknown)
+      3  Position Of Member              (free text; blank = none)
+      4  Shareholding (KES)
+      5  Share contribution (monthly)    (blank = not yet set)
+      6  Emergency Loan Principal        (blank or 0 = none)
+      7  Emergency Loan Start Date       (DD/MM/YYYY or YYYY-MM-DD)
+      8  Emergency Loan Months Remaining
+      9  Normal Loan Principal           (blank or 0 = none)
+     10  Normal Loan Start Date
+     11  Normal Loan Months Remaining
+     12  Total Loan Deductions           (ignored — informational only)
 *@
 
 <PageTitle>Akiba - Opening balances</PageTitle>
@@ -37,8 +52,12 @@
         <MudText Typo="Typo.body2">
             @_result.MembersCreated member(s) created carrying
             <MoneyText Amount="_result.TotalShareholding" /> of shareholding, with an opening
-            bank balance of <MoneyText Amount="_result.OpeningBankBalance" />. It posted as one
-            journal entry against Opening Balance Equity.
+            bank balance of <MoneyText Amount="_result.OpeningBankBalance" />.
+            @if (_result.LoansCreated > 0)
+            {
+                <text> @_result.LoansCreated loan(s) also carried in.</text>
+            }
+            It posted as one journal entry against Opening Balance Equity.
         </MudText>
         <MudText Typo="Typo.body2" Class="mt-2">
             <b>Do not run this again.</b> A second load would create every member twice.
@@ -53,18 +72,19 @@ else
         <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2" Style="max-width: 70ch;">
             Download the template, fill it in Excel or Google Sheets — one member per row —
             then select all the data rows (not the heading), copy, and paste below.
+            Loan columns are optional: leave them blank for members with no outstanding loans.
         </MudText>
 
         <MudButton Variant="Variant.Outlined" Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Download"
                    Class="mb-4"
                    OnClick="DownloadTemplateAsync">
-            Download template (members.csv)
+            Download template (akiba-members-template.csv)
         </MudButton>
 
         <MudTextField @bind-Value="_pasted" Label="Pasted from the register"
                       Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
-                      Placeholder="0001&#9;Grace Njeri&#9;102000&#10;0002&#9;Peter Mwangi&#9;93500"
+                      Placeholder="0001&#9;Grace Njeri&#9;01/01/2020&#9;Chairperson&#9;102000&#9;2000&#9;&#9;&#9;&#9;50000&#9;15/06/2026&#9;6&#9;"
                       Class="akiba-paste" />
 
         <MudGrid Spacing="2" Class="mt-3">
@@ -120,8 +140,6 @@ else
 
             <MudGrid Spacing="3" Class="mt-1 mb-4">
                 <MudItem xs="12" sm="4">
-                    @* A count, not an amount, so it does not borrow the money card and leave
-                       a meaningless KES 0.00 sitting beside two real figures. *@
                     <div class="akiba-stat" style="color: var(--mud-palette-primary);">
                         <div class="akiba-stat-header">
                             <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Primary"
@@ -148,6 +166,25 @@ else
                               Icon="@Icons.Material.Filled.AccountBalance"
                               Caption="As at the go-live date" />
                 </MudItem>
+                @if (_loanCount > 0)
+                {
+                    <MudItem xs="12" sm="4">
+                        <div class="akiba-stat" style="color: var(--mud-palette-warning);">
+                            <div class="akiba-stat-header">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet"
+                                         Color="Color.Warning" Size="Size.Small" />
+                                <MudText Typo="Typo.overline" Class="mud-text-secondary akiba-stat-title">
+                                    Loans
+                                </MudText>
+                            </div>
+                            <MudText Typo="Typo.h3" Class="akiba-figure">@_loanCount</MudText>
+                            <div class="akiba-stat-accent"></div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                would be carried in
+                            </MudText>
+                        </div>
+                    </MudItem>
+                }
             </MudGrid>
 
             @if (_dryRun.FatalProblems.Count > 0)
@@ -198,14 +235,57 @@ else
                             <MudTh>Line</MudTh>
                             <MudTh>Staff no.</MudTh>
                             <MudTh>Name</MudTh>
+                            <MudTh>Join date</MudTh>
+                            <MudTh>Position</MudTh>
                             <MudTh Style="text-align: right">Shareholding</MudTh>
+                            <MudTh Style="text-align: right">Monthly</MudTh>
+                            <MudTh Style="text-align: right">Emerg. loan</MudTh>
+                            <MudTh Style="text-align: right">Normal loan</MudTh>
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd>@context.RowNumber</MudTd>
                             <MudTd>@(context.StaffNumber ?? "—")</MudTd>
                             <MudTd>@context.Name</MudTd>
+                            <MudTd>@(context.JoinDate.HasValue ? context.JoinDate.Value.ToString("d MMM yyyy") : "—")</MudTd>
+                            <MudTd>@(context.PositionTitle ?? "—")</MudTd>
                             <MudTd Class="akiba-money-cell">
                                 <MoneyText Amount="context.OpeningShareholding" />
+                            </MudTd>
+                            <MudTd Class="akiba-money-cell">
+                                @if (context.MonthlyShareContribution is { } monthly)
+                                {
+                                    <MoneyText Amount="monthly" />
+                                }
+                                else
+                                {
+                                    <text>—</text>
+                                }
+                            </MudTd>
+                            <MudTd Class="akiba-money-cell">
+                                @if (context.EmergencyLoanPrincipal is { } el && el.IsPositive)
+                                {
+                                    <MoneyText Amount="el" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @context.EmergencyLoanMonths mo
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <text>—</text>
+                                }
+                            </MudTd>
+                            <MudTd Class="akiba-money-cell">
+                                @if (context.NormalLoanPrincipal is { } nl && nl.IsPositive)
+                                {
+                                    <MoneyText Amount="nl" />
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @context.NormalLoanMonths mo
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <text>—</text>
+                                }
                             </MudTd>
                         </RowTemplate>
                     </MudTable>
@@ -238,9 +318,6 @@ else
                         </MudSelect>
                     </MudItem>
                     <MudItem xs="12" md="6">
-                        @* A name, not a tick. Whoever signs this is saying the totals match
-                           the paper register, and that claim should have somebody's name on
-                           it for as long as the society keeps its books. *@
                         <MudTextField @bind-Value="_treasurer" Label="Signed off by"
                                       Variant="Variant.Outlined" Margin="Margin.Dense"
                                       HelperText="The treasurer's name. Recorded permanently." />
@@ -274,6 +351,7 @@ else
     private List<string> _parseProblems = [];
     private ImportDryRun? _dryRun;
     private ImportResult? _result;
+    private int _loanCount;
 
     private bool _busy;
     private string? _error;
@@ -281,10 +359,6 @@ else
     /// <summary>
     /// A comma between a digit and exactly three more: a thousands separator, never a field.
     /// </summary>
-    /// <remarks>
-    /// A plain compiled Regex rather than a [GeneratedRegex] partial, because the source
-    /// generator cannot add a method to a class Razor itself generates.
-    /// </remarks>
     private static readonly Regex ThousandsSeparatorPattern =
         new(@"(?<=\d),(?=\d{3}(\D|$))", RegexOptions.Compiled);
 
@@ -304,22 +378,73 @@ else
     }
 
     /// <summary>
-    /// Turns the pasted text into rows.
+    /// Parses a date that may be DD/MM/YYYY, MM/DD/YYYY-ish, or ISO YYYY-MM-DD.
+    /// Returns null when the cell is blank or unparseable.
     /// </summary>
-    /// <remarks>
-    /// Tolerant about the separator and about how the amount is written, because what arrives
-    /// from Excel is tab-separated and what arrives from a text file is usually commas, and an
-    /// amount copied from a formatted cell carries thousands separators and sometimes "KES".
-    /// Being strict about any of that would send the treasurer back to reformat a spreadsheet,
-    /// which is how a migration ends up being done by hand.
-    ///
-    /// It is not tolerant about the amount being a number. A line whose third column cannot be
-    /// read as one is reported rather than guessed at.
-    /// </remarks>
+    private static DateOnly? ParseDate(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        // Try ISO first (least ambiguous).
+        if (DateOnly.TryParseExact(raw, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var iso))
+        {
+            return iso;
+        }
+
+        // DD/MM/YYYY — the format on Kenyan forms and most East-African spreadsheets.
+        if (DateOnly.TryParseExact(raw, "dd/MM/yyyy",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dmy))
+        {
+            return dmy;
+        }
+
+        // Fallback: let the runtime try its best.
+        if (DateOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var fallback))
+        {
+            return fallback;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Strips KES, thousands separators, and whitespace, then tries to parse a decimal.
+    /// Returns null when the cell is blank; returns the amount even when it is zero so the
+    /// caller can decide whether zero is valid.
+    /// </summary>
+    private static decimal? ParseAmount(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var cleaned = raw
+            .Replace("KES", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace(",", string.Empty, StringComparison.Ordinal)
+            .Trim();
+
+        if (cleaned.Length == 0)
+        {
+            return null;
+        }
+
+        return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out var v)
+            ? v
+            : (decimal?)null;
+    }
+
+    /// <summary>
+    /// Turns the pasted text into rows, tolerating tabs or commas as separators.
+    /// Expects 5–13 columns; columns beyond 5 are the optional loan and contribution fields.
+    /// </summary>
     private List<RegisterRow> Parse(string text)
     {
         var rows = new List<RegisterRow>();
-
         _parseProblems = [];
 
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -333,66 +458,124 @@ else
                 continue;
             }
 
-            // Thousands separators are stripped before the line is split, or they split it.
-            //
-            // This was a real bug and a dangerous one: 45,000 pasted as comma-separated text
-            // became the fields "45" and "000", the amount read as 45, and the import
-            // cheerfully reported a total three orders of magnitude out. On an opening balance
-            // that is not a wrong screen - it is a wrong balance every later figure derives
-            // from, and nothing downstream would ever contradict it.
-            //
-            // The pattern only strips a comma sitting between a digit and exactly three more
-            // digits, which is a thousands separator and is never a field separator.
+            // Strip thousands separators before splitting so "45,000" does not become two fields.
             var normalised = ThousandsSeparator().Replace(line, string.Empty);
 
-            // Tab wins where there is one. That is what a paste out of Excel gives, and it is
-            // the path the instructions on this screen describe.
             var separators = normalised.Contains('\t', StringComparison.Ordinal)
                 ? new[] { '\t' }
                 : [','];
 
-            var parts = normalised.Split(separators, StringSplitOptions.TrimEntries);
+            var parts = normalised.Split(separators, StringSplitOptions.None)
+                                  .Select(p => p.Trim())
+                                  .ToArray();
 
+            // Need at minimum: staff number, name, [join date, position,] shareholding.
+            // The template has 13 columns; we accept anything from 3 upward and fill blanks.
             if (parts.Length < 3)
             {
-                _parseProblems.Add($"Line {index + 1}: expected three columns, found {parts.Length}.");
+                _parseProblems.Add($"Line {index + 1}: expected at least 3 columns, found {parts.Length}.");
                 continue;
             }
 
-            var raw = parts[2]
-                .Replace("KES", string.Empty, StringComparison.OrdinalIgnoreCase)
-                .Replace(",", string.Empty, StringComparison.Ordinal)
-                .Trim();
+            // Column layout when 13 columns are present:
+            //  0  staff number
+            //  1  full name
+            //  2  join date
+            //  3  position title
+            //  4  shareholding
+            //  5  monthly contribution
+            //  6  emergency loan principal
+            //  7  emergency loan start date
+            //  8  emergency loan months
+            //  9  normal loan principal
+            // 10  normal loan start date
+            // 11  normal loan months
+            // 12  total loan deductions (ignored)
+            //
+            // When only 3 columns are present the old format (staff, name, shareholding) is
+            // assumed for backward-compat.
 
-            if (raw.Length == 0)
+            string staffNumberRaw, nameRaw, shareholdingRaw;
+            string joinDateRaw = string.Empty, positionRaw = string.Empty;
+            string monthlyRaw = string.Empty;
+            string elPrincipalRaw = string.Empty, elDateRaw = string.Empty, elMonthsRaw = string.Empty;
+            string nlPrincipalRaw = string.Empty, nlDateRaw = string.Empty, nlMonthsRaw = string.Empty;
+
+            if (parts.Length >= 5)
             {
-                _parseProblems.Add($"Line {index + 1}: no shareholding.");
-                continue;
+                // Full 13-column layout (or at least the first 5).
+                staffNumberRaw   = parts[0];
+                nameRaw          = parts[1];
+                joinDateRaw      = parts[2];
+                positionRaw      = parts[3];
+                shareholdingRaw  = parts[4];
+                monthlyRaw       = parts.Length > 5  ? parts[5]  : string.Empty;
+                elPrincipalRaw   = parts.Length > 6  ? parts[6]  : string.Empty;
+                elDateRaw        = parts.Length > 7  ? parts[7]  : string.Empty;
+                elMonthsRaw      = parts.Length > 8  ? parts[8]  : string.Empty;
+                nlPrincipalRaw   = parts.Length > 9  ? parts[9]  : string.Empty;
+                nlDateRaw        = parts.Length > 10 ? parts[10] : string.Empty;
+                nlMonthsRaw      = parts.Length > 11 ? parts[11] : string.Empty;
+            }
+            else
+            {
+                // Legacy 3-column format: staff number, name, shareholding.
+                staffNumberRaw  = parts[0];
+                nameRaw         = parts[1];
+                shareholdingRaw = parts[2];
             }
 
-            if (!decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
+            // --- Shareholding (required) ---
+            var shareholdingDecimal = ParseAmount(shareholdingRaw);
+            if (shareholdingDecimal is null)
             {
-                // A heading row lands here, and that is the expected way for it to be skipped.
+                // A heading row lands here — expected and harmless on line 1.
                 if (index == 0)
                 {
                     continue;
                 }
 
-                _parseProblems.Add($"Line {index + 1}: \"{parts[2]}\" is not an amount.");
+                _parseProblems.Add($"Line {index + 1}: \"{shareholdingRaw}\" is not an amount.");
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(parts[1]))
+            if (string.IsNullOrWhiteSpace(nameRaw))
             {
                 _parseProblems.Add($"Line {index + 1}: no name.");
                 continue;
             }
 
+            // --- Optional fields ---
+            var joinDate      = ParseDate(joinDateRaw);
+            var positionTitle = string.IsNullOrWhiteSpace(positionRaw) ? null : positionRaw;
+
+            var monthlyDecimal = ParseAmount(monthlyRaw);
+            Money? monthly = monthlyDecimal is { } m and > 0 ? Money.Kes(m) : null;
+
+            var elPrincipalDecimal = ParseAmount(elPrincipalRaw);
+            Money? elPrincipal = elPrincipalDecimal is { } el and > 0 ? Money.Kes(el) : null;
+            var elDate   = ParseDate(elDateRaw);
+            int? elMonths = int.TryParse(elMonthsRaw, out var em) && em > 0 ? em : null;
+
+            var nlPrincipalDecimal = ParseAmount(nlPrincipalRaw);
+            Money? nlPrincipal = nlPrincipalDecimal is { } nl and > 0 ? Money.Kes(nl) : null;
+            var nlDate   = ParseDate(nlDateRaw);
+            int? nlMonths = int.TryParse(nlMonthsRaw, out var nm) && nm > 0 ? nm : null;
+
             rows.Add(new RegisterRow(
                 index + 1,
-                string.IsNullOrWhiteSpace(parts[0]) ? null : parts[0],
-                parts[1],
-                Money.Kes(amount)));
+                string.IsNullOrWhiteSpace(staffNumberRaw) ? null : staffNumberRaw,
+                nameRaw,
+                joinDate,
+                positionTitle,
+                Money.Kes(shareholdingDecimal.Value),
+                monthly,
+                elPrincipal,
+                elDate,
+                elMonths,
+                nlPrincipal,
+                nlDate,
+                nlMonths));
         }
 
         return rows;
@@ -415,11 +598,13 @@ else
 
             if (rows.Count == 0)
             {
-                _error = "Nothing could be read from that. Check the columns are staff number, "
-                    + "name, then shareholding.";
-
+                _error = "Nothing could be read from that. Check the columns match the template.";
                 return;
             }
+
+            _loanCount = rows.Count(r =>
+                (r.EmergencyLoanPrincipal is { } el && el.IsPositive) ||
+                (r.NormalLoanPrincipal    is { } nl && nl.IsPositive));
 
             _dryRun = await Mediator.Send(new DryRunOpeningBalancesCommand(
                 rows, DateOnly.FromDateTime(goLive), Money.Kes(_bankBalance)));
@@ -438,10 +623,15 @@ else
     private async Task DownloadTemplateAsync()
     {
         const string csv =
-            "Staff Number,Full Name,Shareholding (KES)\r\n" +
-            "0001,Grace Njeri,102000\r\n" +
-            "0002,Peter Mwangi,93500\r\n" +
-            "0003,Jane Atieno,78000\r\n";
+            "Staff Number,Full Name,Join Date,Position Of Member,Shareholding (KES)," +
+            "Share contribution (monthly)," +
+            "Emergency Loan (Principal Amount,Emergency Loan Start Date," +
+            "Emergency Loan Number of months to be deducted," +
+            "Normal Loan (Principal Amount,Normal Loan Start Date," +
+            "Normal Loan Number of months to be deducted,Total Loan Deductions\r\n" +
+            "0001,Grace Njeri,01/01/2020,Chairperson,102000,2000,,,,50000,15/06/2026,6,50000\r\n" +
+            "0002,Peter Mwangi,15/03/2018,Secretary,93500,1500,25000,01/09/2026,3,,,, \r\n" +
+            "0003,Jane Atieno,10/07/2021,,78000,2000,,,,,,,\r\n";
 
         var module = await JS.InvokeAsync<IJSObjectReference>(
             "import", "/js/akiba-download.js");
