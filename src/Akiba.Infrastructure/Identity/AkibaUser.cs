@@ -44,6 +44,15 @@ public sealed class AkibaUser : IdentityUser<Guid>
     /// do nothing else until they have.
     /// </remarks>
     public bool MustEnrolTwoFactor => !TwoFactorEnabled;
+
+    /// <summary>
+    /// Whether this account must change its password before it can do anything.
+    /// </summary>
+    /// <remarks>
+    /// Set to true for every new account so the first sign-in forces the official to replace
+    /// the temporary password the chairman set. Cleared once they choose their own.
+    /// </remarks>
+    public bool MustChangePassword { get; set; } = true;
 }
 
 /// <summary>An Akiba role. Guid keys, to match the users.</summary>

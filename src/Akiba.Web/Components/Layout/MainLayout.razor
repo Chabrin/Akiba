@@ -4,6 +4,8 @@
 @inject IWebHostEnvironment Environment
 @inject IJSRuntime JS
 @inject ILogger<MainLayout> Logger
+@inject AuthenticationStateProvider AuthState
+@inject NavigationManager Nav
 
 <MudThemeProvider Theme="AkibaTheme.Instance" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -68,6 +70,13 @@
                            Color="Color.Inherit"
                            aria-label="Toggle light and dark"
                            OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+        </MudTooltip>
+
+        <MudTooltip Text="Change password">
+            <MudIconButton Icon="@Icons.Material.Filled.Password"
+                           Color="Color.Inherit"
+                           Href="/security/change-password"
+                           aria-label="Change password" />
         </MudTooltip>
 
         @* A form post, not a link: it has to clear the cookie, and it carries an antiforgery
@@ -203,7 +212,7 @@
     private int _secondsLeft;
     private CancellationTokenSource? _countdown;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         // CurrentUser throws when nobody is signed in, by design - an entry attributed to
         // nobody is not an audit trail. The chrome should say so rather than fall over.
@@ -214,6 +223,19 @@
         catch (InvalidOperationException)
         {
             _actorName = "Not signed in";
+        }
+
+        // If the cookie says the official must change their password, send them there before
+        // they can reach any other page. The check is a claim read, not a database round trip.
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        var mustChange = authState.User.FindFirst(AuthenticationEndpoints.MustChangePasswordClaim)?.Value;
+        if (mustChange == "true")
+        {
+            var path = new Uri(Nav.Uri).AbsolutePath;
+            if (!path.StartsWith("/security/change-password", StringComparison.OrdinalIgnoreCase))
+            {
+                Nav.NavigateTo("/security/change-password?required=true");
+            }
         }
     }
 

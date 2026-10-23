@@ -37,6 +37,15 @@ public static class AuthenticationEndpoints
     /// </remarks>
     public const string TwoFactorEnrolledClaim = "akiba:2fa_enrolled";
 
+    /// <summary>
+    /// Whether this account must change its password before doing anything else.
+    /// </summary>
+    /// <remarks>
+    /// Set on every new account; cleared once the official replaces the temporary password.
+    /// Carried as a claim so the MainLayout guard can enforce the redirect without a DB read.
+    /// </remarks>
+    public const string MustChangePasswordClaim = "akiba:must_change_pwd";
+
     public static void MapAkibaAuthentication(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -135,6 +144,9 @@ public static class AuthenticationEndpoints
                 return Results.Redirect("/sign-in?error=expired");
             }
 
+            // Resolve the user now, before the cookie changes, so we can check MustChangePassword.
+            var pendingUser = await signInManager.GetTwoFactorAuthenticationUserAsync();
+
             var form = await context.Request.ReadFormAsync();
             var code = form["code"].ToString().Replace(" ", string.Empty, StringComparison.Ordinal);
 
@@ -143,6 +155,11 @@ public static class AuthenticationEndpoints
 
             if (result.Succeeded)
             {
+                if (pendingUser?.MustChangePassword == true)
+                {
+                    return Results.Redirect("/security/change-password?required=true");
+                }
+
                 return Results.Redirect("/");
             }
 
@@ -153,6 +170,50 @@ public static class AuthenticationEndpoints
                 ? "/sign-in?error=lockedout"
                 : "/sign-in/code?error=invalid");
         });
+
+        group.MapPost("/change-password", async (
+            HttpContext context,
+            UserManager<AkibaUser> userManager,
+            SignInManager<AkibaUser> signInManager,
+            IAntiforgery antiforgery,
+            ILoggerFactory loggerFactory) =>
+        {
+            if (!await IsRequestGenuineAsync(
+                    context, antiforgery, loggerFactory.CreateLogger("Akiba.ChangePassword")))
+            {
+                return Results.Redirect("/security/change-password?error=expired");
+            }
+
+            var user = await userManager.GetUserAsync(context.User);
+            if (user is null)
+            {
+                return Results.Redirect("/sign-in");
+            }
+
+            var form = await context.Request.ReadFormAsync();
+            var currentPassword = form["currentPassword"].ToString();
+            var newPassword = form["newPassword"].ToString();
+            var confirmPassword = form["confirmPassword"].ToString();
+
+            if (!string.Equals(newPassword, confirmPassword, StringComparison.Ordinal))
+            {
+                return Results.Redirect("/security/change-password?error=mismatch");
+            }
+
+            var result = await userManager.ChangePasswordAsync(user, currentPassword, newPassword);
+            if (!result.Succeeded)
+            {
+                return Results.Redirect("/security/change-password?error=invalid");
+            }
+
+            user.MustChangePassword = false;
+            await userManager.UpdateAsync(user);
+
+            // Refresh the cookie so the must_change_pwd claim is cleared immediately.
+            await signInManager.RefreshSignInAsync(user);
+
+            return Results.Redirect("/");
+        }).RequireAuthorization();
 
         group.MapPost("/sign-out", async (
             HttpContext context,
@@ -289,6 +350,10 @@ public sealed class AkibaClaimsPrincipalFactory
         identity.AddClaim(new Claim(
             AuthenticationEndpoints.TwoFactorEnrolledClaim,
             user.TwoFactorEnabled ? "true" : "false"));
+
+        identity.AddClaim(new Claim(
+            AuthenticationEndpoints.MustChangePasswordClaim,
+            user.MustChangePassword ? "true" : "false"));
 
         return identity;
     }
