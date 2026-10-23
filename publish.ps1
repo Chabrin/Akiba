@@ -30,6 +30,7 @@ $ProductionConfig = @"
   "ConnectionStrings": {
     "Akiba": "Host=localhost;Port=5432;Database=akiba;Username=postgres;Password=123"
   },
+  "AllowedHosts": "*",
   "Akiba": {
     "RequireHttps": false
   },

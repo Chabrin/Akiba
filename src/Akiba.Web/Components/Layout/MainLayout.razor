@@ -226,10 +226,15 @@
         }
 
         // If the cookie says the official must change their password, send them there before
-        // they can reach any other page. The check is a claim read, not a database round trip.
+        // they can reach any other page. Only enforce this once 2FA is enrolled — a brand-new
+        // account must enrol their authenticator first, then change their password. Redirecting
+        // before enrolment is complete would bounce them away from the authenticator page and
+        // leave them with a session that can never reach the dashboard.
         var authState = await AuthState.GetAuthenticationStateAsync();
-        var mustChange = authState.User.FindFirst(AuthenticationEndpoints.MustChangePasswordClaim)?.Value;
-        if (mustChange == "true")
+        var user = authState.User;
+        var mustChange   = user.FindFirst(AuthenticationEndpoints.MustChangePasswordClaim)?.Value;
+        var twoFaDone    = user.FindFirst(AuthenticationEndpoints.TwoFactorEnrolledClaim)?.Value;
+        if (mustChange == "true" && twoFaDone == "true")
         {
             var path = new Uri(Nav.Uri).AbsolutePath;
             if (!path.StartsWith("/security/change-password", StringComparison.OrdinalIgnoreCase))
