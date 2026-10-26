@@ -12,16 +12,54 @@ namespace Akiba.Application.Migration;
 /// <param name="RowNumber">Which row of the file this came from, so a problem can be pointed at.</param>
 /// <param name="LoanNumber">The society's reference for this loan (e.g. "L-0042").</param>
 /// <param name="PayrollNumber">The borrower's staff number, used to look them up.</param>
-/// <param name="OutstandingBalance">What the member still owes as at the go-live date.</param>
+/// <param name="OriginalPrincipal">The amount that was originally disbursed.</param>
 /// <param name="DisbursedOn">When the loan was originally paid out.</param>
+/// <param name="TotalTermMonths">The full repayment period agreed at disbursement.</param>
 /// <param name="RemainingTermMonths">How many monthly instalments are left to run.</param>
+/// <param name="MonthlyDeduction">The monthly payroll deduction (principal + interest component).</param>
 public sealed record LoanBalanceRow(
     int RowNumber,
     string LoanNumber,
     string? PayrollNumber,
-    Money OutstandingBalance,
+    Money OriginalPrincipal,
     DateOnly DisbursedOn,
-    int RemainingTermMonths);
+    int TotalTermMonths,
+    int RemainingTermMonths,
+    Money MonthlyDeduction)
+{
+    /// <summary>
+    /// Total amount still to collect: monthly deduction times months remaining.
+    /// This is what goes into the loan receivable account.
+    /// </summary>
+    public Money TotalReceivable =>
+        Money.Kes(MonthlyDeduction.Amount * RemainingTermMonths);
+
+    /// <summary>
+    /// Remaining interest — the share of future deductions that is interest income.
+    /// Proportional to the elapsed fraction: (total interest / total months) × remaining months.
+    /// Returns zero if the inputs are not yet valid (guard for dry-run rows with errors).
+    /// </summary>
+    public Money RemainingInterest
+    {
+        get
+        {
+            if (TotalTermMonths <= 0 || !OriginalPrincipal.IsPositive)
+            {
+                return Money.ZeroKes;
+            }
+
+            var totalInterest = MonthlyDeduction.Amount * TotalTermMonths - OriginalPrincipal.Amount;
+            if (totalInterest <= 0m)
+            {
+                return Money.ZeroKes;
+            }
+            return Money.Kes(totalInterest * RemainingTermMonths / TotalTermMonths).Round();
+        }
+    }
+
+    /// <summary>Outstanding principal at go-live: total receivable minus remaining interest.</summary>
+    public Money OutstandingPrincipal => TotalReceivable - RemainingInterest;
+}
 
 /// <summary>
 /// What a dry run found: what would be created, and everything wrong with it.
@@ -29,12 +67,14 @@ public sealed record LoanBalanceRow(
 /// <param name="GoLiveDate">The date each opening balance would be dated.</param>
 /// <param name="Rows">Rows that parsed without a fatal problem.</param>
 /// <param name="Problems">Everything wrong, fatal or not.</param>
-/// <param name="TotalOutstanding">Sum of every outstanding balance.</param>
+/// <param name="TotalReceivable">Sum of every loan's total receivable (principal + remaining interest).</param>
+/// <param name="TotalInterestIncome">Sum of every loan's remaining interest to be recognised at go-live.</param>
 public sealed record LoanBalanceDryRun(
     DateOnly GoLiveDate,
     IReadOnlyList<LoanBalanceRow> Rows,
     IReadOnlyList<ImportProblem> Problems,
-    Money TotalOutstanding)
+    Money TotalReceivable,
+    Money TotalInterestIncome)
 {
     public IReadOnlyList<ImportProblem> FatalProblems =>
         [.. Problems.Where(p => p.IsFatal)];
@@ -49,7 +89,7 @@ public sealed record LoanBalanceDryRun(
 /// Checks a list of opening loan balances without writing anything.
 /// </summary>
 /// <remarks>
-/// Validates loan numbers, payroll numbers, amounts, and term months.
+/// Validates loan numbers, payroll numbers, original principal, term, and monthly deduction.
 /// Does not touch the database. The dry run is shown to the clerk before the commit.
 /// </remarks>
 public sealed record DryRunLoanBalancesCommand(
@@ -111,11 +151,19 @@ internal sealed class DryRunLoanBalancesHandler
                     IsFatal: true));
             }
 
-            if (!row.OutstandingBalance.IsPositive)
+            if (!row.OriginalPrincipal.IsPositive)
             {
                 problems.Add(new ImportProblem(
                     row.RowNumber, row.LoanNumber,
-                    $"Outstanding balance is {row.OutstandingBalance}. A running loan must have a positive balance.",
+                    $"Original principal is {row.OriginalPrincipal}. Enter the full amount that was disbursed.",
+                    IsFatal: true));
+            }
+
+            if (row.TotalTermMonths <= 0)
+            {
+                problems.Add(new ImportProblem(
+                    row.RowNumber, row.LoanNumber,
+                    $"Total term is {row.TotalTermMonths} months. Enter the full repayment period agreed at disbursement.",
                     IsFatal: true));
             }
 
@@ -123,8 +171,55 @@ internal sealed class DryRunLoanBalancesHandler
             {
                 problems.Add(new ImportProblem(
                     row.RowNumber, row.LoanNumber,
-                    $"Remaining term is {row.RemainingTermMonths} months. Enter how many instalments are left to run.",
+                    $"Remaining term is {row.RemainingTermMonths} months. Enter how many deductions are still outstanding.",
                     IsFatal: true));
+            }
+
+            if (row.TotalTermMonths > 0 && row.RemainingTermMonths > row.TotalTermMonths)
+            {
+                problems.Add(new ImportProblem(
+                    row.RowNumber, row.LoanNumber,
+                    $"Remaining months ({row.RemainingTermMonths}) is more than the total term ({row.TotalTermMonths}). " +
+                    "A loan cannot have more months left than its full term.",
+                    IsFatal: true));
+            }
+
+            if (!row.MonthlyDeduction.IsPositive)
+            {
+                problems.Add(new ImportProblem(
+                    row.RowNumber, row.LoanNumber,
+                    $"Monthly deduction is {row.MonthlyDeduction}. Enter the amount deducted from payroll each month.",
+                    IsFatal: true));
+            }
+
+            // The deductions must exceed the principal — otherwise there is zero or negative interest,
+            // which means the figures have been entered in the wrong columns.
+            if (row.OriginalPrincipal.IsPositive && row.TotalTermMonths > 0 && row.MonthlyDeduction.IsPositive)
+            {
+                var totalRepayable = row.MonthlyDeduction.Amount * row.TotalTermMonths;
+                if (totalRepayable <= row.OriginalPrincipal.Amount)
+                {
+                    problems.Add(new ImportProblem(
+                        row.RowNumber, row.LoanNumber,
+                        $"Monthly deduction {row.MonthlyDeduction} × {row.TotalTermMonths} months = " +
+                        $"{Money.Kes(totalRepayable)} does not exceed the principal {row.OriginalPrincipal}. " +
+                        "The deduction must cover principal plus interest — check the figures.",
+                        IsFatal: true));
+                }
+                else
+                {
+                    // Warn if the implied flat rate looks unusual: outside 5%–25% of principal.
+                    var impliedRate = (totalRepayable - row.OriginalPrincipal.Amount) / row.OriginalPrincipal.Amount;
+                    if (impliedRate < 0.05m || impliedRate > 0.25m)
+                    {
+                        problems.Add(new ImportProblem(
+                            row.RowNumber, row.LoanNumber,
+                            $"Implied total interest is {impliedRate:P0} of the principal " +
+                            $"({Money.Kes(totalRepayable - row.OriginalPrincipal.Amount)} on {row.OriginalPrincipal}). " +
+                            "The normal rate is 10% — check the original principal and monthly deduction.",
+                            IsFatal: false));
+                    }
+                }
             }
 
             if (row.DisbursedOn > command.GoLiveDate)
@@ -136,11 +231,11 @@ internal sealed class DryRunLoanBalancesHandler
                     IsFatal: true));
             }
 
-            if (row.OutstandingBalance.Amount != decimal.Truncate(row.OutstandingBalance.Amount))
+            if (row.OriginalPrincipal.Amount != decimal.Truncate(row.OriginalPrincipal.Amount))
             {
                 problems.Add(new ImportProblem(
                     row.RowNumber, row.LoanNumber,
-                    $"Balance {row.OutstandingBalance} has a fractional shilling — check it against the register.",
+                    $"Principal {row.OriginalPrincipal} has a fractional shilling — check it against the register.",
                     IsFatal: false));
             }
         }
@@ -180,21 +275,30 @@ internal sealed class DryRunLoanBalancesHandler
             }
         }
 
+        var validRows = problems.Any(p => p.IsFatal)
+            ? command.Rows
+                .Where(r => !problems.Any(p => p.IsFatal && p.RowNumber == r.RowNumber))
+                .ToList()
+            : (IReadOnlyList<LoanBalanceRow>)command.Rows;
+
         return new LoanBalanceDryRun(
             command.GoLiveDate,
             command.Rows,
             problems,
-            command.Rows.Select(r => r.OutstandingBalance).Sum(Currency.Kes));
+            command.Rows.Select(r => r.TotalReceivable).Sum(Currency.Kes),
+            command.Rows.Select(r => r.RemainingInterest).Sum(Currency.Kes));
     }
 }
 
 /// <summary>What a committed loan balance import created.</summary>
 /// <param name="LoansCreated">How many loans were imported.</param>
-/// <param name="TotalOutstanding">Their combined outstanding balance.</param>
+/// <param name="TotalReceivable">Their combined outstanding receivable (principal + remaining interest).</param>
+/// <param name="TotalInterestIncome">Interest income recognised at go-live.</param>
 /// <param name="OpeningEntryId">The journal entry that recorded them.</param>
 public sealed record LoanImportResult(
     int LoansCreated,
-    Money TotalOutstanding,
+    Money TotalReceivable,
+    Money TotalInterestIncome,
     JournalEntryId OpeningEntryId);
 
 /// <summary>
@@ -203,16 +307,17 @@ public sealed record LoanImportResult(
 /// <remarks>
 /// <para>
 /// The second half of the staged import. Each loan is created as a domain entity, its
-/// receivable account is opened in the ledger, and one journal entry debits each receivable
-/// account against Opening Balance Equity. One entry for all loans, deliberately — the whole
-/// import either happened or it did not.
+/// receivable account is opened in the ledger, and one journal entry:
+/// <list type="bullet">
+///   <item>debits each loan receivable account for principal + remaining interest;</item>
+///   <item>credits Loan Interest Income for the total remaining interest across all loans;</item>
+///   <item>credits Opening Balance Equity for the total outstanding principal.</item>
+/// </list>
+/// This mirrors how a new loan is posted at disbursement (DR Receivable, CR Bank, CR Interest
+/// Income) — the only difference is that Opening Balance Equity stands in for Bank, because
+/// the cash was paid out before go-live.
 /// </para>
-/// <para>
-/// Interest is set to zero because the outstanding balance already includes whatever interest
-/// was charged. We are recording where things stand today, not reconstructing the original
-/// pricing. Repayment tracking works correctly with a zero-interest loan — the schedule
-/// shows the remaining balance split equally across the remaining term.
-/// </para>
+/// <para>One entry for all loans, deliberately — the whole import either happened or it did not.</para>
 /// </remarks>
 public sealed record CommitLoanBalancesCommand(
     IReadOnlyList<LoanBalanceRow> Rows,
@@ -283,6 +388,8 @@ internal sealed class CommitLoanBalancesHandler
             .ToDictionary(m => m.PayrollNumber.Value!, StringComparer.OrdinalIgnoreCase);
 
         var equity = await _accounts.OpeningBalanceEquityAsync(cancellationToken).ConfigureAwait(false);
+        var interestIncome = await _accounts.LoanInterestIncomeAsync(cancellationToken).ConfigureAwait(false);
+
         var lines = new List<JournalLine>();
 
         foreach (var row in command.Rows)
@@ -294,12 +401,17 @@ internal sealed class CommitLoanBalancesHandler
                 .OpenLoanReceivableAccountAsync(row.LoanNumber.Trim(), loanId.Value, cancellationToken)
                 .ConfigureAwait(false);
 
-            // Outstanding balance = principal; no interest — we are recording a position,
-            // not repricing the loan. The schedule distributes what is owed across the months left.
+            // For a flat-rate loan, interest is the difference between what the member pays in
+            // total and the principal. At go-live we record the remaining slice: months left out
+            // of the full term.
+            var remainingInterest = row.RemainingInterest;
+            var outstandingPrincipal = row.OutstandingPrincipal;
+            var totalReceivable = row.TotalReceivable;
+
             var terms = new LoanTerms(
                 LoanProduct.Normal,
-                row.OutstandingBalance,
-                new Money(0, Currency.Kes),
+                outstandingPrincipal,
+                remainingInterest,
                 row.RemainingTermMonths,
                 TermScaleVersion: 1);
 
@@ -320,15 +432,27 @@ internal sealed class CommitLoanBalancesHandler
 
             _loans.Add(loan);
 
+            // Debit the full receivable (principal + remaining interest) per loan, matching
+            // how a new disbursement posts: DR Receivable for TotalRepayable.
             lines.Add(JournalLine.Debit(
                 receivableAccount.Id,
-                row.OutstandingBalance,
+                totalReceivable,
                 $"Opening loan balance — {row.LoanNumber.Trim()}"));
         }
 
-        // Balance the entry against Opening Balance Equity.
-        var total = lines.Select(l => l.SignedAmount).Sum(Currency.Kes);
-        lines.Add(JournalLine.Credit(equity, total, "Opening loan balances at go-live"));
+        // One credit to Interest Income for all remaining interest combined.
+        var totalInterestIncome = dryRun.TotalInterestIncome;
+        if (totalInterestIncome.IsPositive)
+        {
+            lines.Add(JournalLine.Credit(
+                interestIncome,
+                totalInterestIncome,
+                "Flat interest on opening loan balances at go-live"));
+        }
+
+        // Balance the rest against Opening Balance Equity (the "cash out" before go-live).
+        var totalPrincipal = dryRun.TotalReceivable - totalInterestIncome;
+        lines.Add(JournalLine.Credit(equity, totalPrincipal, "Opening loan balances at go-live"));
 
         var entry = JournalEntry.Post(
             command.GoLiveDate,
@@ -343,6 +467,10 @@ internal sealed class CommitLoanBalancesHandler
         await _journal.AddAsync(entry, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        return new LoanImportResult(command.Rows.Count, dryRun.TotalOutstanding, entry.Id);
+        return new LoanImportResult(
+            command.Rows.Count,
+            dryRun.TotalReceivable,
+            totalInterestIncome,
+            entry.Id);
     }
 }
