@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = AkibaPolicies.LoadsOpeningBalances)]
 @using System.Text.RegularExpressions
 @using Akiba.Application.Migration
+@using Akiba.Domain.Lending
 @inject IMediator Mediator
 @inject IClock Clock
 @inject IJSRuntime JS
@@ -12,10 +13,11 @@
     A mirror of /setup/opening-balances in structure: paste, check, commit — and the commit
     is refused unless the check was clean.
 
-    Seven columns — loan number, payroll number, original principal, disbursement date, total
-    term months, remaining months, monthly deduction — give the system enough to reconstruct
-    the flat-rate interest, record the receivable correctly, and recognise the remaining interest
-    income at go-live. That interest income feeds directly into the dividend calculation.
+    Eight columns — loan number, payroll number, original principal, disbursement date, total
+    term months, remaining months, monthly deduction, loan type — give the system enough to
+    reconstruct the flat-rate interest, record the receivable correctly, and recognise the
+    remaining interest income at go-live. That interest income feeds directly into the dividend
+    calculation. Loan type defaults to Normal when the column is absent or blank.
 *@
 
 <PageTitle>Akiba - Opening loans</PageTitle>
@@ -48,8 +50,9 @@ else
             then select all the data rows (not the heading), copy, and paste below.
         </MudText>
         <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3">
-            Seven columns: loan number, payroll number, original principal (amount disbursed),
-            disbursement date (DD/MM/YYYY), total term months, months remaining, monthly deduction.
+            Eight columns: loan number, payroll number, original principal (amount disbursed),
+            disbursement date (DD/MM/YYYY), total term months, months remaining, monthly deduction,
+            loan type (Normal / Emergency / Client / Rental — defaults to Normal if blank).
             The system derives the outstanding principal and remaining interest from these figures.
         </MudText>
 
@@ -62,7 +65,7 @@ else
 
         <MudTextField @bind-Value="_pasted" Label="Pasted from the loan register"
                       Lines="10" Variant="Variant.Outlined" Margin="Margin.Dense"
-                      Placeholder="L-0042&#9;0001&#9;100000&#9;15/06/2024&#9;10&#9;7&#9;11000&#10;L-0043&#9;0002&#9;50000&#9;01/01/2025&#9;12&#9;9&#9;4583"
+                      Placeholder="L-0042&#9;0001&#9;100000&#9;15/06/2024&#9;10&#9;7&#9;11000&#9;Normal&#10;L-0043&#9;0002&#9;25000&#9;01/01/2025&#9;5&#9;3&#9;5500&#9;Emergency"
                       Class="akiba-paste" />
 
         <MudGrid Spacing="2" Class="mt-3">
@@ -182,6 +185,7 @@ else
                             <MudTh>Line</MudTh>
                             <MudTh>Loan no.</MudTh>
                             <MudTh>Payroll no.</MudTh>
+                            <MudTh>Type</MudTh>
                             <MudTh Style="text-align: right">Original principal</MudTh>
                             <MudTh>Disbursed</MudTh>
                             <MudTh Style="text-align: right">Total term</MudTh>
@@ -194,6 +198,7 @@ else
                             <MudTd>@context.RowNumber</MudTd>
                             <MudTd>@context.LoanNumber</MudTd>
                             <MudTd>@(context.PayrollNumber ?? "—")</MudTd>
+                            <MudTd>@LoanProductLabel(context.Product)</MudTd>
                             <MudTd Class="akiba-money-cell">
                                 <MoneyText Amount="context.OriginalPrincipal" />
                             </MudTd>
@@ -288,10 +293,10 @@ else
     /// Parses pasted text into <see cref="LoanBalanceRow"/> instances.
     /// </summary>
     /// <remarks>
-    /// Seven columns: loan number, payroll number, original principal, disbursement date,
-    /// total term months, months remaining, monthly deduction. Tab-separated (from Excel) or
-    /// comma-separated. Thousands separators and "KES" prefixes are stripped from amounts.
-    /// Dates in DD/MM/YYYY or YYYY-MM-DD are both accepted.
+    /// Eight columns: loan number, payroll number, original principal, disbursement date,
+    /// total term months, months remaining, monthly deduction, loan type (optional — defaults
+    /// to Normal). Tab-separated (from Excel) or comma-separated. Thousands separators and
+    /// "KES" prefixes are stripped from amounts. Dates in DD/MM/YYYY or YYYY-MM-DD accepted.
     /// </remarks>
     private List<LoanBalanceRow> Parse(string text)
     {
@@ -326,7 +331,7 @@ else
                 }
 
                 _parseProblems.Add(
-                    $"Line {index + 1}: expected seven columns (loan no., payroll no., original principal, " +
+                    $"Line {index + 1}: expected at least seven columns (loan no., payroll no., original principal, " +
                     $"disbursement date, total term months, months remaining, monthly deduction), found {parts.Length}.");
                 continue;
             }
@@ -366,6 +371,26 @@ else
                 continue;
             }
 
+            // Column 8: loan type — optional, defaults to Normal.
+            var product = LoanProduct.Normal;
+            if (parts.Length >= 8 && !string.IsNullOrWhiteSpace(parts[7]))
+            {
+                if (!TryParseLoanProduct(parts[7], out product))
+                {
+                    if (index == 0)
+                    {
+                        product = LoanProduct.Normal; // heading row
+                    }
+                    else
+                    {
+                        _parseProblems.Add(
+                            $"Line {index + 1}: \"{parts[7]}\" is not a recognised loan type. " +
+                            "Use Normal, Emergency, Client, or Rental.");
+                        continue;
+                    }
+                }
+            }
+
             rows.Add(new LoanBalanceRow(
                 index + 1,
                 string.IsNullOrWhiteSpace(parts[0]) ? $"ROW-{index + 1}" : parts[0],
@@ -374,11 +399,34 @@ else
                 disbursedOn,
                 totalMonths,
                 remainingMonths,
-                Money.Kes(deduction)));
+                Money.Kes(deduction),
+                product));
         }
 
         return rows;
     }
+
+    private static bool TryParseLoanProduct(string raw, out LoanProduct product)
+    {
+        product = raw.Trim().ToUpperInvariant() switch
+        {
+            "NORMAL" or "1" => LoanProduct.Normal,
+            "EMERGENCY" or "2" => LoanProduct.Emergency,
+            "CLIENT" or "3" => LoanProduct.Client,
+            "RENTAL" or "RENTALINCOME" or "LANDLORD" or "4" => LoanProduct.RentalIncome,
+            _ => (LoanProduct)0,
+        };
+        return product != 0;
+    }
+
+    private static string LoanProductLabel(LoanProduct product) => product switch
+    {
+        LoanProduct.Normal => "Normal",
+        LoanProduct.Emergency => "Emergency",
+        LoanProduct.Client => "Client",
+        LoanProduct.RentalIncome => "Rental",
+        _ => product.ToString(),
+    };
 
     private static string StripAmount(string raw) =>
         raw.Replace("KES", string.Empty, StringComparison.OrdinalIgnoreCase)
@@ -423,7 +471,7 @@ else
             {
                 _error = "Nothing could be read from that. Check the columns are: loan number, "
                     + "payroll number, original principal, disbursement date, total term months, "
-                    + "months remaining, monthly deduction.";
+                    + "months remaining, monthly deduction, loan type (optional).";
                 return;
             }
 
@@ -443,12 +491,12 @@ else
 
     private async Task DownloadTemplateAsync()
     {
-        // Example: 100,000 principal × 10% flat = 110,000 total over 10 months = 11,000/month.
+        // Examples: Normal (10% flat), Emergency (10% flat ≤25k/5mo), Rental (landlord).
         const string csv =
-            "Loan Number,Payroll Number,Original Principal (KES),Disbursement Date (DD/MM/YYYY),Total Term (months),Months Remaining,Monthly Deduction (KES)\r\n" +
-            "L-0001,0001,100000,15/12/2025,10,7,11000\r\n" +
-            "L-0002,0002,50000,01/01/2026,12,9,4583\r\n" +
-            "L-0003,0003,200000,10/06/2025,24,18,9167\r\n";
+            "Loan Number,Payroll Number,Original Principal (KES),Disbursement Date (DD/MM/YYYY),Total Term (months),Months Remaining,Monthly Deduction (KES),Loan Type\r\n" +
+            "L-0001,0001,100000,15/12/2025,10,7,11000,Normal\r\n" +
+            "L-0002,0002,25000,01/01/2026,5,3,5500,Emergency\r\n" +
+            "L-0003,0003,200000,10/06/2025,24,18,9167,Rental\r\n";
 
         var module = await JS.InvokeAsync<IJSObjectReference>(
             "import", "/js/akiba-download.js");

@@ -17,6 +17,7 @@ namespace Akiba.Application.Migration;
 /// <param name="TotalTermMonths">The full repayment period agreed at disbursement.</param>
 /// <param name="RemainingTermMonths">How many monthly instalments are left to run.</param>
 /// <param name="MonthlyDeduction">The monthly payroll deduction (principal + interest component).</param>
+/// <param name="Product">Which loan product this is (Normal, Emergency, Client, or RentalIncome).</param>
 public sealed record LoanBalanceRow(
     int RowNumber,
     string LoanNumber,
@@ -25,7 +26,8 @@ public sealed record LoanBalanceRow(
     DateOnly DisbursedOn,
     int TotalTermMonths,
     int RemainingTermMonths,
-    Money MonthlyDeduction)
+    Money MonthlyDeduction,
+    LoanProduct Product = LoanProduct.Normal)
 {
     /// <summary>
     /// Total amount still to collect: monthly deduction times months remaining.
@@ -216,7 +218,7 @@ internal sealed class DryRunLoanBalancesHandler
                             row.RowNumber, row.LoanNumber,
                             $"Implied total interest is {impliedRate:P0} of the principal " +
                             $"({Money.Kes(totalRepayable - row.OriginalPrincipal.Amount)} on {row.OriginalPrincipal}). " +
-                            "The normal rate is 10% — check the original principal and monthly deduction.",
+                            "Double-check the original principal and monthly deduction.",
                             IsFatal: false));
                     }
                 }
@@ -409,7 +411,7 @@ internal sealed class CommitLoanBalancesHandler
             var totalReceivable = row.TotalReceivable;
 
             var terms = new LoanTerms(
-                LoanProduct.Normal,
+                row.Product,
                 outstandingPrincipal,
                 remainingInterest,
                 row.RemainingTermMonths,

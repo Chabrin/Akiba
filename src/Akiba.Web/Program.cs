@@ -110,7 +110,14 @@ builder.Services.AddAkibaNotifications(
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddMudServices();
+builder.Services.AddMudServices(config =>
+{
+    // MudPopoverProvider registers a SectionOutlet on each render. During layout
+    // transitions (e.g. sign-in layout → main layout within the same circuit) it
+    // can briefly appear twice. MudBlazor throws by default; suppress the duplicate
+    // so the second registration is quietly ignored rather than crashing the page.
+    config.PopoverOptions.ThrowOnDuplicateProvider = false;
+});
 builder.Services.AddCascadingAuthenticationState();
 
 // Authentication, TOTP and the role policies. Registered unconditionally - there is no
