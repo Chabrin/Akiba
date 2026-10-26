@@ -23,7 +23,7 @@
        picker, no switch, no tab, no expansion panel. Registering the mode on the endpoint
        with AddInteractiveServerRenderMode() only makes it AVAILABLE - a component still has
        to ask for it. *@
-    <Routes @rendermode="RenderMode.InteractiveServer" />
+    <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
 
