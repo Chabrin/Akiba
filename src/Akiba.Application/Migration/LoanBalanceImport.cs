@@ -31,15 +31,33 @@ public sealed record LoanBalanceRow(
 {
     /// <summary>
     /// Total amount still to collect: monthly deduction times months remaining.
-    /// This is what goes into the loan receivable account.
+    /// This is what goes into the loan receivable account (and the journal debit at go-live).
     /// </summary>
     public Money TotalReceivable =>
         Money.Kes(MonthlyDeduction.Amount * RemainingTermMonths);
 
     /// <summary>
-    /// Remaining interest — the share of future deductions that is interest income.
-    /// Proportional to the elapsed fraction: (total interest / total months) × remaining months.
+    /// Full interest over the original term: (monthly × total months) − principal.
+    /// This is stored on the loan entity so the progress bar can use TotalRepayable correctly.
     /// Returns zero if the inputs are not yet valid (guard for dry-run rows with errors).
+    /// </summary>
+    public Money TotalInterest
+    {
+        get
+        {
+            if (TotalTermMonths <= 0 || !OriginalPrincipal.IsPositive)
+            {
+                return Money.ZeroKes;
+            }
+
+            var totalInterest = MonthlyDeduction.Amount * TotalTermMonths - OriginalPrincipal.Amount;
+            return totalInterest > 0m ? Money.Kes(totalInterest) : Money.ZeroKes;
+        }
+    }
+
+    /// <summary>
+    /// Remaining interest — the share of future deductions that is interest income.
+    /// Used for the go-live journal entry (credit to Interest Income).
     /// </summary>
     public Money RemainingInterest
     {
@@ -403,17 +421,17 @@ internal sealed class CommitLoanBalancesHandler
                 .OpenLoanReceivableAccountAsync(row.LoanNumber.Trim(), loanId.Value, cancellationToken)
                 .ConfigureAwait(false);
 
-            // For a flat-rate loan, interest is the difference between what the member pays in
-            // total and the principal. At go-live we record the remaining slice: months left out
-            // of the full term.
+            // Store the original principal and full-term interest on the loan entity.
+            // The ledger is debited only for TotalReceivable (Monthly × Remaining), so
+            // ledgerProportion = (TotalRepayable − outstanding) / TotalRepayable correctly
+            // reflects how many months have already been paid before go-live.
             var remainingInterest = row.RemainingInterest;
-            var outstandingPrincipal = row.OutstandingPrincipal;
             var totalReceivable = row.TotalReceivable;
 
             var terms = new LoanTerms(
                 row.Product,
-                outstandingPrincipal,
-                remainingInterest,
+                row.OriginalPrincipal,
+                row.TotalInterest,
                 row.RemainingTermMonths,
                 TermScaleVersion: 1);
 
