@@ -481,3 +481,27 @@ internal sealed class ListZonesHandler : IRequestHandler<ListZonesQuery, IReadOn
         ];
     }
 }
+
+public sealed record ZoneAdminOption(ZoneId Id, string Code, string Name, bool IsOffice, bool IsActive);
+
+public sealed record ListAllZonesQuery : IRequest<IReadOnlyList<ZoneAdminOption>>;
+
+internal sealed class ListAllZonesHandler : IRequestHandler<ListAllZonesQuery, IReadOnlyList<ZoneAdminOption>>
+{
+    private readonly IZoneRepository _zones;
+
+    public ListAllZonesHandler(IZoneRepository zones) => _zones = zones;
+
+    public async Task<IReadOnlyList<ZoneAdminOption>> Handle(
+        ListAllZonesQuery query, CancellationToken cancellationToken)
+    {
+        var zones = await _zones.AllAsync(cancellationToken).ConfigureAwait(false);
+
+        return
+        [
+            .. zones
+                .OrderBy(zone => zone.Code)
+                .Select(zone => new ZoneAdminOption(zone.Id, zone.Code, zone.Name, zone.IsOffice, zone.IsActive)),
+        ];
+    }
+}

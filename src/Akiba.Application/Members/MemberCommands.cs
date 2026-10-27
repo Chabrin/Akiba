@@ -508,3 +508,56 @@ internal sealed class ReleaseSharesHoldHandler : IRequestHandler<ReleaseSharesHo
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }
+
+public sealed record CreateZoneCommand(string Code, string Name, bool IsOffice) : IRequest<ZoneId>;
+
+internal sealed class CreateZoneHandler : IRequestHandler<CreateZoneCommand, ZoneId>
+{
+    private readonly IZoneRepository _zones;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public CreateZoneHandler(IZoneRepository zones, IUnitOfWork unitOfWork)
+    {
+        _zones = zones;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<ZoneId> Handle(CreateZoneCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var zone = command.IsOffice
+            ? Zone.CreateOffice(command.Code, command.Name)
+            : Zone.Create(command.Code, command.Name);
+
+        _zones.Add(zone);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return zone.Id;
+    }
+}
+
+public sealed record DeactivateZoneCommand(ZoneId ZoneId) : IRequest;
+
+internal sealed class DeactivateZoneHandler : IRequestHandler<DeactivateZoneCommand>
+{
+    private readonly IZoneRepository _zones;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public DeactivateZoneHandler(IZoneRepository zones, IUnitOfWork unitOfWork)
+    {
+        _zones = zones;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task Handle(DeactivateZoneCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var zone = await _zones.FindByIdAsync(command.ZoneId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Zone {command.ZoneId} not found.");
+
+        zone.Deactivate();
+        _zones.Update(zone);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+}

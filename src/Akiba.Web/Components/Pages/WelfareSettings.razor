@@ -1,7 +1,9 @@
 @page "/settings"
 @attribute [Authorize(Policy = AkibaPolicies.ViewsLedger)]
 @using Akiba.Application.Lending
+@using Akiba.Application.Members
 @using Akiba.Domain.Lending
+@using Akiba.Domain.Membership
 @inject IMediator Mediator
 @inject TenureBasedTerms TenureTerms
 
@@ -333,6 +335,115 @@
     </div>
 </MudPaper>
 
+@* ── Zones ── *@
+<MudPaper Elevation="1" Class="mb-6">
+    <div class="pa-4 pb-0">
+        <MudText Typo="Typo.h6">Zones</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 mb-3">
+            Zones group members by location or branch. Each member is enrolled into one zone.
+            Add a zone here before enrolling members into it; deactivate it when it is no longer used.
+        </MudText>
+    </div>
+
+    @if (_zones is null)
+    {
+        <TableSkeleton Rows="3" Columns="4" />
+    }
+    else
+    {
+        @if (_zones.Count > 0)
+        {
+            <MudTable Items="_zones"
+                      Dense="true"
+                      Hover="true"
+                      Striped="true"
+                      Elevation="0"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Code</MudTh>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Code">@context.Code</MudTd>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Type">
+                        @if (context.IsOffice)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">Office</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Field</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.IsActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Inactive</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd Class="akiba-no-print">
+                        @if (context.IsActive)
+                        {
+                            <div class="akiba-row-actions">
+                                <MudTooltip Text="Deactivate this zone">
+                                    <MudIconButton Icon="@Icons.Material.Filled.ToggleOff"
+                                                   Size="Size.Small"
+                                                   Color="Color.Warning"
+                                                   aria-label="@($"Deactivate {context.Name}")"
+                                                   OnClick="@(() => DeactivateZoneAsync(context.Id))" />
+                                </MudTooltip>
+                            </div>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        <div class="pa-4 pt-3">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Add zone</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="3">
+                    <MudTextField @bind-Value="_newZoneCode"
+                                  Label="Code"
+                                  Placeholder="e.g. NBI"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  HelperText="Short uppercase code" />
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudTextField @bind-Value="_newZoneName"
+                                  Label="Name"
+                                  Placeholder="e.g. Nairobi Branch"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="2">
+                    <MudSwitch @bind-Value="_newZoneIsOffice"
+                               Label="Office"
+                               Color="Color.Info" />
+                </MudItem>
+                <MudItem xs="12" sm="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="AddZoneAsync"
+                               Disabled="@(string.IsNullOrWhiteSpace(_newZoneCode) || string.IsNullOrWhiteSpace(_newZoneName) || _savingZone)">
+                        @if (_savingZone) { <MudProgressCircular Size="Size.Small" Indeterminate="true" /> } else { <text>Add</text> }
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </div>
+    }
+</MudPaper>
+
 @* ── M-Pesa payments guide ── *@
 <MudPaper Elevation="1" Class="mb-6">
     <div class="pa-4">
@@ -403,11 +514,16 @@
     private IReadOnlyList<ContributionSetting>? _contributions;
     private IReadOnlyList<LoanProductConfig>? _loanProducts;
     private IReadOnlyList<TermScaleBandSetting>? _termScale;
+    private IReadOnlyList<ZoneAdminOption>? _zones;
     private string _search = string.Empty;
     private bool _changingContribution;
     private ContributionSetting? _editingMember;
     private bool _editingLoanProduct;
     private LoanProductConfig? _editingConfig;
+    private string _newZoneCode = string.Empty;
+    private string _newZoneName = string.Empty;
+    private bool _newZoneIsOffice;
+    private bool _savingZone;
 
     private IReadOnlyList<ContributionSetting> Filtered =>
         _contributions is null
@@ -420,7 +536,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadAsync(), LoadLoanProductsAsync());
+        await Task.WhenAll(LoadAsync(), LoadLoanProductsAsync(), LoadZonesAsync());
     }
 
     private bool Matches(ContributionSetting m) =>
@@ -463,6 +579,31 @@
     {
         _editingConfig = config;
         _editingLoanProduct = true;
+    }
+
+    private async Task LoadZonesAsync() =>
+        _zones = await Mediator.Send(new ListAllZonesQuery());
+
+    private async Task AddZoneAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newZoneCode) || string.IsNullOrWhiteSpace(_newZoneName))
+            return;
+
+        _savingZone = true;
+        await Mediator.Send(new CreateZoneCommand(_newZoneCode.Trim(), _newZoneName.Trim(), _newZoneIsOffice));
+        _newZoneCode = string.Empty;
+        _newZoneName = string.Empty;
+        _newZoneIsOffice = false;
+        _savingZone = false;
+        _zones = null;
+        await LoadZonesAsync();
+    }
+
+    private async Task DeactivateZoneAsync(ZoneId zoneId)
+    {
+        await Mediator.Send(new DeactivateZoneCommand(zoneId));
+        _zones = null;
+        await LoadZonesAsync();
     }
 
     private static string ProductIcon(LoanProduct product) => product switch
