@@ -23,14 +23,48 @@ public sealed record LoanSummary(
     Money AmountOverdue,
     ArrearsBucket ArrearsBucket,
     int DaysOverdue,
-    BorrowerCategory BorrowerCategory)
+    BorrowerCategory BorrowerCategory,
+    int? OriginalTermMonths = null)
 {
     public bool IsInArrears => AmountOverdue.IsPositive;
 
-    /// <summary>How far the loan has been repaid, for a progress bar.</summary>
-    public double ProportionRepaid => TotalRepayable.IsZero
-        ? 0d
-        : (double)((TotalRepayable - OutstandingBalance).Amount / TotalRepayable.Amount);
+    /// <summary>
+    /// How far the loan has been repaid, for a progress bar.
+    /// For opening-balance imports the historical months already paid are included
+    /// (OriginalTermMonths − current TermMonths) so the bar doesn't start at 0.
+    /// </summary>
+    public double ProportionRepaid
+    {
+        get
+        {
+            if (TotalRepayable.IsZero)
+            {
+                return 0d;
+            }
+
+            // Ledger-based proportion (payments recorded since go-live / import).
+            var ledgerProportion = (double)((TotalRepayable - OutstandingBalance).Amount
+                / TotalRepayable.Amount);
+
+            if (OriginalTermMonths is not { } originalMonths || originalMonths <= 0)
+            {
+                return ledgerProportion;
+            }
+
+            // For an import the TermMonths in TotalRepayable is the REMAINING term.
+            // Add the historical fraction: months already paid / original total months.
+            var currentMonths = MonthlyInstalment.IsZero
+                ? 0
+                : (int)Math.Round((double)TotalRepayable.Amount / (double)MonthlyInstalment.Amount);
+            var historicalMonths = originalMonths - currentMonths;
+            var historicalProportion = historicalMonths > 0
+                ? (double)historicalMonths / originalMonths
+                : 0d;
+            // Scale the ledger proportion to the remaining share of the original term.
+            var remainingShare = currentMonths > 0 ? (double)currentMonths / originalMonths : 0d;
+            return historicalProportion + ledgerProportion * remainingShare;
+        }
+    }
 }
 
 /// <summary>
@@ -95,7 +129,8 @@ internal sealed class GetLoanPortfolioHandler
                 arrears.AmountOverdue,
                 arrears.Bucket,
                 arrears.DaysOverdue,
-                BorrowerCategories.Of(borrower)));
+                BorrowerCategories.Of(borrower),
+                loan.OriginalTermMonths));
         }
 
         return [.. summaries.OrderByDescending(loan => loan.AmountOverdue.Amount)

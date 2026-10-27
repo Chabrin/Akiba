@@ -204,6 +204,7 @@ internal static class LendingMapper
             Interest = loan.Terms.Interest.Amount,
             TermMonths = loan.Terms.TermMonths,
             TermScaleVersion = loan.Terms.TermScaleVersion,
+            OriginalTermMonths = loan.OriginalTermMonths,
             DisbursedOn = loan.DisbursedOn,
             Status = (int)loan.Status,
             RestructuresLoanId = loan.Restructures?.Value,
@@ -261,7 +262,8 @@ internal static class LendingMapper
             row.RestructuresLoanId is { } restructures ? new LoanId(restructures) : null,
             row.HasBeenRestructured,
             row.SettledOn,
-            row.Guarantees.Select(ToDomain));
+            row.Guarantees.Select(ToDomain),
+            row.OriginalTermMonths);
     }
 
     // -----------------------------------------------------------------

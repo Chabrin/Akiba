@@ -160,6 +160,14 @@ internal sealed class LoanRow
 
     public int TermScaleVersion { get; set; }
 
+    /// <summary>
+    /// The full agreed term at disbursement, in months. Null for normally-disbursed loans
+    /// (where TermMonths IS the original term). Set only for opening-balance imports, where
+    /// TermMonths is the remaining term and this records the full original term so the
+    /// portfolio page can show historical repayment progress.
+    /// </summary>
+    public int? OriginalTermMonths { get; set; }
+
     public DateOnly DisbursedOn { get; set; }
 
     public int Status { get; set; }

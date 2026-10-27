@@ -1276,6 +1276,9 @@ namespace Akiba.Infrastructure.Persistence.Migrations
                     b.Property<int>("TermScaleVersion")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("OriginalTermMonths")
+                        .HasColumnType("integer");
+
                     b.Property<string>("VoucherReference")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");

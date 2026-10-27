@@ -125,6 +125,14 @@ public sealed class Loan : AggregateRoot<LoanId>
 
     public bool IsRunning => Status == LoanStatus.Running;
 
+    /// <summary>
+    /// The full agreed term at disbursement, in months. Null for normally-disbursed loans.
+    /// Set only for opening-balance imports so the portfolio can show historical progress:
+    /// at import time <see cref="LoanTerms.TermMonths"/> is the remaining term, and this is
+    /// the total agreed term so the progress bar can show months already paid.
+    /// </summary>
+    public int? OriginalTermMonths { get; private set; }
+
     /// <summary>The schedule of instalments, with its one month of grace.</summary>
     public RepaymentSchedule Schedule => RepaymentSchedule.Generate(Terms, DisbursedOn);
 
@@ -267,7 +275,8 @@ public sealed class Loan : AggregateRoot<LoanId>
         LoanId? restructures,
         bool hasBeenRestructured,
         DateOnly? settledOn,
-        IEnumerable<Guarantee> guarantees)
+        IEnumerable<Guarantee> guarantees,
+        int? originalTermMonths = null)
     {
         var loan = new Loan(
             id, loanNumber, applicationId, borrowerId, receivableAccountId, terms, disbursedOn, cheque)
@@ -276,6 +285,7 @@ public sealed class Loan : AggregateRoot<LoanId>
             Restructures = restructures,
             HasBeenRestructured = hasBeenRestructured,
             SettledOn = settledOn,
+            OriginalTermMonths = originalTermMonths,
         };
 
         loan._guarantees.AddRange(guarantees);

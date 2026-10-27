@@ -430,7 +430,8 @@ internal sealed class CommitLoanBalancesHandler
                 restructures: null,
                 hasBeenRestructured: false,
                 settledOn: null,
-                guarantees: []);
+                guarantees: [],
+                originalTermMonths: row.TotalTermMonths);
 
             _loans.Add(loan);
 
